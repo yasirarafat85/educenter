@@ -176,21 +176,19 @@ body {
 
 
 
-/* স্টিকি বার এখন সব স্ক্রিনে — পেজের কনটেন্ট যাতে এর পেছনে চাপা না পড়ে, নিচে জায়গা ছাড়া।
-   WhatsApp ভাসমান বাটন বারের ঠিক উপরে (নাহলে বারের পেছনে ঢুকে যেত)। */
-body { padding-bottom: 60px; }
-#wa-float { bottom: 74px; }
+/* স্টিকি বার সব স্ক্রিনে — কনটেন্ট এর পেছনে চাপা না পড়তে নিচে জায়গা ছাড়া (বার ~60px) */
+body { padding-bottom: 64px; }
 
 /* ── ভাসমান WhatsApp বাটন ── */
 #wa-float {
     position: fixed;
-    right: 16px; bottom: 76px;
+    right: 16px; bottom: 78px; /* স্টিকি বারের (~60px) স্পষ্ট উপরে */
     width: 52px; height: 52px;
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     color: #fff; background: #25D366;              /* WhatsApp ব্র্যান্ড সবুজ (থিম-নিরপেক্ষ) */
     box-shadow: 0 6px 20px rgba(37,211,102,.45);
-    z-index: 44;
+    z-index: 50; /* স্টিকি বারের (45) উপরে */
     transition: transform .2s ease, box-shadow .2s ease;
 }
 #wa-float:hover { transform: scale(1.08); box-shadow: 0 10px 26px rgba(37,211,102,.55); }
