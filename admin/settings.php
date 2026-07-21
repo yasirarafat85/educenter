@@ -55,9 +55,10 @@ $groups = [
         'courier_weight_extra' => 'ওজন বেশি হলে অতিরিক্ত চার্জ (টাকা)',
     ],
     'যোগাযোগ' => [
-        'contact_address' => 'ঠিকানা',
-        'contact_phone'   => 'ফোন নম্বর',
-        'contact_email'   => 'ইমেইল',
+        'contact_address'  => 'ঠিকানা',
+        'contact_phone'    => 'ফোন নম্বর',
+        'contact_email'    => 'ইমেইল',
+        'contact_whatsapp' => 'WhatsApp নম্বর (মোবাইলে ভাসমান সবুজ বাটন — খালি রাখলে দেখাবে না)',
     ],
     'সোশ্যাল মিডিয়া লিংক' => [
         'social_facebook'  => 'Facebook URL',

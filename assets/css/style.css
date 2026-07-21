@@ -255,3 +255,53 @@ body {
     text-shadow: 0 2px 8px rgba(0,0,0,.25);
     display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
 }
+
+/* ── নিচের স্টিকি নেভিগেশন বার (মোবাইল, ২০২৬-০৭-২১) ─────────────────
+   অ্যাপের মতো — সবচেয়ে দরকারি ৪টা লিংক সবসময় হাতের নাগালে। শুধু মোবাইলে
+   (HTML-এ lg:hidden), ডেস্কটপে উপরে পুরো মেনু আছে বলে দরকার নেই। */
+#bottom-nav {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 45;
+    display: flex;
+    background: rgba(255,255,255,.97);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid rgb(var(--c-border, 226 232 240));
+    box-shadow: 0 -2px 12px rgba(0,0,0,.06);
+    padding-bottom: env(safe-area-inset-bottom, 0); /* আইফোনের নিচের বার এড়াতে */
+}
+.bnav-item {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; padding: 8px 4px 6px;
+    color: #6b7280; font-size: 11px; font-weight: 600;
+    transition: color .15s;
+    min-height: 52px; /* যথেষ্ট বড় ট্যাপ-টার্গেট */
+}
+.bnav-item svg { width: 22px; height: 22px; }
+.bnav-item:active { background: rgb(var(--c-tint, 236 253 245)); }
+.bnav-on { color: rgb(var(--c-primary)); }
+
+/* মোবাইলে স্টিকি বার পেজের কনটেন্টের উপর যাতে না বসে — নিচে জায়গা ছাড়া */
+@media (max-width: 1023px) {
+    body { padding-bottom: 58px; }
+    /* ভাসমান বাটনগুলো স্টিকি বারের উপরে তুলে দেওয়া (নাহলে বারের পেছনে চাপা পড়ত) */
+    #back-to-top { bottom: 72px; }
+    #wa-float { bottom: 128px; } /* back-to-top এর ঠিক উপরে */
+}
+
+/* ── ভাসমান WhatsApp বাটন ── */
+#wa-float {
+    position: fixed;
+    right: 16px; bottom: 76px;
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; background: #25D366;              /* WhatsApp ব্র্যান্ড সবুজ (থিম-নিরপেক্ষ) */
+    box-shadow: 0 6px 20px rgba(37,211,102,.45);
+    z-index: 44;
+    transition: transform .2s ease, box-shadow .2s ease;
+}
+#wa-float:hover { transform: scale(1.08); box-shadow: 0 10px 26px rgba(37,211,102,.55); }
+#wa-float:focus-visible { outline: 3px solid rgba(37,211,102,.5); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { #wa-float { transition: none; } #wa-float:hover { transform: none; } }
