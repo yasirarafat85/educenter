@@ -10,6 +10,7 @@
 // INSERT বানিয়ে) তৈরি হয় এবং **সরাসরি ব্রাউজারে স্ট্রিম** হয় — সার্ভারের মেমরিতে পুরো ফাইল জমে না।
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/includes/db-dump.php';
 admin_require_login();
 
 $db = get_db();
@@ -40,50 +41,48 @@ if ($action === 'db' && csrf_verify()) {
     @set_time_limit(0);
     backup_send_headers('educenter-db-' . $mode . '-' . backup_stamp() . '.sql', 'application/sql; charset=utf-8');
 
-    echo "-- EduCenter ডাটাবেস ব্যাকআপ\n";
-    echo '-- তৈরি: ' . date('Y-m-d H:i:s') . "\n";
-    echo '-- মোড: ' . $mode . "\n";
-    echo "-- ফেরানোর নিয়ম: phpMyAdmin → আপনার DB সিলেক্ট → Import → এই ফাইল → Go\n";
-    echo "-- ⚠️ এই ফাইলে কাস্টমারের নাম/ফোন/ঠিকানা আছে — নিরাপদ জায়গায় রাখুন।\n\n";
-    echo "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS = 0;\n\n";
-
-    $tables = $db->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
-    foreach ($tables as $table) {
-        if ($mode !== 'data') {
-            $create = $db->query("SHOW CREATE TABLE `$table`")->fetch(PDO::FETCH_NUM)[1];
-            echo "-- ------------------------------------------------------------\n";
-            echo "-- টেবিল: $table\n";
-            echo "-- ------------------------------------------------------------\n";
-            echo "DROP TABLE IF EXISTS `$table`;\n" . $create . ";\n\n";
-        }
-        if ($mode === 'structure') {
-            continue;
-        }
-
-        // সারি ধরে ধরে স্ট্রিম — বড় টেবিলেও মেমরি ফুরায় না
-        $stmt = $db->query("SELECT * FROM `$table`");
-        $rowCount = 0;
-        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            if ($rowCount === 0) {
-                echo '-- ডেটা: ' . $table . "\n";
-            }
-            $vals = [];
-            foreach ($row as $v) {
-                $vals[] = $v === null ? 'NULL' : $db->quote((string) $v);
-            }
-            $cols = '`' . implode('`, `', array_keys($row)) . '`';
-            echo "INSERT INTO `$table` ($cols) VALUES (" . implode(', ', $vals) . ");\n";
-            $rowCount++;
-            if ($rowCount % 200 === 0) {
-                flush(); // ধাপে ধাপে পাঠানো — বড় টেবিলে ব্রাউজার ঝুলে থাকে না
-            }
-        }
-        if ($rowCount > 0) {
-            echo "\n";
-        }
-    }
-    echo "SET FOREIGN_KEY_CHECKS = 1;\n";
+    // শেয়ার্ড হেল্পার (admin/includes/db-dump.php) — cron স্ক্রিপ্টও এটাই ব্যবহার করে।
+    // এখানে খণ্ডগুলো সরাসরি ব্রাউজারে echo হয়, প্রতি খণ্ডে flush() করে ধাপে ধাপে পাঠানো।
+    $n = 0;
+    db_dump_stream($db, $mode, function (string $chunk) use (&$n) {
+        echo $chunk;
+        if ((++$n % 200) === 0) { flush(); }
+    });
     exit;
+}
+
+// ── অটো-ব্যাকআপ ফাইল ডাউনলোড (তালিকা থেকে) ──────────────────────────────
+if ($action === 'get' && csrf_verify()) {
+    // ⚠️ শুধু ফাইলের নাম (basename) নেওয়া হয় — কেউ ../ দিয়ে অন্য ফাইল টানতে পারবে না (path traversal ঠেকানো)
+    $name = basename($_POST['file'] ?? '');
+    $path = db_backup_dir() . DIRECTORY_SEPARATOR . $name;
+    if (!preg_match('/^educenter-db-[0-9]{8}-[0-9]{6}\.sql$/', $name) || !is_file($path)) {
+        set_flash('error', 'ফাইলটি পাওয়া যায়নি।');
+        redirect('backup.php');
+    }
+    backup_send_headers($name, 'application/sql; charset=utf-8');
+    readfile($path);
+    exit;
+}
+
+// ── অটো-ব্যাকআপ ফাইল মুছে ফেলা ───────────────────────────────────────────
+if ($action === 'del' && csrf_verify()) {
+    $name = basename($_POST['file'] ?? '');
+    $path = db_backup_dir() . DIRECTORY_SEPARATOR . $name;
+    if (preg_match('/^educenter-db-[0-9]{8}-[0-9]{6}\.sql$/', $name) && is_file($path)) {
+        @unlink($path);
+        set_flash('success', 'ব্যাকআপ ফাইল মুছে ফেলা হয়েছে।');
+    }
+    redirect('backup.php');
+}
+
+// ── "এখনই একটা সার্ভার-ব্যাকআপ বানাও" (cron ছাড়াই টেস্ট/ম্যানুয়াল ট্রিগার) ──
+if ($action === 'runnow' && csrf_verify()) {
+    $r = db_backup_to_file($db, 7);
+    set_flash($r['ok'] ? 'success' : 'error',
+        $r['ok'] ? "সার্ভারে ব্যাকআপ তৈরি হয়েছে: {$r['file']} (" . round($r['size'] / 1024) . " KB)"
+                 : 'ব্যাকআপ ব্যর্থ: ' . $r['error']);
+    redirect('backup.php');
 }
 
 // ── ফাইল ব্যাকআপ (.zip) ─────────────────────────────────────────────────
@@ -220,6 +219,55 @@ require __DIR__ . '/includes/layout-top.php';
         </div>
         <?php endif; ?>
         <p class="text-xs text-gray-400 mt-3">ফাইল বেশি হলে "পুরো ওয়েবসাইট" সময় নিতে পারে। না নামলে ছবি ও কোড আলাদা করে নিন, অথবা cPanel → File Manager → Compress ব্যবহার করুন।</p>
+    </div>
+
+    <?php // ── অটো ব্যাকআপ (সার্ভারে জমা) ── ?>
+    <?php
+        $autoDir = db_backup_dir();
+        $autoFiles = glob($autoDir . DIRECTORY_SEPARATOR . 'educenter-db-*.sql') ?: [];
+        usort($autoFiles, fn($a, $b) => filemtime($b) <=> filemtime($a)); // নতুন আগে
+    ?>
+    <div class="bg-white rounded-2xl shadow p-5">
+        <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+            <h3 class="font-bold text-gray-800"><i data-lucide="history" class="w-5 h-5 inline text-indigo-600"></i> অটো ব্যাকআপ (সার্ভারে জমা)</h3>
+            <form method="post" action="backup.php?action=runnow">
+                <?= csrf_field() ?>
+                <button type="submit" class="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold px-4 py-2 rounded-xl text-sm"><i data-lucide="plus" class="w-4 h-4 inline"></i> এখনই একটা বানাও</button>
+            </form>
+        </div>
+        <p class="text-sm text-gray-500 mb-4">cPanel Cron রোজ একটা করে ব্যাকআপ বানায়, সর্বশেষ ৭টা এখানে জমা থাকে (পুরনোগুলো নিজে মুছে যায়)। যেকোনোটা ডাউনলোড করে কম্পিউটার/ফোনে রেখে দিন।</p>
+
+        <?php if (!$autoFiles): ?>
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+                এখনো কোনো অটো ব্যাকআপ নেই। Cron সেট করলে রোজ নিজে থেকে তৈরি হবে — অথবা উপরের <strong>"এখনই একটা বানাও"</strong> চেপে পরীক্ষা করুন।<br>
+                <span class="text-xs">Cron সেটআপ: cPanel → Cron Jobs → Once a day → Command-এ দিন:<br>
+                <code class="break-all">php <?= e(realpath(__DIR__ . '/../cron/db-backup.php') ?: '/home/ইউজার/public_html/cron/db-backup.php') ?></code></span>
+            </div>
+        <?php else: ?>
+            <div class="bg-white rounded-2xl border border-gray-100 overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead><tr class="text-left text-gray-500 border-b bg-gray-50"><th class="py-3 px-4">তারিখ ও সময়</th><th class="py-3 px-4">সাইজ</th><th class="py-3 px-4">অ্যাকশন</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($autoFiles as $f): $bn = basename($f); ?>
+                        <tr class="border-b last:border-0">
+                            <td class="py-2.5 px-4 font-mono text-xs"><?= e(date('d/m/Y  H:i', filemtime($f))) ?></td>
+                            <td class="py-2.5 px-4"><?= round(filesize($f) / 1024) ?> KB</td>
+                            <td class="py-2.5 px-4 whitespace-nowrap space-x-2">
+                                <form method="post" action="backup.php?action=get" class="inline">
+                                    <?= csrf_field() ?><input type="hidden" name="file" value="<?= e($bn) ?>">
+                                    <button type="submit" class="text-indigo-600 font-semibold">ডাউনলোড</button>
+                                </form>
+                                <form method="post" action="backup.php?action=del" class="inline" onsubmit="return confirmSubmit(this, 'এই ব্যাকআপ ফাইলটি মুছবেন?', 'ডিলিট নিশ্চিতকরণ');">
+                                    <?= csrf_field() ?><input type="hidden" name="file" value="<?= e($bn) ?>">
+                                    <button type="submit" class="text-red-600 font-semibold">ডিলিট</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
     </div>
 
     <?php // ── কীভাবে ফেরাবেন ── ?>

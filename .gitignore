@@ -34,3 +34,6 @@ desktop.ini
 
 # node (Tailwind বিল্ডে npx ব্যবহার হয়, তবু সুরক্ষার জন্য)
 node_modules/
+
+# অটো-ব্যাকআপ ফাইল (কাস্টমার ডেটা — git-এ কখনো না)
+storage/backups/*.sql
