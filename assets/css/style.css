@@ -261,3 +261,18 @@ body { padding-bottom: 64px; }
     display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
 }
 
+
+   OS নিজেই ফেসবুক অ্যাপে খুলে দেয় (App Links / Universal Links), অ্যাপ না থাকলে ব্রাউজারে। */
+.fb-open-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1877F2;              /* ফেসবুকের ব্র্যান্ড নীল — ইচ্ছাকৃতভাবে সাইট-থিম থেকে আলাদা */
+    background: #eff6ff;
+    transition: background .15s ease;
+}
+.fb-open-link:hover { background: #dbeafe; }
