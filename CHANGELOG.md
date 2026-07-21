@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-07-21 (💾 অটো DB ব্যাকআপ — cron + অ্যাডমিন তালিকা)
+
+ইউজার চাইলেন: সার্ভারে রোজ অটো ব্যাকআপ + অ্যাডমিন থেকে তালিকা/ডাউনলোড।
+
+- **`admin/includes/db-dump.php`** (নতুন, শেয়ার্ড): `db_dump_stream($db,$mode,$write)` — ডাম্প খণ্ডে খণ্ডে callback-এ পাঠায় (backup.php echo করে, cron ফাইলে fwrite করে — DRY, আগের ডুপ্লিকেট লজিক সরানো)। `db_backup_dir()` (storage/backups + deny-all .htaccess অটো), `db_backup_to_file($db,$keep=7)` (সেভ + rotation)।
+- **`cron/db-backup.php`** (নতুন): cPanel Cron রোজ চালায়। **শুধু CLI** (`PHP_SAPI===cli` চেক — ব্রাউজার থেকে ট্রিগার করে সার্ভার ভরানো ঠেকাতে ৪০৩)। storage/backups-এ সেভ, সর্বশেষ ৭টা রাখে।
+- **`admin/backup.php`**: অটো-ব্যাকআপ তালিকা (তারিখ/সাইজ) + ডাউনলোড/ডিলিট + "এখনই একটা বানাও" (cron ছাড়াই টেস্ট)। **path-traversal ব্লক**: ফাইলনাম `basename()` + কঠোর regex (`educenter-db-\d{8}-\d{6}\.sql`)।
+- **সুরক্ষা**: storage/backups-এ deny-all `.htaccess` (কাস্টমার ডেটা — বাইরে থেকে খোলা যায় না, PHP নিজে পড়ে ডাউনলোড করায়)। `.sql` ব্যাকআপ **git-এও বাদ** (.gitignore), শুধু ফোল্ডার+htaccess ট্র্যাক।
+- **✅ যাচাই**: cron CLI → ২০৫ KB ব্যাকআপ (৩০ টেবিল/৬৩৮ INSERT) · **rotation** ১০→৭ (পুরনো মুছেছে) · অ্যাডমিন তালিকা ৭ সারি · ডাউনলোড ২০৯ KB · **path-traversal `../../config.php` চেষ্টা ব্লকড** (redirect, config ফাঁস হয়নি)। টেস্ট ফাইল মুছে ক্লিন। git commit।
+- **ডিপ্লয় জিপে যোগ**: `cron/` ট্রি + `storage/backups/` ফোল্ডার (htaccess+index.html, সঠিক পারমিশন)। **⚠️ ইউজারের কাজ (একবার)**: cPanel → Cron Jobs → Once a day → `php /home/<ইউজার>/public_html/cron/db-backup.php`।
+
 ## 2026-07-21 (✅ git + GitHub সম্পূর্ণ — কোড ক্লাউডে)
 
 - **GitHub-এ push সম্পন্ন**: private রিপো `github.com/yasirarafat85/educenter`-এ ৯৩ ফাইল, `main` branch, ২ commit। **যাচাইকৃত**: `git ls-tree origin/main`-এ config.php নেই — সিক্রেট নিরাপদ।
