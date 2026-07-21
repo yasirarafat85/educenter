@@ -1,0 +1,27 @@
+# EduCenter — ক্লিন URL (.php লুকানো)
+# লোকাল (সাবডিরেক্টরি /website) ও লাইভ (ডোমেইন রুট) — দুই জায়গাতেই কাজ করে।
+# THE_REQUEST-ভিত্তিক %1 এ সাবডিরেক্টরি প্রিফিক্স সহ পুরো পাথ থাকে, তাই redirect নিরাপদ।
+# admin/ ফোল্ডার ও ফাংশনাল endpoint (-submit / ajax-* / log-download / sitemap) ইচ্ছাকৃতভাবে বাদ।
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # (B) /index.php (যেকোনো ফোল্ডারে) → সেই ফোল্ডারের রুট  (GET only)
+    RewriteCond %{REQUEST_METHOD} =GET
+    RewriteCond %{THE_REQUEST} \s/+([^\s?]*/)?index\.php[\s?] [NC]
+    RewriteRule ^ /%1 [R=301,L,NE]
+
+    # (A) দৃশ্যমান /foo.php → /foo  (GET only; admin ও ফাংশনাল endpoint বাদ)
+    RewriteCond %{REQUEST_METHOD} =GET
+    RewriteCond %{THE_REQUEST} \s/+([^\s?]+?)\.php[\s?] [NC]
+    RewriteCond %{REQUEST_URI} !(^|/)admin/ [NC]
+    RewriteCond %{REQUEST_URI} !-submit\.php$ [NC]
+    RewriteCond %{REQUEST_URI} !/(ajax-[^/]+|log-download|sitemap)\.php$ [NC]
+    RewriteRule ^ /%1 [R=301,L,NE]
+
+    # extensionless URL → আসল .php ফাইল (থাকলে) — অভ্যন্তরীণ rewrite, query string সহ (QSA)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}.php -f
+    RewriteRule ^(.+?)/?$ $1.php [L,QSA]
+</IfModule>

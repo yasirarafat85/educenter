@@ -1,0 +1,4 @@
+# uploads ফোল্ডারে কেউ যেন .php ফাইল আপলোড করে রান করাতে না পারে (নিরাপত্তার জন্য)
+<FilesMatch "\.(php|phtml|php\d)$">
+    Require all denied
+</FilesMatch>

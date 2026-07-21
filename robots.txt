@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /includes/
+Disallow: /database/
+Disallow: /config.php
+Disallow: /register-submit.php
+Disallow: /course-register-submit.php
+Disallow: /log-download.php
+Disallow: /ajax-lookup-registration.php
+
+# সাইটম্যাপ Google Search Console এ সাবমিট করুন: https://your-domain.com/sitemap.php

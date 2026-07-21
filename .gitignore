@@ -1,0 +1,36 @@
+# ══════════════════════════════════════════════════════════════════
+#  EduCenter — git-এ যা যা যাবে না
+# ══════════════════════════════════════════════════════════════════
+
+# 🔴🔴 সবচেয়ে জরুরি: config.php-এ DB পাসওয়ার্ড ও Pathao ক্রেডেনশিয়াল আছে —
+#     এটা কখনো git/GitHub-এ যাবে না। নমুনা হিসেবে config.example.php আছে।
+config.php
+
+# ডেভ/সেটআপ টুল (লাইভে দরকার নেই, deploy zip-এও বাদ থাকে)
+setup-admin.php
+test-connection.php
+indexv3.html
+
+# আপলোড করা ছবি — ব্যবহারকারীর কনটেন্ট, লাইভ সার্ভারে থাকে (git-এ না)।
+# ফোল্ডার-স্ট্রাকচার রাখতে প্রতিটা uploads/<sub>/index.html কিন্তু git-এ থাকে।
+uploads/**/*.jpg
+uploads/**/*.jpeg
+uploads/**/*.png
+uploads/**/*.gif
+uploads/**/*.webp
+
+# ব্যাকআপ ও প্যাকেজ ফাইল
+*.zip
+*.sql.gz
+educenter-*.sql
+
+# OS/এডিটরের আবর্জনা
+Thumbs.db
+.DS_Store
+desktop.ini
+*.swp
+.vscode/
+.idea/
+
+# node (Tailwind বিল্ডে npx ব্যবহার হয়, তবু সুরক্ষার জন্য)
+node_modules/
