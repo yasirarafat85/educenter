@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-07-21 (🔧 git repo তৈরি — লোকাল অংশ সম্পন্ন, GitHub পুশ বাকি)
+
+ইউজার git + GitHub চেয়েছেন (মোবাইল থেকে কাজ + কোড ব্যাকআপ + ইতিহাস)।
+
+- **`.gitignore`** (নতুন): 🔴 `config.php` (DB পাসওয়ার্ড + Pathao ক্রেডেনশিয়াল) বাদ; সাথে `setup-admin.php`/`test-connection.php`/`indexv3.html` (ডেভ), uploads-এর আসল ছবি (`*.jpg/png/webp` — ফোল্ডার-স্ট্রাকচার থাকে), `*.zip`, `educenter-*.sql`, OS/এডিটর আবর্জনা।
+- **`config.example.php`** (নতুন): আসল পাসওয়ার্ড ছাড়া নমুনা — fresh clone-এ কপি করে `config.php` বানাতে হয়।
+- **`git init` + প্রথম commit** (`main` branch): **৯৩ ফাইল** ট্র্যাক। **নিরাপত্তা যাচাইকৃত**: `git ls-files`-এ config.php নেই, কোনো ছবি/সিক্রেট/ডেটা-ডাম্প নেই (৬১ php, ৯ sql [সব migration/schema], ৭ md ইত্যাদি)। git পরিচয় সেট (Yasir Arafat / arafat.bd6@gmail.com)।
+- **⬜ বাকি (ইউজারের অ্যাকাউন্ট লাগবে)**: GitHub-এ **private** repo তৈরি → remote যোগ → push। তারপর হোস্টিং git support করলে (cPanel → Git Version Control) লাইভে `git pull`-এ আপডেট। **DB সবসময় আলাদা** — git-এর আওতায় না (ব্যাকআপ = `admin/backup.php`)।
+
 ## 2026-07-20 (💾 ব্যাকআপ ও ডাউনলোড ফিচার — `admin/backup.php`)
 
 ইউজারের উদ্বেগ: লোকাল ফোল্ডারে কোড আছে কিন্তু **লাইভ DB-র কাস্টমার ডেটার কোনো কপি নেই** — হোস্টিং নষ্ট হলে সব হারাবে।
