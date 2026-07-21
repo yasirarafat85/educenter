@@ -81,8 +81,9 @@
     </footer>
 
     <?php
-    // ── নিচের স্টিকি নেভিগেশন বার (শুধু মোবাইলে) — অ্যাপের মতো, সবচেয়ে দরকারি ৪টা লিংক হাতের নাগালে ──
-    // ডেস্কটপে (lg+) লুকানো, কারণ সেখানে উপরে পুরো মেনু আছে। active পেজ হাইলাইট হয়।
+    // ── নিচের স্টিকি নেভিগেশন বার (মোবাইল ও ডেস্কটপ দুটোতেই) — অ্যাপের মতো, দরকারি লিংক হাতের নাগালে ──
+    // শেষ আইটেম "উপরে" = পেজের উপরে নিয়ে যায় (আগের আলাদা ভাসমান back-to-top বাটন এর সাথে ভিড়
+    // করত, তাই বারের ভেতরে ৫ম আইটেম হিসেবে নেওয়া হয়েছে — ইউজারের আইডিয়া, ২০২৬-০৭-২১)।
     $bottomNav = [
         ['label' => 'হোম',      'icon' => 'home',        'url' => './',        'id' => 'home'],
         ['label' => 'কোর্স',     'icon' => 'book-open',   'url' => 'courses',   'id' => 'courses'],
@@ -90,13 +91,18 @@
         ['label' => 'যোগাযোগ',   'icon' => 'phone',       'url' => 'about',     'id' => 'about'],
     ];
     ?>
-    <nav id="bottom-nav" class="lg:hidden" aria-label="দ্রুত নেভিগেশন">
+    <nav id="bottom-nav" aria-label="দ্রুত নেভিগেশন">
         <?php foreach ($bottomNav as $bn): ?>
             <a href="<?= e($bn['url']) ?>" class="bnav-item<?= ($activePage ?? '') === $bn['id'] ? ' bnav-on' : '' ?>">
                 <i data-lucide="<?= e($bn['icon']) ?>" class="w-5 h-5"></i>
                 <span><?= e($bn['label']) ?></span>
             </a>
         <?php endforeach; ?>
+        <?php // ৫ম আইটেম — "উপরে যান" (আলাদা ভাসমান বাটনের বদলে) ?>
+        <button type="button" id="bnav-top" class="bnav-item" aria-label="উপরে যান">
+            <i data-lucide="arrow-up" class="w-5 h-5"></i>
+            <span>উপরে</span>
+        </button>
     </nav>
 
     <?php // ── ভাসমান WhatsApp বাটন — অ্যাডমিন contact_whatsapp সেট করলে দেখাবে (এক ট্যাপে চ্যাট) ──
@@ -108,29 +114,13 @@
     </a>
     <?php endif; ?>
 
-    <?php // "উপরে যান" বাটন — নিচে স্ক্রল করলে দেখা যায়, ক্লিকে উপরে নিয়ে যায় ?>
-    <button type="button" id="back-to-top" aria-label="উপরে যান" title="উপরে যান">
-        <i data-lucide="arrow-up" class="w-5 h-5"></i>
-    </button>
-
     <script>
         lucide.createIcons();
 
-        // ── উপরে যাওয়ার বাটন ──
+        // ── স্টিকি বারের "উপরে" আইটেম — ক্লিকে পেজের উপরে নিয়ে যায় (আলাদা ভাসমান বাটন নয়) ──
         (function () {
-            var btn = document.getElementById('back-to-top');
+            var btn = document.getElementById('bnav-top');
             if (!btn) { return; }
-            // ৩০০px এর বেশি নিচে নামলে দেখাও (rAF দিয়ে scroll ইভেন্ট থ্রটল করা — মোবাইলে স্মুথ থাকে)
-            var ticking = false;
-            function update() {
-                btn.classList.toggle('show', window.scrollY > 300);
-                ticking = false;
-            }
-            window.addEventListener('scroll', function () {
-                if (!ticking) { window.requestAnimationFrame(update); ticking = true; }
-            }, { passive: true });
-            update();
-
             btn.addEventListener('click', function () {
                 // prefers-reduced-motion সম্মান করা (CLAUDE.md এর মোবাইল/অ্যাক্সেসিবিলিটি নিয়ম)
                 var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;

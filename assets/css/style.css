@@ -141,121 +141,6 @@ body {
    নিচে স্ক্রল করলে (JS `.show` ক্লাস বসায়) ডান-নিচে ভেসে ওঠে। রঙ সাইট
    থিম থেকে (rgb(var(--c-primary))), তাই থিম বদলালে এটাও বদলাবে।
    মোবাইলে ট্যাপ-টার্গেট ৪৮px (CLAUDE.md এর নিয়ম)। */
-#back-to-top {
-    position: fixed;
-    right: 16px;
-    bottom: 16px;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    background: linear-gradient(135deg, rgb(var(--c-primary-2)) 0%, rgb(var(--c-primary)) 100%);
-    box-shadow: 0 6px 20px rgb(var(--c-primary) / 0.4);
-    border: none;
-    cursor: pointer;
-    z-index: 40;
-    /* ডিফল্টে লুকানো — নিচে না নামা পর্যন্ত দেখা যাবে না।
-       ⚠️ `visibility` ইচ্ছাকৃতভাবে ব্যবহার করা হয়নি — transition-এ visibility মেশালে কিছু
-       ব্রাউজারে অদ্ভুত আচরণ করে; `pointer-events` দিয়ে একই কাজ হয় (লুকানো অবস্থায় ক্লিক ধরে না)। */
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(12px);
-    transition: opacity .25s ease, transform .25s ease;
-}
-#back-to-top.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
-#back-to-top:hover { transform: translateY(-3px); box-shadow: 0 10px 26px rgb(var(--c-primary) / 0.5); }
-#back-to-top:focus-visible { outline: 3px solid rgb(var(--c-primary) / 0.45); outline-offset: 2px; }
-
-@media (prefers-reduced-motion: reduce) {
-    #back-to-top { transition: opacity .01ms; }
-    #back-to-top:hover { transform: none; }
-}
-
-/* ফেসবুক পোস্টের নিচে "ফেসবুকে পুরোটা দেখুন" লিংক — মোবাইলে সাধারণ https ফেসবুক লিংক
-   OS নিজেই ফেসবুক অ্যাপে খুলে দেয় (App Links / Universal Links), অ্যাপ না থাকলে ব্রাউজারে। */
-.fb-open-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    border-radius: 10px;
-    font-size: 14px;
-    font-weight: 700;
-    color: #1877F2;              /* ফেসবুকের ব্র্যান্ড নীল — ইচ্ছাকৃতভাবে সাইট-থিম থেকে আলাদা */
-    background: #eff6ff;
-    transition: background .15s ease;
-}
-.fb-open-link:hover { background: #dbeafe; }
-
-/* ── ফেসবুক পোস্ট কার্ড (২০২৬-০৭-২০) ───────────────────────────────
-   iframe এমবেডের বদলে নিজেদের কার্ড — সব পোস্ট/রিল/ভিডিওতে কাজ করে,
-   অনেক দ্রুত, আর ক্লিকে মোবাইলে ফেসবুক অ্যাপে খোলে। */
-.fb-card {
-    display: flex; flex-direction: column;
-    background: #fff; border-radius: 1rem; overflow: hidden;
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,.08), 0 2px 4px -2px rgba(0,0,0,.06);
-    transition: transform .25s ease, box-shadow .25s ease;
-    height: 100%;
-}
-.fb-card:hover { transform: translateY(-6px); box-shadow: 0 20px 35px -12px rgba(20,20,60,.22); }
-.fb-card-feat { outline: 2px solid #93c5fd; outline-offset: -2px; }
-
-.fb-card-media { position: relative; aspect-ratio: 4/3; background: #f1f5f9; overflow: hidden; }
-.fb-card-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-
-.fb-card-kind, .fb-card-star {
-    position: absolute; top: 10px;
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 4px 10px; border-radius: 999px;
-    font-size: 12px; font-weight: 700; backdrop-filter: blur(4px);
-}
-.fb-card-kind { left: 10px; background: rgba(255,255,255,.92); color: #1877F2; }
-.fb-card-kind svg { width: 13px; height: 13px; }
-.fb-card-star { right: 10px; background: rgba(37,99,235,.92); color: #fff; }
-
-.fb-card-body { padding: 14px 16px 16px; display: flex; flex-direction: column; flex: 1; }
-.fb-card-title {
-    font-weight: 700; font-size: 1rem; line-height: 1.5; color: #111827;
-    /* ২ লাইনের বেশি হলে ... দেখাবে — সব কার্ড সমান উচ্চতায় সুন্দর থাকে */
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.fb-card-text {
-    margin-top: 6px; font-size: .875rem; line-height: 1.6; color: #6b7280;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.fb-card-cta { margin-top: auto; padding-top: 12px; font-size: .875rem; font-weight: 700; color: #1877F2; }
-.fb-card:hover .fb-card-cta { text-decoration: underline; }
-
-@media (prefers-reduced-motion: reduce) {
-    .fb-card { transition: none; }
-    .fb-card:hover { transform: none; }
-}
-
-/* ছবি না দিলে — রঙিন গ্রেডিয়েন্ট + হালকা ডট-নকশার উপর শিরোনামটাই বড় করে
-   (খবরের সাইটের ছবিহীন খবরের মতো)। রঙ কার্ডভেদে ঘোরে (c0–c4), তাই পাশাপাশি
-   কয়েকটা থাকলেও একঘেয়ে লাগে না। */
-.fb-card-noimg { display: flex; align-items: center; justify-content: center; padding: 22px; }
-.fb-card-noimg::after {
-    content: ''; position: absolute; inset: 0;
-    background-image: radial-gradient(rgba(255,255,255,.22) 1.5px, transparent 1.5px);
-    background-size: 16px 16px;
-}
-.fb-card-noimg.c0 { background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); }
-.fb-card-noimg.c1 { background: linear-gradient(135deg, #059669 0%, #065f46 100%); }
-.fb-card-noimg.c2 { background: linear-gradient(135deg, #9333ea 0%, #6b21a8 100%); }
-.fb-card-noimg.c3 { background: linear-gradient(135deg, #ea580c 0%, #9a3412 100%); }
-.fb-card-noimg.c4 { background: linear-gradient(135deg, #0891b2 0%, #155e75 100%); }
-.fb-card-ph-title {
-    position: relative; z-index: 1; text-align: center;
-    color: #fff; font-weight: 800; font-size: 1.15rem; line-height: 1.65;
-    text-shadow: 0 2px 8px rgba(0,0,0,.25);
-    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
-}
-
 /* ── নিচের স্টিকি নেভিগেশন বার (মোবাইল, ২০২৬-০৭-২১) ─────────────────
    অ্যাপের মতো — সবচেয়ে দরকারি ৪টা লিংক সবসময় হাতের নাগালে। শুধু মোবাইলে
    (HTML-এ lg:hidden), ডেস্কটপে উপরে পুরো মেনু আছে বলে দরকার নেই। */
@@ -281,14 +166,20 @@ body {
 .bnav-item svg { width: 22px; height: 22px; }
 .bnav-item:active { background: rgb(var(--c-tint, 236 253 245)); }
 .bnav-on { color: rgb(var(--c-primary)); }
-
-/* মোবাইলে স্টিকি বার পেজের কনটেন্টের উপর যাতে না বসে — নিচে জায়গা ছাড়া */
-@media (max-width: 1023px) {
-    body { padding-bottom: 58px; }
-    /* ভাসমান বাটনগুলো স্টিকি বারের উপরে তুলে দেওয়া (নাহলে বারের পেছনে চাপা পড়ত) */
-    #back-to-top { bottom: 72px; }
-    #wa-float { bottom: 128px; } /* back-to-top এর ঠিক উপরে */
+/* "উপরে" আইটেম একটা <button> — লিংকদের মতোই দেখাতে ডিফল্ট বাটন-স্টাইল রিসেট */
+#bnav-top { background: none; border: none; cursor: pointer; font-family: inherit; }
+/* ডেস্কটপে ৫টা আইটেম পুরো চওড়ায় না ছড়িয়ে কেন্দ্রে গোছানো (মোবাইলে fl:1 পুরো প্রস্থ) */
+@media (min-width: 1024px) {
+    #bottom-nav { justify-content: center; }
+    #bottom-nav .bnav-item { flex: 0 0 auto; min-width: 110px; }
 }
+
+
+
+/* স্টিকি বার এখন সব স্ক্রিনে — পেজের কনটেন্ট যাতে এর পেছনে চাপা না পড়ে, নিচে জায়গা ছাড়া।
+   WhatsApp ভাসমান বাটন বারের ঠিক উপরে (নাহলে বারের পেছনে ঢুকে যেত)। */
+body { padding-bottom: 60px; }
+#wa-float { bottom: 74px; }
 
 /* ── ভাসমান WhatsApp বাটন ── */
 #wa-float {
