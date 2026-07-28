@@ -259,6 +259,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
             <p class="nav-section">অর্ডার</p>
             <a href="registrations.php" class="nav-link <?= nav_active('registrations.php', $currentFile) ?>"><i data-lucide="clipboard-list" class="w-4 h-4"></i> রেজিস্ট্রেশন/অর্ডার</a>
             <a href="course-data.php" class="nav-link <?= nav_active('course-data.php', $currentFile) ?>"><i data-lucide="table" class="w-4 h-4"></i> ডেটা টেবিল</a>
+            <a href="course-interests.php" class="nav-link <?= nav_active('course-interests.php', $currentFile) ?>"><i data-lucide="heart-handshake" class="w-4 h-4"></i> আগ্রহ তালিকা</a>
             <a href="courier.php" class="nav-link <?= nav_active('courier.php', $currentFile) ?>"><i data-lucide="truck" class="w-4 h-4"></i> কুরিয়ার</a>
             <a href="courier-prepare.php" class="nav-link <?= nav_active('courier-prepare.php', $currentFile) ?>"><i data-lucide="package" class="w-4 h-4"></i> পার্সেল প্রস্তুত</a>
             <a href="courier-tracking.php" class="nav-link <?= nav_active('courier-tracking.php', $currentFile) ?>"><i data-lucide="calendar-check" class="w-4 h-4"></i> কুরিয়ার ট্র্যাকিং</a>

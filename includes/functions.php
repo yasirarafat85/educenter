@@ -418,7 +418,7 @@ function render_item_card(array $item, string $type): string
     $closedBadge = $registrationClosed ? '<div class="absolute top-3 left-3 bg-gray-900/80 text-white px-3 py-1.5 rounded-full font-semibold text-xs">রেজিস্ট্রেশন বন্ধ</div>' : '';
 
     $ctaBtn = $registrationClosed
-        ? '<span class="block w-full text-center py-3 px-4 rounded-xl font-bold bg-gray-200 text-gray-500 cursor-not-allowed">রেজিস্ট্রেশন বন্ধ</span>'
+        ? '<a href="course-interest?course_id=' . $id . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">জানিয়ে রাখুন</a>'
         : '<a href="' . $actionUrl . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">' . $actionLabel . '</a>';
 
     return '

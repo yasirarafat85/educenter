@@ -556,4 +556,29 @@ CREATE TABLE social_posts (
     INDEX idx_active_order (is_active, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ------------------------------------------------------------
+-- course_interests : রেজিস্ট্রেশন বন্ধ ("আসছে শীঘ্রই") কোর্সে অভিভাবক আগ্রহ জানিয়ে রাখেন —
+-- নতুন ব্যাচ খুললে অ্যাডমিন যোগাযোগ করেন (ওয়েটিং লিস্ট / লিড সংগ্রহ)। পাবলিক course-interest.php ফর্ম থেকে।
+-- batch_id → course_batches (ব্যাচ ডিলিট হলে SET NULL, স্ন্যাপশট নাম item_title/batch_name-এ থাকে)।
+-- একই নাম্বারে আগে জমা থাকলে ফর্মে অটো-ফিল হয় (ajax-lookup-interest.php)।
+-- ------------------------------------------------------------
+CREATE TABLE course_interests (
+    id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    batch_id      INT UNSIGNED DEFAULT NULL,           -- course_batches.id (কোন কোর্স-ব্যাচে আগ্রহ)
+    item_title    VARCHAR(255) DEFAULT NULL,           -- কোর্স টাইটেল স্ন্যাপশট
+    batch_name    VARCHAR(100) DEFAULT NULL,           -- ব্যাচ নাম স্ন্যাপশট
+    contact_phone VARCHAR(20)  NOT NULL,               -- যোগাযোগ নাম্বার
+    phone_owner   VARCHAR(10)  NOT NULL DEFAULT 'mother', -- 'mother' / 'father'
+    child_name    VARCHAR(150) DEFAULT NULL,           -- শিশুর নাম
+    facebook_name VARCHAR(150) DEFAULT NULL,           -- ফেসবুক আইডির নাম
+    remarks       VARCHAR(500) DEFAULT NULL,           -- মন্তব্য
+    status        VARCHAR(20)  NOT NULL DEFAULT 'new', -- new / contacted
+    ip_address    VARCHAR(45)  DEFAULT NULL,
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (batch_id) REFERENCES course_batches(id) ON DELETE SET NULL,
+    INDEX idx_ci_phone (contact_phone),
+    INDEX idx_ci_status (status),
+    INDEX idx_ci_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

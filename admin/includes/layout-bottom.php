@@ -187,7 +187,7 @@
         }
 
         // ইতিমধ্যে নিজস্ব ফিল্টার-ফর্ম আছে এমন পেজ বাদ
-        if (document.querySelector('#regFilterForm, #courierFilterForm, #logsFilterForm')) { return; }
+        if (document.querySelector('#regFilterForm, #courierFilterForm, #logsFilterForm, #ciFilterForm')) { return; }
 
         // ১) টেবিল-ভিত্তিক লিস্ট
         document.querySelectorAll('main .overflow-x-auto > table').forEach(function (t) {
