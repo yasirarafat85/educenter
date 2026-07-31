@@ -1,0 +1,52 @@
+package com.shishurmedhabikash.clipnotes.data
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.Query
+import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface AppDao {
+
+    // ---- Notes ----
+    @Query("SELECT * FROM notes WHERE isTrashed = 0 ORDER BY isFavorite DESC, updatedAt DESC")
+    fun activeNotes(): Flow<List<Note>>
+
+    @Query("SELECT * FROM notes WHERE isTrashed = 0 AND isFavorite = 1 ORDER BY updatedAt DESC")
+    fun favoriteNotes(): Flow<List<Note>>
+
+    @Query("SELECT * FROM notes WHERE isTrashed = 1 ORDER BY updatedAt DESC")
+    fun trashedNotes(): Flow<List<Note>>
+
+    @Query("SELECT * FROM notes WHERE id = :id LIMIT 1")
+    suspend fun getNote(id: Long): Note?
+
+    @Insert
+    suspend fun insertNote(note: Note): Long
+
+    @Update
+    suspend fun updateNote(note: Note)
+
+    @Query("DELETE FROM notes WHERE id = :id")
+    suspend fun deleteNoteHard(id: Long)
+
+    @Query("DELETE FROM notes WHERE isTrashed = 1")
+    suspend fun emptyTrash()
+
+    // ---- Categories ----
+    @Query("SELECT * FROM categories ORDER BY name COLLATE NOCASE ASC")
+    fun categories(): Flow<List<Category>>
+
+    @Insert
+    suspend fun insertCategory(category: Category): Long
+
+    @Update
+    suspend fun updateCategory(category: Category)
+
+    @Query("DELETE FROM categories WHERE id = :id")
+    suspend fun deleteCategory(id: Long)
+
+    @Query("UPDATE notes SET categoryId = NULL WHERE categoryId = :id")
+    suspend fun clearCategoryFromNotes(id: Long)
+}

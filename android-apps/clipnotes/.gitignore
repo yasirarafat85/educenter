@@ -1,0 +1,15 @@
+# Android / Gradle build output
+.gradle/
+build/
+app/build/
+local.properties
+
+# Signing keys must NEVER be committed
+*.jks
+*.keystore
+keystore.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store
