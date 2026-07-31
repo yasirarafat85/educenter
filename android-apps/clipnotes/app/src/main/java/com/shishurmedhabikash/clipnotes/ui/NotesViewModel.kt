@@ -33,7 +33,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
     var themeMode by mutableStateOf(prefs.getInt("theme", 0))
         private set
 
-    fun setThemeMode(mode: Int) {
+    fun setTheme(mode: Int) {
         themeMode = mode
         prefs.edit().putInt("theme", mode).apply()
     }

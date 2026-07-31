@@ -46,13 +46,13 @@ fun SettingsScreen(vm: NotesViewModel) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { vm.setThemeMode(value) }
+                    .clickable { vm.setTheme(value) }
                     .padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 RadioButton(
                     selected = vm.themeMode == value,
-                    onClick = { vm.setThemeMode(value) }
+                    onClick = { vm.setTheme(value) }
                 )
                 Spacer(Modifier.size(8.dp))
                 Text(label, style = MaterialTheme.typography.bodyLarge)
