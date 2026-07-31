@@ -1,4 +1,4 @@
-package com.shishurmedhabikash.clipnotes.ui
+package com.yasirarafat.clipnotes.ui
 
 import android.app.Application
 import android.content.Context
@@ -7,9 +7,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.shishurmedhabikash.clipnotes.data.AppDatabase
-import com.shishurmedhabikash.clipnotes.data.Category
-import com.shishurmedhabikash.clipnotes.data.Note
+import com.yasirarafat.clipnotes.data.AppDatabase
+import com.yasirarafat.clipnotes.data.Category
+import com.yasirarafat.clipnotes.data.Note
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn

@@ -7,7 +7,7 @@
 ## 2026-07-31 (📱 নতুন সাবপ্রজেক্ট: Android অ্যাপ "Clip Notes")
 
 - ইউজার এখন ওয়েবসাইটের পাশাপাশি স্বতন্ত্র **Android অ্যাপ** বানাতে চান (Play Store-এ পাবলিশের জন্য)। প্রথম অ্যাপ: **Clip Notes** — দরকারি লেখা সেভ করে এক-ট্যাপে কপি করার নোট/ক্লিপবোর্ড ম্যানেজার (ব্যবহারকারীর দেখানো "Clipboard Manager" অ্যাপের আদলে)।
-- **নতুন ফোল্ডার `android-apps/clipnotes/`** (এই ওয়েবসাইট রিপোর ভেতরেই, আলাদা সাবপ্রজেক্ট)। টেক: Kotlin + Jetpack Compose (Material 3) + Room (SQLite)। সম্পূর্ণ **অফলাইন**, কোনো সার্ভার/ইন্টারনেট লাগে না — সব ডেটা ফোনের প্রাইভেট স্টোরেজে। প্যাকেজ `com.shishurmedhabikash.clipnotes`, minSdk 24, compileSdk 34।
+- **নতুন ফোল্ডার `android-apps/clipnotes/`** (এই ওয়েবসাইট রিপোর ভেতরেই, আলাদা সাবপ্রজেক্ট)। টেক: Kotlin + Jetpack Compose (Material 3) + Room (SQLite)। সম্পূর্ণ **অফলাইন**, কোনো সার্ভার/ইন্টারনেট লাগে না — সব ডেটা ফোনের প্রাইভেট স্টোরেজে। প্যাকেজ `com.yasirarafat.clipnotes`, minSdk 24, compileSdk 34।
 - ফিচার: Notes তালিকা + এক-ট্যাপ কপি, Add/Edit, Categories, Favorites, Trash (soft-delete+restore), Search, Settings (লাইট/ডার্ক/সিস্টেম থিম), Share। PIL দিয়ে সব density-র launcher আইকন + Play Store অ্যাসেট (৫১২ আইকন, ফিচার গ্রাফিক) `store-assets/`-এ জেনারেট করা।
 - **বিল্ড হয় GitHub Actions-এ** (`.github/workflows/android-clipnotes.yml`) — এই Claude environment-এ Google Maven (`dl.google.com`) egress-পলিসিতে ব্লক বলে লোকালি বিল্ড করা যায় না; CI-তে debug APK (সবসময়) + signed release AAB (signing Secrets থাকলে) তৈরি হয়। প্রথম বিল্ডে একটা JVM signature clash (`setThemeMode` ↔ প্রপার্টি সেটার) ধরা পড়ে ঠিক করা হয়; run #2 সফল, APK আর্টিফ্যাক্ট প্রস্তুত।
 - **বাকি (পরের ধাপ)**: Google Play Console অ্যাকাউন্ট ($25), upload keystore তৈরি + GitHub Secrets, release AAB আপলোড ও স্টোর লিস্টিং। বিস্তারিত `android-apps/clipnotes/README.md`-এ।

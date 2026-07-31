@@ -1,4 +1,4 @@
-package com.shishurmedhabikash.clipnotes.ui.theme
+package com.yasirarafat.clipnotes.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme

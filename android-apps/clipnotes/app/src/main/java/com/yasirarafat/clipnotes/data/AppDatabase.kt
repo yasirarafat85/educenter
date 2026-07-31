@@ -1,4 +1,4 @@
-package com.shishurmedhabikash.clipnotes.data
+package com.yasirarafat.clipnotes.data
 
 import android.content.Context
 import androidx.room.Database

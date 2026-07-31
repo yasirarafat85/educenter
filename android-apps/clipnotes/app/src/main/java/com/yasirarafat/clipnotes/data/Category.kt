@@ -1,4 +1,4 @@
-package com.shishurmedhabikash.clipnotes.data
+package com.yasirarafat.clipnotes.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey

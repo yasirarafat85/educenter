@@ -3,7 +3,7 @@
 দরকারি লেখা সেভ করে রেখে **এক ট্যাপে কপি** করার অ্যাপ। সব ডেটা ফোনের ভেতরেই থাকে (SQLite), ইন্টারনেট লাগে না।
 
 - **অ্যাপের নাম**: Clip Notes (বদলানো সহজ — `app/src/main/res/values/strings.xml`)
-- **প্যাকেজ (Play Store-এ স্থায়ী আইডি)**: `com.shishurmedhabikash.clipnotes`
+- **প্যাকেজ (Play Store-এ স্থায়ী আইডি)**: `com.yasirarafat.clipnotes`
 - **সর্বনিম্ন Android**: 7.0 (প্রায় সব ফোনে চলবে)
 
 ## ✅ ফিচার

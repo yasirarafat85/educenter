@@ -1,4 +1,4 @@
-package com.shishurmedhabikash.clipnotes.data
+package com.yasirarafat.clipnotes.data
 
 import androidx.room.Dao
 import androidx.room.Insert

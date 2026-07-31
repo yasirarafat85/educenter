@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.shishurmedhabikash.clipnotes"
+    namespace = "com.yasirarafat.clipnotes"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.shishurmedhabikash.clipnotes"
+        applicationId = "com.yasirarafat.clipnotes"
         minSdk = 24
         targetSdk = 34
         versionCode = 1

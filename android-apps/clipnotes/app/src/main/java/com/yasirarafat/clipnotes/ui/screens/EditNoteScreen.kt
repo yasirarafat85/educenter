@@ -1,4 +1,4 @@
-package com.shishurmedhabikash.clipnotes.ui.screens
+package com.yasirarafat.clipnotes.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -32,8 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.shishurmedhabikash.clipnotes.data.Category
-import com.shishurmedhabikash.clipnotes.ui.NotesViewModel
+import com.yasirarafat.clipnotes.data.Category
+import com.yasirarafat.clipnotes.ui.NotesViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

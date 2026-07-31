@@ -1,4 +1,4 @@
-package com.shishurmedhabikash.clipnotes.ui.screens
+package com.yasirarafat.clipnotes.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -45,8 +45,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.shishurmedhabikash.clipnotes.data.Category
-import com.shishurmedhabikash.clipnotes.data.Note
+import com.yasirarafat.clipnotes.data.Category
+import com.yasirarafat.clipnotes.data.Note
 
 @Composable
 fun NotesList(

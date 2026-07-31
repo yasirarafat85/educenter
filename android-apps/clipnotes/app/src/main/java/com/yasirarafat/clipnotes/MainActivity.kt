@@ -1,4 +1,4 @@
-package com.shishurmedhabikash.clipnotes
+package com.yasirarafat.clipnotes
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -9,9 +9,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import com.shishurmedhabikash.clipnotes.ui.ClipApp
-import com.shishurmedhabikash.clipnotes.ui.NotesViewModel
-import com.shishurmedhabikash.clipnotes.ui.theme.ClipNotesTheme
+import com.yasirarafat.clipnotes.ui.ClipApp
+import com.yasirarafat.clipnotes.ui.NotesViewModel
+import com.yasirarafat.clipnotes.ui.theme.ClipNotesTheme
 
 class MainActivity : ComponentActivity() {
 

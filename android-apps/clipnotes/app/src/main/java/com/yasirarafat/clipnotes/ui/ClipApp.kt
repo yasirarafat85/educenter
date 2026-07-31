@@ -1,4 +1,4 @@
-package com.shishurmedhabikash.clipnotes.ui
+package com.yasirarafat.clipnotes.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -54,11 +54,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.shishurmedhabikash.clipnotes.ui.screens.CategoriesScreen
-import com.shishurmedhabikash.clipnotes.ui.screens.EditNoteScreen
-import com.shishurmedhabikash.clipnotes.ui.screens.NotesList
-import com.shishurmedhabikash.clipnotes.ui.screens.SettingsScreen
-import com.shishurmedhabikash.clipnotes.ui.screens.TrashScreen
+import com.yasirarafat.clipnotes.ui.screens.CategoriesScreen
+import com.yasirarafat.clipnotes.ui.screens.EditNoteScreen
+import com.yasirarafat.clipnotes.ui.screens.NotesList
+import com.yasirarafat.clipnotes.ui.screens.SettingsScreen
+import com.yasirarafat.clipnotes.ui.screens.TrashScreen
 import kotlinx.coroutines.launch
 
 private const val NOT_EDITING = Long.MIN_VALUE

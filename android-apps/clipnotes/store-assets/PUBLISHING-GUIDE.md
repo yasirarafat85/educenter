@@ -7,8 +7,8 @@
 ## ০) আগে যা লাগবে
 1. **signed AAB ফাইল** — GitHub-এ ৪টা Secret যোগ করলে অটো তৈরি হয় (নিচে "AAB" অংশ দেখুন)
 2. **Play Console অ্যাকাউন্ট** — https://play.google.com/console ($25 একবার)
-3. **প্রাইভেসি পলিসি লিংক** — `privacy-policy.html` ফাইলটা আপনার ওয়েবসাইটে আপলোড করুন
-   - যেমন cPanel-এ রুটে দিলে লিংক হবে: `https://shishurmedhabikash.com/privacy-policy.html`
+3. **প্রাইভেসি পলিসি লিংক** — Google Sites-এ (ফ্রি, নিরপেক্ষ) পেজ বানিয়ে পাবলিশ করুন
+   - `privacy-policy-text.md` ফাইলের লেখা Google Sites-এ পেস্ট করে পাবলিশ করলে একটা `sites.google.com/...` লিংক পাবেন
    - এই লিংকটাই Play Console-এ দিতে হবে
 
 ---
