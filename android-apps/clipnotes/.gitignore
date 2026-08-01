@@ -4,10 +4,12 @@ build/
 app/build/
 local.properties
 
-# Signing keys must NEVER be committed
+# Signing keys must NEVER be committed (the release/upload key)
 *.jks
 *.keystore
 keystore.properties
+# ...except the throwaway DEBUG key, which is public by design and needed by CI
+!app/debug.keystore
 
 # IDE
 .idea/

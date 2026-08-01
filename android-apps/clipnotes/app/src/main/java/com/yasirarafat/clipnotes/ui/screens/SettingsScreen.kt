@@ -117,31 +117,49 @@ fun SettingsScreen(vm: NotesViewModel) {
 
         Divider16()
 
-        // ---- Backup ----
+        // ---- Backup (Pro) ----
         SectionTitle("Backup & Restore")
-        Text(
-            "Save all your notes to a file you can keep or move to another phone. " +
-                "Android also backs up automatically to your Google account when enabled.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.size(12.dp))
-        Button(
-            onClick = { exportLauncher.launch("clipnotes-backup.json") },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Filled.FileUpload, null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Export / Backup to file")
-        }
-        Spacer(Modifier.size(8.dp))
-        OutlinedButton(
-            onClick = { importLauncher.launch(arrayOf("*/*")) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Filled.FileDownload, null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Import / Restore from file")
+        if (!vm.isPro) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.Lock, null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    "Unlock Pro (below) to back up and restore your notes.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            Text(
+                "Save all your notes to a file. In the save screen you can choose " +
+                    "Google Drive to back up to the cloud, or your phone storage. " +
+                    "Restore reads that file back. (Android also auto-backs-up to your " +
+                    "Google account when device backup is on.)",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.size(12.dp))
+            Button(
+                onClick = { exportLauncher.launch("clipnotes-backup.json") },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.FileUpload, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Back up (Google Drive / file)")
+            }
+            Spacer(Modifier.size(8.dp))
+            OutlinedButton(
+                onClick = { importLauncher.launch(arrayOf("*/*")) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.FileDownload, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Restore (Google Drive / file)")
+            }
         }
 
         Divider16()
@@ -160,7 +178,7 @@ fun SettingsScreen(vm: NotesViewModel) {
             val deviceCode = remember { vm.deviceCode() }
 
             Text(
-                "Pro unlocks extra features (like the Dark theme). To activate, share your " +
+                "Pro unlocks the Dark theme and Backup & Restore. To activate, share your " +
                     "Device Code, then enter the key you receive.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

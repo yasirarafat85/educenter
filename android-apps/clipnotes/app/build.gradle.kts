@@ -22,6 +22,15 @@ android {
     // builds), the release build simply stays unsigned.
     val keystorePath: String? = System.getenv("KEYSTORE_PATH")
     signingConfigs {
+        // Fixed debug key (committed) so every debug build is signed the same way.
+        // This keeps the test app installable over previous test builds and keeps
+        // the device code (for Pro activation) stable across builds.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         create("release") {
             if (keystorePath != null) {
                 storeFile = file(keystorePath)

@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-08-01 (📱 Clip Notes: Backup Pro-গেটেড + Google Drive + স্থায়ী debug key)
+
+- **Export/Import এখন Pro-গেটেড** (আগে ফ্রি ছিল): Pro key দিয়ে আনলক হলে তবেই Backup & Restore + Dark theme — ইউজারের চাওয়া অনুযায়ী।
+- **Google Drive ব্যাকআপ/রিস্টোর**: SAF (CreateDocument/OpenDocument) সেভ/ওপেন স্ক্রিনে Google Drive লোকেশন হিসেবে আসে — আলাদা OAuth/Cloud-project ছাড়াই ক্লাউড ব্যাকআপ। বাটন রিলেবেল ("Back up (Google Drive / file)")। পূর্ণ অটো-সিংক ইচ্ছাকৃতভাবে বাদ (Drive API scope verification + debug SHA rotation-এ ভাঙে)।
+- **🔴 স্থায়ী debug keystore** (`app/debug.keystore`, কমিটেড, `.gitignore`-এ `!app/debug.keystore` exception): এতদিন CI প্রতি বিল্ডে ephemeral debug key বানাত → (ক) রিইনস্টলে "package conflicts" ও (খ) প্রতি বিল্ডে `ANDROID_ID`/Device Code বদলে Pro key ভেঙে যেত। এখন `signingConfigs.getByName("debug")` স্থির key ব্যবহার করে → Device Code স্থিতিশীল, টেস্ট APK মসৃণভাবে আপডেট হয়। (এই একবার Device Code বদলাবে, তারপর স্থির।)
+
 ## 2026-07-31 (📱 Clip Notes: প্যাকেজ রিনেম + Export/Import + Key সিস্টেম)
 
 - **ব্র্যান্ড নাম সরানো**: প্যাকেজ `com.shishurmedhabikash.clipnotes` → **`com.yasirarafat.clipnotes`** (ইউজার চেয়েছেন অ্যাপে এডুকেশন-ব্র্যান্ড না রাখতে); keystore-ও নতুন করে নিরপেক্ষ dname দিয়ে বানানো।
