@@ -131,7 +131,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         writeBackup(uri, onResult)
     }
 
-    fun setAutoBackup(on: Boolean) {
+    fun setAutoBackupEnabled(on: Boolean) {
         autoBackup = on
         prefs.edit().putBoolean("auto_backup", on).apply()
     }

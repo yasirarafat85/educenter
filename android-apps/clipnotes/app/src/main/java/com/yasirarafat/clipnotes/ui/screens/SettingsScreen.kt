@@ -184,7 +184,7 @@ fun SettingsScreen(vm: NotesViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Auto backup on changes", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                Switch(checked = vm.autoBackup, onCheckedChange = { vm.setAutoBackup(it) })
+                Switch(checked = vm.autoBackup, onCheckedChange = { vm.setAutoBackupEnabled(it) })
             }
             Spacer(Modifier.size(8.dp))
             Button(
