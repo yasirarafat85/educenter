@@ -2,6 +2,7 @@ package com.yasirarafat.clipnotes.ui
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,11 +10,16 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasirarafat.clipnotes.data.AppDatabase
 import com.yasirarafat.clipnotes.data.Category
+import com.yasirarafat.clipnotes.data.License
 import com.yasirarafat.clipnotes.data.Note
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
 class NotesViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -33,9 +39,25 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
     var themeMode by mutableStateOf(prefs.getInt("theme", 0))
         private set
 
+    // Pro (unlocked by activation key)
+    var isPro by mutableStateOf(prefs.getBoolean("pro_unlocked", false))
+        private set
+
     fun setTheme(mode: Int) {
         themeMode = mode
         prefs.edit().putInt("theme", mode).apply()
+    }
+
+    fun deviceCode(): String = License.deviceCode(getApplication())
+
+    /** Returns true if the key was valid for this device and Pro is now unlocked. */
+    fun tryUnlock(key: String): Boolean {
+        val ok = License.isValidKey(getApplication(), key)
+        if (ok) {
+            isPro = true
+            prefs.edit().putBoolean("pro_unlocked", true).apply()
+        }
+        return ok
     }
 
     suspend fun loadNote(id: Long): Note? = dao.getNote(id)
@@ -88,5 +110,93 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteCategory(category: Category) = viewModelScope.launch {
         dao.clearCategoryFromNotes(category.id)
         dao.deleteCategory(category.id)
+    }
+
+    // ---- Export / Import (manual backup to a file) ----
+
+    fun exportTo(uri: Uri, onResult: (Boolean) -> Unit) = viewModelScope.launch {
+        val ok = withContext(Dispatchers.IO) {
+            try {
+                val cats = dao.allCategoriesOnce()
+                val exportNotes = dao.notesForExport()
+                val catNameById = cats.associateBy({ it.id }, { it.name })
+
+                val root = JSONObject()
+                root.put("app", "ClipNotes")
+                root.put("version", 1)
+
+                val catArr = JSONArray()
+                cats.forEach { catArr.put(JSONObject().put("name", it.name)) }
+                root.put("categories", catArr)
+
+                val noteArr = JSONArray()
+                exportNotes.forEach { n ->
+                    val o = JSONObject()
+                    o.put("title", n.title)
+                    o.put("content", n.content)
+                    o.put("category", n.categoryId?.let { catNameById[it] } ?: JSONObject.NULL)
+                    o.put("favorite", n.isFavorite)
+                    noteArr.put(o)
+                }
+                root.put("notes", noteArr)
+
+                getApplication<Application>().contentResolver.openOutputStream(uri)?.use { os ->
+                    os.write(root.toString(2).toByteArray(Charsets.UTF_8))
+                }
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
+        onResult(ok)
+    }
+
+    /** Returns number of notes imported, or -1 on failure. */
+    fun importFrom(uri: Uri, onResult: (Int) -> Unit) = viewModelScope.launch {
+        val count = withContext(Dispatchers.IO) {
+            try {
+                val text = getApplication<Application>().contentResolver.openInputStream(uri)?.use {
+                    it.readBytes().toString(Charsets.UTF_8)
+                } ?: return@withContext -1
+
+                val root = JSONObject(text)
+
+                root.optJSONArray("categories")?.let { catArr ->
+                    for (i in 0 until catArr.length()) {
+                        val name = catArr.getJSONObject(i).optString("name").trim()
+                        if (name.isNotEmpty() && dao.categoryIdByName(name) == null) {
+                            dao.insertCategory(Category(name = name))
+                        }
+                    }
+                }
+
+                val noteArr = root.optJSONArray("notes") ?: JSONArray()
+                var inserted = 0
+                for (i in 0 until noteArr.length()) {
+                    val o = noteArr.getJSONObject(i)
+                    val title = o.optString("title", "")
+                    val content = o.optString("content", "")
+                    if (title.isBlank() && content.isBlank()) continue
+                    val catName = if (o.isNull("category")) null else o.optString("category").ifBlank { null }
+                    val catId = catName?.let {
+                        dao.categoryIdByName(it) ?: dao.insertCategory(Category(name = it))
+                    }
+                    dao.insertNote(
+                        Note(
+                            title = title,
+                            content = content,
+                            categoryId = catId,
+                            isFavorite = o.optBoolean("favorite", false),
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                    inserted++
+                }
+                inserted
+            } catch (e: Exception) {
+                -1
+            }
+        }
+        onResult(count)
     }
 }

@@ -49,4 +49,14 @@ interface AppDao {
 
     @Query("UPDATE notes SET categoryId = NULL WHERE categoryId = :id")
     suspend fun clearCategoryFromNotes(id: Long)
+
+    // ---- Export / Import ----
+    @Query("SELECT * FROM categories")
+    suspend fun allCategoriesOnce(): List<Category>
+
+    @Query("SELECT * FROM notes WHERE isTrashed = 0")
+    suspend fun notesForExport(): List<Note>
+
+    @Query("SELECT id FROM categories WHERE name = :name LIMIT 1")
+    suspend fun categoryIdByName(name: String): Long?
 }

@@ -21,7 +21,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val systemDark = isSystemInDarkTheme()
-            val dark = when (vm.themeMode) {
+            // Dark theme is a Pro feature: free users always get the light theme.
+            val dark = vm.isPro && when (vm.themeMode) {
                 1 -> false
                 2 -> true
                 else -> systemDark

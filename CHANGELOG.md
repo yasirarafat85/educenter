@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-07-31 (📱 Clip Notes: প্যাকেজ রিনেম + Export/Import + Key সিস্টেম)
+
+- **ব্র্যান্ড নাম সরানো**: প্যাকেজ `com.shishurmedhabikash.clipnotes` → **`com.yasirarafat.clipnotes`** (ইউজার চেয়েছেন অ্যাপে এডুকেশন-ব্র্যান্ড না রাখতে); keystore-ও নতুন করে নিরপেক্ষ dname দিয়ে বানানো।
+- **Export / Import** (`NotesViewModel` + SAF, org.json): সব নোট+ক্যাটাগরি JSON ফাইলে সেভ ও ফেরানো — ফোন-নিরপেক্ষ ম্যানুয়াল ব্যাকআপ (Settings → Backup & Restore, ফ্রি)।
+- **Google Auto Backup** নিশ্চিত (allowBackup + backup_rules — DB ও prefs ব্যাকআপ হয়); Play-র বাইরে ইনস্টল করলেও কাজ করে (same signing key দরকার)।
+- **Activation Key (Pro) সিস্টেম** (`data/License.kt`): ডিভাইস-লক (`Settings.Secure.ANDROID_ID` + SALT → SHA-256 → XXXX-XXXX-XXXX-XXXX)। uninstall/reinstall-এ একই key কাজ করে (signing key এক থাকলে), factory reset-এ বদলায়। ডেমো গেট: **Dark theme = Pro** (`MainActivity` dark = isPro && ...)। key জেনারেটর প্রাইভেট `clipnotes-keygen.html`-এ (রিপোতে কমিট করা হয় না — SALT থাকে)। ⚠️ নোট: SALT আপাতত কোডে const; শক্ত সুরক্ষা চাইলে পরে build-secret-এ সরানো যাবে।
+- Google Play merchant/পেমেন্ট আলোচনা: ইন-অ্যাপ ডিজিটাল আনলকে Play Billing বাধ্যতামূলক; Play-র বাইরে সরাসরি বিতরণে key+bKash বৈধ (ইউজারের use-case অনুযায়ী)।
+
 ## 2026-07-31 (📱 নতুন সাবপ্রজেক্ট: Android অ্যাপ "Clip Notes")
 
 - ইউজার এখন ওয়েবসাইটের পাশাপাশি স্বতন্ত্র **Android অ্যাপ** বানাতে চান (Play Store-এ পাবলিশের জন্য)। প্রথম অ্যাপ: **Clip Notes** — দরকারি লেখা সেভ করে এক-ট্যাপে কপি করার নোট/ক্লিপবোর্ড ম্যানেজার (ব্যবহারকারীর দেখানো "Clipboard Manager" অ্যাপের আদলে)।
