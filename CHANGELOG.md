@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-08-01 (📱 Clip Notes: সম্পূর্ণ ব্যাকআপ + অটো-ব্যাকআপ ফাইল)
+
+- **ব্যাকআপে এখন সব থাকে**: notes (trash সহ, `isTrashed` ফ্ল্যাগ প্রিজার্ভ) + categories + settings (theme)। `notesForExport` → `allNotesOnce`; export version 2। Pro-স্ট্যাটাস ইচ্ছাকৃতভাবে export হয় না (নাহলে ব্যাকআপ শেয়ার করে ফ্রি আনলক হয়ে যেত)। import-এ ডুপ্লিকেট স্কিপ (`countMatchingNotes` — title+content+trashed মিললে বাদ)।
+- **অটো-ব্যাকআপ ফাইল**: ইউজার একবার ব্যাকআপ ফাইল বেছে দেয় (SAF CreateDocument, `takePersistableUriPermission`), তারপর (ক) পরিবর্তনে debounced অটো-ব্যাকআপ (`scheduleAutoBackup`, ২.৫s), (খ) "Back up now"/"Restore now" এক ট্যাপে picker ছাড়াই। prefs: `backup_uri`, `auto_backup`। Settings-এ Switch + Back up/Restore now + Change file।
+- Google Drive: ফাইল বেছে নেওয়ার সময় Drive লোকেশন সিলেক্ট করলে ক্লাউডে যায় (আগের মতোই)।
+
 ## 2026-08-01 (📱 Clip Notes: Backup Pro-গেটেড + Google Drive + স্থায়ী debug key)
 
 - **Export/Import এখন Pro-গেটেড** (আগে ফ্রি ছিল): Pro key দিয়ে আনলক হলে তবেই Backup & Restore + Dark theme — ইউজারের চাওয়া অনুযায়ী।

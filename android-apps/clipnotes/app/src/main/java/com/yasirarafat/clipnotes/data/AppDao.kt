@@ -54,9 +54,13 @@ interface AppDao {
     @Query("SELECT * FROM categories")
     suspend fun allCategoriesOnce(): List<Category>
 
-    @Query("SELECT * FROM notes WHERE isTrashed = 0")
-    suspend fun notesForExport(): List<Note>
+    /** ALL notes, including trashed ones, so backups are complete. */
+    @Query("SELECT * FROM notes")
+    suspend fun allNotesOnce(): List<Note>
 
     @Query("SELECT id FROM categories WHERE name = :name LIMIT 1")
     suspend fun categoryIdByName(name: String): Long?
+
+    @Query("SELECT COUNT(*) FROM notes WHERE title = :title AND content = :content AND isTrashed = :trashed")
+    suspend fun countMatchingNotes(title: String, content: String, trashed: Boolean): Int
 }

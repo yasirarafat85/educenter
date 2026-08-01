@@ -19,9 +19,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -31,7 +32,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,13 +61,17 @@ private fun copyText(context: Context, text: String) {
 fun SettingsScreen(vm: NotesViewModel) {
     val context = LocalContext.current
 
-    val exportLauncher = rememberLauncherForActivityResult(
+    // Pick (create) the backup file once; after that backups are automatic / one-tap.
+    val setupBackupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         if (uri != null) {
-            vm.exportTo(uri) { ok -> toast(context, if (ok) "Backup saved" else "Export failed") }
+            vm.configureBackupFile(uri) { ok ->
+                toast(context, if (ok) "Auto backup set up ✓" else "Could not set up backup")
+            }
         }
     }
+    // Import/restore from a different file (does not change the auto-backup file).
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -133,23 +140,23 @@ fun SettingsScreen(vm: NotesViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-        } else {
+        } else if (vm.backupUri == null) {
+            // First-time setup: choose the backup file once (Google Drive or phone).
             Text(
-                "Save all your notes to a file. In the save screen you can choose " +
-                    "Google Drive to back up to the cloud, or your phone storage. " +
-                    "Restore reads that file back. (Android also auto-backs-up to your " +
-                    "Google account when device backup is on.)",
+                "Choose a backup file once — in Google Drive (cloud) or your phone. " +
+                    "After that, your notes, categories, trash and settings back up " +
+                    "automatically to that file, and you can restore with one tap.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.size(12.dp))
             Button(
-                onClick = { exportLauncher.launch("clipnotes-backup.json") },
+                onClick = { setupBackupLauncher.launch("clipnotes-backup.json") },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Filled.FileUpload, null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.CloudUpload, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Back up (Google Drive / file)")
+                Text("Set up auto backup")
             }
             Spacer(Modifier.size(8.dp))
             OutlinedButton(
@@ -158,7 +165,54 @@ fun SettingsScreen(vm: NotesViewModel) {
             ) {
                 Icon(Icons.Filled.FileDownload, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Restore (Google Drive / file)")
+                Text("Restore from a file")
+            }
+        } else {
+            // Configured: automatic + one-tap, no picker needed.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.CheckCircle, null, tint = Color(0xFF16A34A), modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    "Backup file is set. Notes, categories, trash & settings are saved here.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.size(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Auto backup on changes", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                Switch(checked = vm.autoBackup, onCheckedChange = { vm.setAutoBackup(it) })
+            }
+            Spacer(Modifier.size(8.dp))
+            Button(
+                onClick = { vm.backupNow { ok -> toast(context, if (ok) "Backed up ✓" else "Backup failed") } },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.CloudUpload, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Back up now")
+            }
+            Spacer(Modifier.size(8.dp))
+            OutlinedButton(
+                onClick = { vm.restoreNow { n -> toast(context, if (n >= 0) "Restored $n note(s)" else "Restore failed") } },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.CloudDownload, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Restore now")
+            }
+            Spacer(Modifier.size(6.dp))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = { setupBackupLauncher.launch("clipnotes-backup.json") }) {
+                    Text("Change file")
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { importLauncher.launch(arrayOf("*/*")) }) {
+                    Text("Restore from another file")
+                }
             }
         }
 
