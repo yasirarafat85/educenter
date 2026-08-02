@@ -112,15 +112,21 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun loadNote(id: Long): Note? = dao.getNote(id)
 
-    fun saveNote(id: Long, title: String, content: String, categoryId: Long?) = viewModelScope.launch {
+    fun saveNote(id: Long, title: String, content: String, categoryId: Long?, color: Int = 0) = viewModelScope.launch {
         if (id == 0L) {
             dao.insertNote(
-                Note(title = title, content = content, categoryId = categoryId, updatedAt = System.currentTimeMillis())
+                Note(
+                    title = title, content = content, categoryId = categoryId,
+                    color = color, updatedAt = System.currentTimeMillis()
+                )
             )
         } else {
             val existing = dao.getNote(id) ?: return@launch
             dao.updateNote(
-                existing.copy(title = title, content = content, categoryId = categoryId, updatedAt = System.currentTimeMillis())
+                existing.copy(
+                    title = title, content = content, categoryId = categoryId,
+                    color = color, updatedAt = System.currentTimeMillis()
+                )
             )
         }
         scheduleAutoBackup()
@@ -244,6 +250,8 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                     o.put("trashed", n.isTrashed)
                     o.put("pinned", n.isPinned)
                     o.put("copyCount", n.copyCount)
+                    o.put("color", n.color)
+                    o.put("checklist", n.isChecklist)
                     noteArr.put(o)
                 }
                 root.put("notes", noteArr)
@@ -312,6 +320,8 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                             isTrashed = o.optBoolean("trashed", false),
                             isPinned = o.optBoolean("pinned", false),
                             copyCount = o.optInt("copyCount", 0),
+                            color = o.optInt("color", 0),
+                            isChecklist = o.optBoolean("checklist", false),
                             updatedAt = System.currentTimeMillis()
                         )
                     )

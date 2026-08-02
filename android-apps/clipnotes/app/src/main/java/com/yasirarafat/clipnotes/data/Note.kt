@@ -14,5 +14,7 @@ data class Note(
     val isTrashed: Boolean = false,
     val isPinned: Boolean = false,
     val copyCount: Int = 0,
+    val color: Int = 0,            // 0 = none; otherwise index into NoteStripColors
+    val isChecklist: Boolean = false,
     val updatedAt: Long = System.currentTimeMillis()
 )

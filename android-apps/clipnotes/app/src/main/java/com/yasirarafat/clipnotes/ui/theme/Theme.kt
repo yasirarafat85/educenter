@@ -25,6 +25,17 @@ val ClipAccents = listOf(
     ClipAccent(Color(0xFFEA580C), Color(0xFFFB923C), Color(0xFFFFE0CC), Color(0xFF4A1A00))  // Orange
 )
 
+/** Per-note strip colours. Index 0 = none (no strip). Stored on each note. */
+val NoteStripColors = listOf(
+    Color(0x00000000), // 0 none
+    Color(0xFFEF4444), // red
+    Color(0xFFF59E0B), // amber
+    Color(0xFF10B981), // green
+    Color(0xFF3B82F6), // blue
+    Color(0xFF8B5CF6), // purple
+    Color(0xFFEC4899)  // pink
+)
+
 private val LightBase = lightColorScheme(
     onPrimary = Color.White,
     background = Color(0xFFF5F6FA),
