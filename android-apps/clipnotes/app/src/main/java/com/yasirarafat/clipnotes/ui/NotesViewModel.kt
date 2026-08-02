@@ -13,6 +13,7 @@ import com.yasirarafat.clipnotes.data.AppDatabase
 import com.yasirarafat.clipnotes.data.Category
 import com.yasirarafat.clipnotes.data.License
 import com.yasirarafat.clipnotes.data.Note
+import com.yasirarafat.clipnotes.widget.ClipWidgetProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -186,6 +187,8 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun scheduleAutoBackup() {
+        // Keep any home-screen widgets in sync whenever notes change.
+        ClipWidgetProvider.notifyDataChanged(getApplication())
         val u = backupUri
         if (!autoBackup || u == null) return
         autoBackupJob?.cancel()

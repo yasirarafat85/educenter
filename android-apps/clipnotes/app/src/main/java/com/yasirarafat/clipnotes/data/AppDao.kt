@@ -19,6 +19,10 @@ interface AppDao {
     @Query("UPDATE notes SET copyCount = copyCount + 1 WHERE id = :id")
     suspend fun incrementCopy(id: Long)
 
+    /** Synchronous (blocking) query for the home-screen widget's list. */
+    @Query("SELECT * FROM notes WHERE isTrashed = 0 ORDER BY isPinned DESC, updatedAt DESC LIMIT 50")
+    fun widgetNotes(): List<Note>
+
     @Query("SELECT * FROM notes WHERE isTrashed = 1 ORDER BY updatedAt DESC")
     fun trashedNotes(): Flow<List<Note>>
 
