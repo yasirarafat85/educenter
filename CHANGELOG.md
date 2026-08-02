@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-08-01 (📱 Clip Notes: পিন/সাজানো/কপি-কাউন্ট + Share-to-save + হোম উইজেট)
+
+- **পিন + সাজানো + কপি কাউন্ট**: `Note`-এ `isPinned`/`copyCount` (DB v2 migration, non-destructive)। পিন করা নোট সবসময় উপরে; সাজানো recent/A–Z/most-copied (ViewModel `sortMode`, top-bar মেনু); কপি করলে `incrementCopy`, কার্ডে "copied N×"।
+- **Share-to-save**: MainActivity-তে `ACTION_SEND text/plain` intent-filter — অন্য অ্যাপ থেকে লেখা Share করলে Clip Notes-এ নতুন নোট প্রি-ফিল হয় (`pendingSharedText` → EditNoteScreen `initialContent`)।
+- **হোম-স্ক্রিন উইজেট**: `widget/ClipWidgetProvider` (AppWidgetProvider) + `ClipWidgetService` (RemoteViewsService/Factory) + layouts (`widget_clip`/`widget_item`) + `clip_widget_info.xml`; তালিকা দেখায়, রো ট্যাপে ক্লিপবোর্ডে কপি (broadcast `ACTION_COPY` + fillInIntent), হেডার ট্যাপে অ্যাপ খোলে। ব্লকিং `widgetNotes()` DAO (binder thread)। নোট বদলালে `notifyDataChanged` (scheduleAutoBackup থেকে)। ম্যানিফেস্টে receiver(exported=true)+service(BIND_REMOTEVIEWS)।
+
 ## 2026-08-01 (📱 Clip Notes: সম্পূর্ণ ব্যাকআপ + অটো-ব্যাকআপ ফাইল)
 
 - **ব্যাকআপে এখন সব থাকে**: notes (trash সহ, `isTrashed` ফ্ল্যাগ প্রিজার্ভ) + categories + settings (theme)। `notesForExport` → `allNotesOnce`; export version 2। Pro-স্ট্যাটাস ইচ্ছাকৃতভাবে export হয় না (নাহলে ব্যাকআপ শেয়ার করে ফ্রি আনলক হয়ে যেত)। import-এ ডুপ্লিকেট স্কিপ (`countMatchingNotes` — title+content+trashed মিললে বাদ)।
