@@ -73,6 +73,57 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
     var pendingSharedText by mutableStateOf<String?>(null)
         private set
 
+    // App lock (master password). lockEnabled = a password is set; unlocked = this session is open.
+    var lockEnabled by mutableStateOf(prefs.getString("lock_hash", null) != null)
+        private set
+    var unlocked by mutableStateOf(false)
+        private set
+
+    private fun hashPw(pw: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(("clipnotes-lock-salt::" + pw).toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+    }
+
+    fun setMasterPassword(pw: String) {
+        if (pw.isBlank()) return
+        prefs.edit().putString("lock_hash", hashPw(pw)).apply()
+        lockEnabled = true
+        unlocked = true
+    }
+
+    fun verifyMaster(pw: String): Boolean {
+        val stored = prefs.getString("lock_hash", null) ?: return false
+        return stored == hashPw(pw)
+    }
+
+    fun changeMasterPassword(old: String, new: String): Boolean {
+        if (!verifyMaster(old) || new.isBlank()) return false
+        prefs.edit().putString("lock_hash", hashPw(new)).apply()
+        return true
+    }
+
+    fun removeMasterPassword(current: String): Boolean {
+        if (!verifyMaster(current)) return false
+        prefs.edit().remove("lock_hash").apply()
+        lockEnabled = false
+        unlocked = true
+        viewModelScope.launch { dao.unlockAllNotes() } // nothing to gate anymore
+        return true
+    }
+
+    fun unlockSession(pw: String): Boolean {
+        if (verifyMaster(pw)) { unlocked = true; return true }
+        return false
+    }
+
+    fun lockSession() { unlocked = false }
+
+    fun toggleNoteLock(note: Note) = viewModelScope.launch {
+        dao.updateNote(note.copy(isLocked = !note.isLocked, updatedAt = System.currentTimeMillis()))
+        scheduleAutoBackup()
+    }
+
     fun setTheme(mode: Int) {
         themeMode = mode
         prefs.edit().putInt("theme", mode).apply()
@@ -267,6 +318,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                     o.put("copyCount", n.copyCount)
                     o.put("color", n.color)
                     o.put("checklist", n.isChecklist)
+                    o.put("locked", n.isLocked)
                     noteArr.put(o)
                 }
                 root.put("notes", noteArr)
@@ -337,6 +389,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                             copyCount = o.optInt("copyCount", 0),
                             color = o.optInt("color", 0),
                             isChecklist = o.optBoolean("checklist", false),
+                            isLocked = o.optBoolean("locked", false),
                             updatedAt = System.currentTimeMillis()
                         )
                     )

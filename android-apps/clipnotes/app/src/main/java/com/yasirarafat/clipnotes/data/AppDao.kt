@@ -75,6 +75,9 @@ interface AppDao {
     @Query("DELETE FROM categories")
     suspend fun deleteAllCategories()
 
+    @Query("UPDATE notes SET isLocked = 0")
+    suspend fun unlockAllNotes()
+
     @Query("SELECT COUNT(*) FROM notes WHERE title = :title AND content = :content AND isTrashed = :trashed")
     suspend fun countMatchingNotes(title: String, content: String, trashed: Boolean): Int
 }

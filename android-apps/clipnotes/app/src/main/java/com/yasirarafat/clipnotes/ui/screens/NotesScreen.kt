@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Share
@@ -70,7 +71,10 @@ fun NotesList(
     onTogglePin: (Note) -> Unit,
     onShare: (Note) -> Unit,
     onTrash: (Note) -> Unit,
-    onToggleChecklistItem: (Note, Int) -> Unit
+    onToggleChecklistItem: (Note, Int) -> Unit,
+    sessionUnlocked: Boolean,
+    onRequestUnlock: () -> Unit,
+    onToggleLock: (Note) -> Unit
 ) {
     val filtered = remember(notes, query, sortMode) {
         val base = if (query.isBlank()) notes
@@ -109,7 +113,10 @@ fun NotesList(
                     onTogglePin = { onTogglePin(note) },
                     onShare = { onShare(note) },
                     onTrash = { onTrash(note) },
-                    onToggleItem = { index -> onToggleChecklistItem(note, index) }
+                    onToggleItem = { index -> onToggleChecklistItem(note, index) },
+                    sessionUnlocked = sessionUnlocked,
+                    onRequestUnlock = onRequestUnlock,
+                    onToggleLock = { onToggleLock(note) }
                 )
             }
         }
@@ -126,17 +133,31 @@ private fun NoteCard(
     onTogglePin: () -> Unit,
     onShare: () -> Unit,
     onTrash: () -> Unit,
-    onToggleItem: (Int) -> Unit
+    onToggleItem: (Int) -> Unit,
+    sessionUnlocked: Boolean,
+    onRequestUnlock: () -> Unit,
+    onToggleLock: () -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val hidden = note.isLocked && !sessionUnlocked
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCopy() },
+            .clickable { if (hidden) onRequestUnlock() else onCopy() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
+      if (hidden) {
+          Row(
+              modifier = Modifier.padding(16.dp),
+              verticalAlignment = Alignment.CenterVertically
+          ) {
+              Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+              Spacer(Modifier.width(10.dp))
+              Text("Locked note — tap to unlock", color = MaterialTheme.colorScheme.onSurfaceVariant)
+          }
+      } else {
       Row(modifier = Modifier.height(IntrinsicSize.Min)) {
         if (note.color in 1 until NoteStripColors.size) {
             Box(
@@ -228,6 +249,11 @@ private fun NoteCard(
                             onClick = { menuOpen = false; onTogglePin() }
                         )
                         DropdownMenuItem(
+                            text = { Text(if (note.isLocked) "Unlock note" else "Lock note") },
+                            leadingIcon = { Icon(Icons.Filled.Lock, null) },
+                            onClick = { menuOpen = false; onToggleLock() }
+                        )
+                        DropdownMenuItem(
                             text = { Text("Edit") },
                             leadingIcon = { Icon(Icons.Filled.Edit, null) },
                             onClick = { menuOpen = false; onEdit() }
@@ -276,6 +302,7 @@ private fun NoteCard(
                 }
             }
         }
+      }
       }
     }
 }

@@ -26,11 +26,14 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +62,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.yasirarafat.clipnotes.data.Checklist
 import com.yasirarafat.clipnotes.data.Note
@@ -93,6 +97,7 @@ fun ClipApp(vm: NotesViewModel) {
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var sortMenuOpen by remember { mutableStateOf(false) }
+    var showUnlock by remember { mutableStateOf(false) }
 
     val notes by vm.notes.collectAsState()
     val favorites by vm.favorites.collectAsState()
@@ -121,6 +126,25 @@ fun ClipApp(vm: NotesViewModel) {
         searchActive = false
         query = ""
         scope.launch { drawerState.close() }
+    }
+
+    fun onToggleLock(note: Note) {
+        if (vm.lockEnabled) {
+            vm.toggleNoteLock(note)
+        } else {
+            Toast.makeText(context, "Set a master password in Settings first", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    if (showUnlock) {
+        UnlockDialog(
+            onDismiss = { showUnlock = false },
+            onUnlock = { pw ->
+                if (vm.unlockSession(pw)) {
+                    showUnlock = false; true
+                } else false
+            }
+        )
     }
 
     ModalNavigationDrawer(
@@ -242,7 +266,10 @@ fun ClipApp(vm: NotesViewModel) {
                             onTogglePin = { vm.togglePin(it) },
                             onShare = { shareText(context, noteCopyText(it)) },
                             onTrash = { vm.moveToTrash(it) },
-                            onToggleChecklistItem = { note, idx -> vm.toggleChecklistItem(note, idx) }
+                            onToggleChecklistItem = { note, idx -> vm.toggleChecklistItem(note, idx) },
+                            sessionUnlocked = vm.unlocked,
+                            onRequestUnlock = { showUnlock = true },
+                            onToggleLock = { onToggleLock(it) }
                         )
                     }
                     Screen.Favorites -> NotesList(
@@ -257,7 +284,10 @@ fun ClipApp(vm: NotesViewModel) {
                         onTogglePin = { vm.togglePin(it) },
                         onShare = { shareText(context, noteCopyText(it)) },
                         onTrash = { vm.moveToTrash(it) },
-                        onToggleChecklistItem = { note, idx -> vm.toggleChecklistItem(note, idx) }
+                        onToggleChecklistItem = { note, idx -> vm.toggleChecklistItem(note, idx) },
+                        sessionUnlocked = vm.unlocked,
+                        onRequestUnlock = { showUnlock = true },
+                        onToggleLock = { onToggleLock(it) }
                     )
                     Screen.Categories -> CategoriesScreen(
                         categories = categories,
@@ -325,6 +355,40 @@ private fun DrawerRow(
         selected = selected,
         onClick = onClick,
         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+    )
+}
+
+@Composable
+private fun UnlockDialog(onDismiss: () -> Unit, onUnlock: (String) -> Boolean) {
+    var pw by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Unlock notes") },
+        text = {
+            Column {
+                Text("Enter your master password to view locked notes.")
+                Spacer(Modifier.size(8.dp))
+                OutlinedTextField(
+                    value = pw,
+                    onValueChange = { pw = it; error = false },
+                    label = { Text("Master password") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                if (error) {
+                    Text(
+                        "Wrong password",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (!onUnlock(pw)) error = true }) { Text("Unlock") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 

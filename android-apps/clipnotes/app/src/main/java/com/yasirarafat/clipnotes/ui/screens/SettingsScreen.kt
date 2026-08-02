@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yasirarafat.clipnotes.ui.NotesViewModel
@@ -73,6 +74,11 @@ fun SettingsScreen(vm: NotesViewModel) {
     // Restore is destructive (replace), so confirm first.
     var confirmRestoreSaved by remember { mutableStateOf(false) }
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+
+    // App-lock dialogs
+    var showSetPw by remember { mutableStateOf(false) }
+    var showChangePw by remember { mutableStateOf(false) }
+    var showRemovePw by remember { mutableStateOf(false) }
 
     // Pick (create) the backup file once; afterwards you can back up / restore with one tap.
     val setupBackupLauncher = rememberLauncherForActivityResult(
@@ -336,6 +342,41 @@ fun SettingsScreen(vm: NotesViewModel) {
 
         Divider16()
 
+        // ---- App Lock ----
+        SectionTitle("App Lock")
+        if (!vm.lockEnabled) {
+            Text(
+                "Set a master password, then lock any note from its ⋮ menu. " +
+                    "Locked notes stay hidden until you unlock them.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.size(10.dp))
+            Button(onClick = { showSetPw = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Filled.Lock, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Set master password")
+            }
+        } else {
+            Text(
+                "Master password is set. Lock a note from its ⋮ menu; locked notes need this password to open.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.size(10.dp))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = { showChangePw = true }) { Text("Change") }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(onClick = { showRemovePw = true }) { Text("Remove") }
+                Spacer(Modifier.weight(1f))
+                if (vm.unlocked) {
+                    TextButton(onClick = { vm.lockSession(); toast(context, "Locked") }) { Text("Lock now") }
+                }
+            }
+        }
+
+        Divider16()
+
         // ---- About ----
         SectionTitle("About")
         Text("Clip Notes  •  version 1.0", style = MaterialTheme.typography.bodyMedium)
@@ -376,6 +417,92 @@ fun SettingsScreen(vm: NotesViewModel) {
                 }) { Text("Restore") }
             },
             dismissButton = { TextButton(onClick = { pendingImportUri = null }) { Text("Cancel") } }
+        )
+    }
+
+    if (showSetPw) {
+        var p1 by remember { mutableStateOf("") }
+        var p2 by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showSetPw = false },
+            title = { Text("Set master password") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        p1, { p1 = it }, label = { Text("New password") },
+                        singleLine = true, visualTransformation = PasswordVisualTransformation()
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    OutlinedTextField(
+                        p2, { p2 = it }, label = { Text("Confirm password") },
+                        singleLine = true, visualTransformation = PasswordVisualTransformation()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (p1.isNotBlank() && p1 == p2) {
+                        vm.setMasterPassword(p1); showSetPw = false; toast(context, "Password set")
+                    } else toast(context, "Passwords don't match")
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { showSetPw = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showChangePw) {
+        var cur by remember { mutableStateOf("") }
+        var nw by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showChangePw = false },
+            title = { Text("Change master password") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        cur, { cur = it }, label = { Text("Current password") },
+                        singleLine = true, visualTransformation = PasswordVisualTransformation()
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    OutlinedTextField(
+                        nw, { nw = it }, label = { Text("New password") },
+                        singleLine = true, visualTransformation = PasswordVisualTransformation()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (vm.changeMasterPassword(cur, nw)) {
+                        showChangePw = false; toast(context, "Password changed")
+                    } else toast(context, "Wrong current password")
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { showChangePw = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showRemovePw) {
+        var cur by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showRemovePw = false },
+            title = { Text("Remove master password") },
+            text = {
+                Column {
+                    Text("This unlocks all locked notes. Enter your password to confirm.")
+                    Spacer(Modifier.size(8.dp))
+                    OutlinedTextField(
+                        cur, { cur = it }, label = { Text("Current password") },
+                        singleLine = true, visualTransformation = PasswordVisualTransformation()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (vm.removeMasterPassword(cur)) {
+                        showRemovePw = false; toast(context, "Password removed")
+                    } else toast(context, "Wrong password")
+                }) { Text("Remove") }
+            },
+            dismissButton = { TextButton(onClick = { showRemovePw = false }) { Text("Cancel") } }
         )
     }
 }
