@@ -60,6 +60,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.yasirarafat.clipnotes.data.Checklist
+import com.yasirarafat.clipnotes.data.Note
 import com.yasirarafat.clipnotes.ui.screens.CategoriesScreen
 import com.yasirarafat.clipnotes.ui.screens.EditNoteScreen
 import com.yasirarafat.clipnotes.ui.screens.NotesList
@@ -234,12 +236,13 @@ fun ClipApp(vm: NotesViewModel) {
                             query = query,
                             sortMode = vm.sortMode,
                             emptyText = "No notes yet. Tap the + button to save your first text.",
-                            onCopy = { copyToClipboard(context, it.content.ifBlank { it.title }); vm.onCopied(it) },
+                            onCopy = { copyToClipboard(context, noteCopyText(it)); vm.onCopied(it) },
                             onEdit = { editingId = it.id },
                             onToggleFavorite = { vm.toggleFavorite(it) },
                             onTogglePin = { vm.togglePin(it) },
-                            onShare = { shareText(context, it.content.ifBlank { it.title }) },
-                            onTrash = { vm.moveToTrash(it) }
+                            onShare = { shareText(context, noteCopyText(it)) },
+                            onTrash = { vm.moveToTrash(it) },
+                            onToggleChecklistItem = { note, idx -> vm.toggleChecklistItem(note, idx) }
                         )
                     }
                     Screen.Favorites -> NotesList(
@@ -248,12 +251,13 @@ fun ClipApp(vm: NotesViewModel) {
                         query = query,
                         sortMode = vm.sortMode,
                         emptyText = "No favorites yet. Tap the star on any note to add it here.",
-                        onCopy = { copyToClipboard(context, it.content.ifBlank { it.title }); vm.onCopied(it) },
+                        onCopy = { copyToClipboard(context, noteCopyText(it)); vm.onCopied(it) },
                         onEdit = { editingId = it.id },
                         onToggleFavorite = { vm.toggleFavorite(it) },
                         onTogglePin = { vm.togglePin(it) },
-                        onShare = { shareText(context, it.content.ifBlank { it.title }) },
-                        onTrash = { vm.moveToTrash(it) }
+                        onShare = { shareText(context, noteCopyText(it)) },
+                        onTrash = { vm.moveToTrash(it) },
+                        onToggleChecklistItem = { note, idx -> vm.toggleChecklistItem(note, idx) }
                     )
                     Screen.Categories -> CategoriesScreen(
                         categories = categories,
@@ -323,6 +327,9 @@ private fun DrawerRow(
         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
     )
 }
+
+private fun noteCopyText(note: Note): String =
+    if (note.isChecklist) Checklist.plainText(note.content) else note.content.ifBlank { note.title }
 
 private fun copyToClipboard(context: Context, text: String) {
     if (text.isBlank()) return

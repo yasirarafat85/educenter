@@ -33,6 +33,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -48,9 +49,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yasirarafat.clipnotes.data.Category
+import com.yasirarafat.clipnotes.data.Checklist
 import com.yasirarafat.clipnotes.data.Note
 import com.yasirarafat.clipnotes.ui.theme.NoteStripColors
 
@@ -66,7 +69,8 @@ fun NotesList(
     onToggleFavorite: (Note) -> Unit,
     onTogglePin: (Note) -> Unit,
     onShare: (Note) -> Unit,
-    onTrash: (Note) -> Unit
+    onTrash: (Note) -> Unit,
+    onToggleChecklistItem: (Note, Int) -> Unit
 ) {
     val filtered = remember(notes, query, sortMode) {
         val base = if (query.isBlank()) notes
@@ -104,7 +108,8 @@ fun NotesList(
                     onToggleFavorite = { onToggleFavorite(note) },
                     onTogglePin = { onTogglePin(note) },
                     onShare = { onShare(note) },
-                    onTrash = { onTrash(note) }
+                    onTrash = { onTrash(note) },
+                    onToggleItem = { index -> onToggleChecklistItem(note, index) }
                 )
             }
         }
@@ -120,7 +125,8 @@ private fun NoteCard(
     onToggleFavorite: () -> Unit,
     onTogglePin: () -> Unit,
     onShare: () -> Unit,
-    onTrash: () -> Unit
+    onTrash: () -> Unit,
+    onToggleItem: (Int) -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
 
@@ -154,13 +160,45 @@ private fun NoteCard(
                         )
                         Spacer(Modifier.size(4.dp))
                     }
-                    Text(
-                        text = note.content.ifBlank { "(empty)" },
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 6,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (note.isChecklist) {
+                        val items = remember(note.content) { Checklist.parse(note.content) }
+                        Column {
+                            items.take(8).forEachIndexed { index, item ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(
+                                        checked = item.checked,
+                                        onCheckedChange = { onToggleItem(index) },
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = item.text,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textDecoration = if (item.checked) TextDecoration.LineThrough else null,
+                                        color = if (item.checked) MaterialTheme.colorScheme.onSurfaceVariant
+                                        else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                            if (items.size > 8) {
+                                Text(
+                                    "+${items.size - 8} more",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = note.content.ifBlank { "(empty)" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 6,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 if (note.isPinned) {
                     Icon(

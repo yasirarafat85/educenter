@@ -11,6 +11,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasirarafat.clipnotes.data.AppDatabase
 import com.yasirarafat.clipnotes.data.Category
+import com.yasirarafat.clipnotes.data.Checklist
 import com.yasirarafat.clipnotes.data.License
 import com.yasirarafat.clipnotes.data.Note
 import com.yasirarafat.clipnotes.widget.ClipWidgetProvider
@@ -112,12 +113,19 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun loadNote(id: Long): Note? = dao.getNote(id)
 
-    fun saveNote(id: Long, title: String, content: String, categoryId: Long?, color: Int = 0) = viewModelScope.launch {
+    fun saveNote(
+        id: Long,
+        title: String,
+        content: String,
+        categoryId: Long?,
+        color: Int = 0,
+        isChecklist: Boolean = false
+    ) = viewModelScope.launch {
         if (id == 0L) {
             dao.insertNote(
                 Note(
                     title = title, content = content, categoryId = categoryId,
-                    color = color, updatedAt = System.currentTimeMillis()
+                    color = color, isChecklist = isChecklist, updatedAt = System.currentTimeMillis()
                 )
             )
         } else {
@@ -125,10 +133,17 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
             dao.updateNote(
                 existing.copy(
                     title = title, content = content, categoryId = categoryId,
-                    color = color, updatedAt = System.currentTimeMillis()
+                    color = color, isChecklist = isChecklist, updatedAt = System.currentTimeMillis()
                 )
             )
         }
+        scheduleAutoBackup()
+    }
+
+    /** Tick/untick a checklist item straight from the card. */
+    fun toggleChecklistItem(note: Note, index: Int) = viewModelScope.launch {
+        val newContent = Checklist.toggleAt(note.content, index)
+        dao.updateNote(note.copy(content = newContent, updatedAt = System.currentTimeMillis()))
         scheduleAutoBackup()
     }
 

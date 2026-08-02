@@ -1,0 +1,40 @@
+package com.yasirarafat.clipnotes.data
+
+/** A single checklist row. */
+data class ChecklistItem(val text: String, val checked: Boolean)
+
+/**
+ * Checklist notes store their items in the note's [Note.content], one item per line.
+ * A checked item is prefixed with "[x] "; an unchecked item is stored as plain text.
+ */
+object Checklist {
+
+    fun parse(content: String): List<ChecklistItem> =
+        content.split("\n")
+            .map { it.trimEnd() }
+            .filter { it.isNotBlank() }
+            .map { line ->
+                when {
+                    line.startsWith("[x] ") -> ChecklistItem(line.removePrefix("[x] "), true)
+                    line.startsWith("[X] ") -> ChecklistItem(line.removePrefix("[X] "), true)
+                    line.startsWith("[ ] ") -> ChecklistItem(line.removePrefix("[ ] "), false)
+                    else -> ChecklistItem(line, false)
+                }
+            }
+
+    private fun serialize(items: List<ChecklistItem>): String =
+        items.joinToString("\n") { if (it.checked) "[x] ${it.text}" else it.text }
+
+    /** Flip the checked state of the item at [index], returning the new content. */
+    fun toggleAt(content: String, index: Int): String {
+        val items = parse(content).toMutableList()
+        if (index !in items.indices) return content
+        val item = items[index]
+        items[index] = item.copy(checked = !item.checked)
+        return serialize(items)
+    }
+
+    /** Plain text (no markers) — used when copying a checklist note. */
+    fun plainText(content: String): String =
+        parse(content).joinToString("\n") { it.text }
+}

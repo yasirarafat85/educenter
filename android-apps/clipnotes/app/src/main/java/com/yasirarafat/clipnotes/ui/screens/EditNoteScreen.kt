@@ -24,6 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -34,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -56,6 +58,7 @@ fun EditNoteScreen(
     var content by remember { mutableStateOf(if (noteId == 0L) (initialContent ?: "") else "") }
     var categoryId by remember { mutableStateOf<Long?>(null) }
     var colorIndex by remember { mutableStateOf(0) }
+    var isChecklist by remember { mutableStateOf(false) }
 
     LaunchedEffect(noteId) {
         if (noteId != 0L) {
@@ -65,6 +68,7 @@ fun EditNoteScreen(
                 content = note.content
                 categoryId = note.categoryId
                 colorIndex = note.color
+                isChecklist = note.isChecklist
             }
         }
     }
@@ -81,7 +85,7 @@ fun EditNoteScreen(
                 actions = {
                     TextButton(
                         onClick = {
-                            vm.saveNote(noteId, title.trim(), content.trim(), categoryId, colorIndex)
+                            vm.saveNote(noteId, title.trim(), content.trim(), categoryId, colorIndex, isChecklist)
                             onDone()
                         },
                         enabled = title.isNotBlank() || content.isNotBlank()
@@ -115,11 +119,23 @@ fun EditNoteScreen(
             OutlinedTextField(
                 value = content,
                 onValueChange = { content = it },
-                label = { Text("Text to save & copy") },
+                label = { Text(if (isChecklist) "One item per line" else "Text to save & copy") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
             )
+            Spacer(Modifier.size(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Checklist", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Each line becomes a tickable item",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = isChecklist, onCheckedChange = { isChecklist = it })
+            }
             if (categories.isNotEmpty()) {
                 Spacer(Modifier.size(12.dp))
                 Text("Category", style = androidx.compose.material3.MaterialTheme.typography.labelLarge)
