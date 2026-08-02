@@ -391,7 +391,7 @@ fun SettingsScreen(vm: NotesViewModel) {
                 Switch(
                     checked = vm.biometricEnabled && fingerprintReady,
                     enabled = fingerprintReady,
-                    onCheckedChange = { vm.setBiometricEnabled(it) }
+                    onCheckedChange = { vm.enableBiometric(it) }
                 )
             }
         }

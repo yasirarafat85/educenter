@@ -85,7 +85,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
     var biometricEnabled by mutableStateOf(prefs.getBoolean("biometric", false))
         private set
 
-    fun setBiometricEnabled(on: Boolean) {
+    fun enableBiometric(on: Boolean) {
         biometricEnabled = on
         prefs.edit().putBoolean("biometric", on).apply()
     }
