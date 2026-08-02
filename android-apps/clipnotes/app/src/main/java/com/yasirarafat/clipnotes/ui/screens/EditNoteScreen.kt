@@ -1,5 +1,11 @@
 package com.yasirarafat.clipnotes.ui.screens
 
+import android.Manifest
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +28,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -39,11 +46,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yasirarafat.clipnotes.data.Category
 import com.yasirarafat.clipnotes.ui.NotesViewModel
 import com.yasirarafat.clipnotes.ui.theme.NoteStripColors
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +70,33 @@ fun EditNoteScreen(
     var categoryId by remember { mutableStateOf<Long?>(null) }
     var colorIndex by remember { mutableStateOf(0) }
     var isChecklist by remember { mutableStateOf(false) }
+    var reminderAt by remember { mutableStateOf<Long?>(null) }
+
+    val context = LocalContext.current
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* result ignored; the reminder is still set either way */ }
+
+    fun pickReminder() {
+        val cal = Calendar.getInstance()
+        reminderAt?.let { cal.timeInMillis = it }
+        DatePickerDialog(
+            context,
+            { _, year, month, day ->
+                TimePickerDialog(
+                    context,
+                    { _, hour, minute ->
+                        val c = Calendar.getInstance()
+                        c.set(year, month, day, hour, minute, 0)
+                        c.set(Calendar.MILLISECOND, 0)
+                        reminderAt = c.timeInMillis
+                    },
+                    cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), false
+                ).show()
+            },
+            cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
 
     LaunchedEffect(noteId) {
         if (noteId != 0L) {
@@ -69,6 +107,7 @@ fun EditNoteScreen(
                 categoryId = note.categoryId
                 colorIndex = note.color
                 isChecklist = note.isChecklist
+                reminderAt = note.reminderAt
             }
         }
     }
@@ -85,7 +124,7 @@ fun EditNoteScreen(
                 actions = {
                     TextButton(
                         onClick = {
-                            vm.saveNote(noteId, title.trim(), content.trim(), categoryId, colorIndex, isChecklist)
+                            vm.saveNote(noteId, title.trim(), content.trim(), categoryId, colorIndex, isChecklist, reminderAt)
                             onDone()
                         },
                         enabled = title.isNotBlank() || content.isNotBlank()
@@ -135,6 +174,28 @@ fun EditNoteScreen(
                     )
                 }
                 Switch(checked = isChecklist, onCheckedChange = { isChecklist = it })
+            }
+            Spacer(Modifier.size(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Reminder", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        reminderAt?.let {
+                            SimpleDateFormat("MMM d, yyyy • h:mm a", Locale.getDefault()).format(it)
+                        } ?: "No reminder set",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (reminderAt != null) {
+                    TextButton(onClick = { reminderAt = null }) { Text("Clear") }
+                }
+                OutlinedButton(onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    pickReminder()
+                }) { Text("Set") }
             }
             if (categories.isNotEmpty()) {
                 Spacer(Modifier.size(12.dp))

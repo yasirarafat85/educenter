@@ -14,6 +14,7 @@ import com.yasirarafat.clipnotes.data.Category
 import com.yasirarafat.clipnotes.data.Checklist
 import com.yasirarafat.clipnotes.data.License
 import com.yasirarafat.clipnotes.data.Note
+import com.yasirarafat.clipnotes.reminder.ReminderScheduler
 import com.yasirarafat.clipnotes.widget.ClipWidgetProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -39,6 +40,8 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         dao.trashedNotes().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val categories: StateFlow<List<Category>> =
         dao.categories().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val reminders: StateFlow<List<Note>> =
+        dao.reminderNotes().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // 0 = follow system, 1 = light, 2 = dark
     var themeMode by mutableStateOf(prefs.getInt("theme", 0))
@@ -170,13 +173,16 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         content: String,
         categoryId: Long?,
         color: Int = 0,
-        isChecklist: Boolean = false
+        isChecklist: Boolean = false,
+        reminderAt: Long? = null
     ) = viewModelScope.launch {
+        val savedId: Long
         if (id == 0L) {
-            dao.insertNote(
+            savedId = dao.insertNote(
                 Note(
                     title = title, content = content, categoryId = categoryId,
-                    color = color, isChecklist = isChecklist, updatedAt = System.currentTimeMillis()
+                    color = color, isChecklist = isChecklist, reminderAt = reminderAt,
+                    updatedAt = System.currentTimeMillis()
                 )
             )
         } else {
@@ -184,9 +190,17 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
             dao.updateNote(
                 existing.copy(
                     title = title, content = content, categoryId = categoryId,
-                    color = color, isChecklist = isChecklist, updatedAt = System.currentTimeMillis()
+                    color = color, isChecklist = isChecklist, reminderAt = reminderAt,
+                    updatedAt = System.currentTimeMillis()
                 )
             )
+            savedId = id
+        }
+        val app = getApplication<Application>()
+        if (reminderAt != null && reminderAt > System.currentTimeMillis()) {
+            ReminderScheduler.schedule(app, savedId, title, content, reminderAt)
+        } else {
+            ReminderScheduler.cancel(app, savedId)
         }
         scheduleAutoBackup()
     }
@@ -203,14 +217,20 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun moveToTrash(note: Note) = viewModelScope.launch {
+        ReminderScheduler.cancel(getApplication(), note.id)
         dao.updateNote(note.copy(isTrashed = true, isFavorite = false, updatedAt = System.currentTimeMillis())); scheduleAutoBackup()
     }
 
     fun restore(note: Note) = viewModelScope.launch {
-        dao.updateNote(note.copy(isTrashed = false, updatedAt = System.currentTimeMillis())); scheduleAutoBackup()
+        dao.updateNote(note.copy(isTrashed = false, updatedAt = System.currentTimeMillis()))
+        note.reminderAt?.let { if (it > System.currentTimeMillis()) ReminderScheduler.schedule(getApplication(), note.id, note.title, note.content, it) }
+        scheduleAutoBackup()
     }
 
-    fun deleteForever(note: Note) = viewModelScope.launch { dao.deleteNoteHard(note.id); scheduleAutoBackup() }
+    fun deleteForever(note: Note) = viewModelScope.launch {
+        ReminderScheduler.cancel(getApplication(), note.id)
+        dao.deleteNoteHard(note.id); scheduleAutoBackup()
+    }
 
     fun emptyTrash() = viewModelScope.launch { dao.emptyTrash(); scheduleAutoBackup() }
 
@@ -319,6 +339,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                     o.put("color", n.color)
                     o.put("checklist", n.isChecklist)
                     o.put("locked", n.isLocked)
+                    o.put("reminderAt", n.reminderAt ?: JSONObject.NULL)
                     noteArr.put(o)
                 }
                 root.put("notes", noteArr)
@@ -378,7 +399,8 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                     val catId = catName?.let { name ->
                         nameToId[name] ?: dao.insertCategory(Category(name = name)).also { nameToId[name] = it }
                     }
-                    dao.insertNote(
+                    val reminderAt = if (o.isNull("reminderAt")) null else o.optLong("reminderAt").takeIf { it > 0 }
+                    val newId = dao.insertNote(
                         Note(
                             title = title,
                             content = content,
@@ -390,9 +412,13 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                             color = o.optInt("color", 0),
                             isChecklist = o.optBoolean("checklist", false),
                             isLocked = o.optBoolean("locked", false),
+                            reminderAt = reminderAt,
                             updatedAt = System.currentTimeMillis()
                         )
                     )
+                    if (reminderAt != null && reminderAt > System.currentTimeMillis()) {
+                        ReminderScheduler.schedule(getApplication(), newId, title, content, reminderAt)
+                    }
                     inserted++
                 }
                 inserted

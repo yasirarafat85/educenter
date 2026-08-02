@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapVert
@@ -69,6 +70,7 @@ import com.yasirarafat.clipnotes.data.Note
 import com.yasirarafat.clipnotes.ui.screens.CategoriesScreen
 import com.yasirarafat.clipnotes.ui.screens.EditNoteScreen
 import com.yasirarafat.clipnotes.ui.screens.NotesList
+import com.yasirarafat.clipnotes.ui.screens.RemindersScreen
 import com.yasirarafat.clipnotes.ui.screens.SettingsScreen
 import com.yasirarafat.clipnotes.ui.screens.TrashScreen
 import kotlinx.coroutines.launch
@@ -79,6 +81,7 @@ enum class Screen(val title: String) {
     Notes("All Notes"),
     Favorites("Favorites"),
     Categories("Categories"),
+    Reminders("Reminders"),
     Trash("Trash"),
     Settings("Settings")
 }
@@ -103,6 +106,7 @@ fun ClipApp(vm: NotesViewModel) {
     val favorites by vm.favorites.collectAsState()
     val trashed by vm.trashed.collectAsState()
     val categories by vm.categories.collectAsState()
+    val reminders by vm.reminders.collectAsState()
 
     // Text shared into the app from another app opens a new note, prefilled.
     LaunchedEffect(vm.pendingSharedText) {
@@ -156,6 +160,7 @@ fun ClipApp(vm: NotesViewModel) {
                 DrawerRow(Icons.Filled.Description, "All Notes", screen == Screen.Notes) { goTo(Screen.Notes) }
                 DrawerRow(Icons.Filled.Favorite, "Favorites", screen == Screen.Favorites) { goTo(Screen.Favorites) }
                 DrawerRow(Icons.Filled.Folder, "Categories", screen == Screen.Categories) { goTo(Screen.Categories) }
+                DrawerRow(Icons.Filled.Notifications, "Reminders", screen == Screen.Reminders) { goTo(Screen.Reminders) }
                 DrawerRow(Icons.Filled.Delete, "Trash", screen == Screen.Trash) { goTo(Screen.Trash) }
                 DrawerRow(Icons.Filled.Settings, "Settings", screen == Screen.Settings) { goTo(Screen.Settings) }
             }
@@ -295,6 +300,10 @@ fun ClipApp(vm: NotesViewModel) {
                         onAdd = { vm.addCategory(it) },
                         onRename = { c, n -> vm.renameCategory(c, n) },
                         onDelete = { vm.deleteCategory(it) }
+                    )
+                    Screen.Reminders -> RemindersScreen(
+                        reminders = reminders,
+                        onOpen = { editingId = it.id }
                     )
                     Screen.Trash -> TrashScreen(
                         trashed = trashed,

@@ -17,5 +17,6 @@ data class Note(
     val color: Int = 0,            // 0 = none; otherwise index into NoteStripColors
     val isChecklist: Boolean = false,
     val isLocked: Boolean = false,
+    val reminderAt: Long? = null,   // epoch millis of a reminder, or null
     val updatedAt: Long = System.currentTimeMillis()
 )

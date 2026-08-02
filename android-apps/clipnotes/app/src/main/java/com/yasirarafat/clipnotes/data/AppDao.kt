@@ -26,6 +26,12 @@ interface AppDao {
     @Query("SELECT * FROM notes WHERE isTrashed = 1 ORDER BY updatedAt DESC")
     fun trashedNotes(): Flow<List<Note>>
 
+    @Query("SELECT * FROM notes WHERE isTrashed = 0 AND reminderAt IS NOT NULL ORDER BY reminderAt ASC")
+    fun reminderNotes(): Flow<List<Note>>
+
+    @Query("SELECT * FROM notes WHERE isTrashed = 0 AND reminderAt IS NOT NULL")
+    fun remindersSync(): List<Note>
+
     @Query("SELECT * FROM notes WHERE id = :id LIMIT 1")
     suspend fun getNote(id: Long): Note?
 
