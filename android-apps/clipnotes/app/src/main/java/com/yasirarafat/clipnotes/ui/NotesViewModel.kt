@@ -191,6 +191,9 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         ClipWidgetProvider.notifyDataChanged(getApplication())
         val u = backupUri
         if (!autoBackup || u == null) return
+        // Safety: never let an automatic backup overwrite a good file with nothing.
+        // (Manual "Back up now" is unaffected.)
+        if (notes.value.isEmpty() && trashed.value.isEmpty()) return
         autoBackupJob?.cancel()
         autoBackupJob = viewModelScope.launch {
             delay(2500) // debounce a burst of edits into one write
