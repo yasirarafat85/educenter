@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Share
@@ -72,8 +73,9 @@ fun NotesList(
     onShare: (Note) -> Unit,
     onTrash: (Note) -> Unit,
     onToggleChecklistItem: (Note, Int) -> Unit,
-    sessionUnlocked: Boolean,
-    onRequestUnlock: () -> Unit,
+    revealedIds: Set<Long>,
+    onRequestUnlock: (Note) -> Unit,
+    onRelock: (Note) -> Unit,
     onToggleLock: (Note) -> Unit
 ) {
     val filtered = remember(notes, query, sortMode) {
@@ -114,8 +116,9 @@ fun NotesList(
                     onShare = { onShare(note) },
                     onTrash = { onTrash(note) },
                     onToggleItem = { index -> onToggleChecklistItem(note, index) },
-                    sessionUnlocked = sessionUnlocked,
-                    onRequestUnlock = onRequestUnlock,
+                    revealed = note.id in revealedIds,
+                    onRequestUnlock = { onRequestUnlock(note) },
+                    onRelock = { onRelock(note) },
                     onToggleLock = { onToggleLock(note) }
                 )
             }
@@ -134,12 +137,13 @@ private fun NoteCard(
     onShare: () -> Unit,
     onTrash: () -> Unit,
     onToggleItem: (Int) -> Unit,
-    sessionUnlocked: Boolean,
+    revealed: Boolean,
     onRequestUnlock: () -> Unit,
+    onRelock: () -> Unit,
     onToggleLock: () -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val hidden = note.isLocked && !sessionUnlocked
+    val hidden = note.isLocked && !revealed
 
     Card(
         modifier = Modifier
@@ -149,13 +153,37 @@ private fun NoteCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
       if (hidden) {
-          Row(
-              modifier = Modifier.padding(16.dp),
-              verticalAlignment = Alignment.CenterVertically
-          ) {
-              Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-              Spacer(Modifier.width(10.dp))
-              Text("Locked note — tap to unlock", color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+              if (note.color in 1 until NoteStripColors.size) {
+                  Box(
+                      modifier = Modifier
+                          .width(6.dp)
+                          .fillMaxHeight()
+                          .background(NoteStripColors[note.color])
+                  )
+              }
+              Row(
+                  modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                  verticalAlignment = Alignment.CenterVertically
+              ) {
+                  Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                  Spacer(Modifier.width(12.dp))
+                  Column(modifier = Modifier.weight(1f)) {
+                      Text(
+                          text = note.title.ifBlank { if (note.isChecklist) "Checklist" else "Note" },
+                          style = MaterialTheme.typography.titleMedium,
+                          fontWeight = FontWeight.SemiBold,
+                          maxLines = 1,
+                          overflow = TextOverflow.Ellipsis,
+                          color = MaterialTheme.colorScheme.onSurface
+                      )
+                      Text(
+                          "Locked — tap to unlock",
+                          style = MaterialTheme.typography.bodySmall,
+                          color = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                  }
+              }
           }
       } else {
       Row(modifier = Modifier.height(IntrinsicSize.Min)) {
@@ -229,6 +257,15 @@ private fun NoteCard(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.size(4.dp))
+                }
+                if (note.isLocked) {
+                    IconButton(onClick = onRelock) {
+                        Icon(
+                            Icons.Filled.LockOpen,
+                            contentDescription = "Lock now",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
                 IconButton(onClick = onToggleFavorite) {
                     Icon(

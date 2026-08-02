@@ -71,6 +71,7 @@ fun EditNoteScreen(
     var colorIndex by remember { mutableStateOf(0) }
     var isChecklist by remember { mutableStateOf(false) }
     var reminderAt by remember { mutableStateOf<Long?>(null) }
+    var lockTimeoutSecs by remember { mutableStateOf(0) }
 
     val context = LocalContext.current
     val notifPermissionLauncher = rememberLauncherForActivityResult(
@@ -108,6 +109,7 @@ fun EditNoteScreen(
                 colorIndex = note.color
                 isChecklist = note.isChecklist
                 reminderAt = note.reminderAt
+                lockTimeoutSecs = note.lockTimeoutSecs
             }
         }
     }
@@ -124,7 +126,7 @@ fun EditNoteScreen(
                 actions = {
                     TextButton(
                         onClick = {
-                            vm.saveNote(noteId, title.trim(), content.trim(), categoryId, colorIndex, isChecklist, reminderAt)
+                            vm.saveNote(noteId, title.trim(), content.trim(), categoryId, colorIndex, isChecklist, reminderAt, lockTimeoutSecs)
                             onDone()
                         },
                         enabled = title.isNotBlank() || content.isNotBlank()
@@ -197,6 +199,27 @@ fun EditNoteScreen(
                     pickReminder()
                 }) { Text("Set") }
             }
+            Spacer(Modifier.size(12.dp))
+            Text("Auto-lock timer", style = MaterialTheme.typography.labelLarge)
+            Text(
+                "After you unlock this note, re-lock it automatically. Applies when the note is locked.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.size(6.dp))
+            val lockOptions = listOf(
+                "Manual" to 0, "10s" to 10, "30s" to 30, "1 min" to 60, "5 min" to 300
+            )
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(lockOptions, key = { it.second }) { (label, secs) ->
+                    FilterChip(
+                        selected = lockTimeoutSecs == secs,
+                        onClick = { lockTimeoutSecs = secs },
+                        label = { Text(label) }
+                    )
+                }
+            }
+
             if (categories.isNotEmpty()) {
                 Spacer(Modifier.size(12.dp))
                 Text("Category", style = androidx.compose.material3.MaterialTheme.typography.labelLarge)

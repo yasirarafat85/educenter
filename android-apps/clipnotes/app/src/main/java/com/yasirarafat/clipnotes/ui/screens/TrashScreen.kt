@@ -41,8 +41,8 @@ import com.yasirarafat.clipnotes.data.Note
 fun TrashScreen(
     trashed: List<Note>,
     categories: List<Category>,
-    sessionUnlocked: Boolean,
-    onRequestUnlock: () -> Unit,
+    revealedIds: Set<Long>,
+    onRequestUnlock: (Note) -> Unit,
     onRestore: (Note) -> Unit,
     onDeleteForever: (Note) -> Unit,
     onEmpty: () -> Unit
@@ -77,10 +77,10 @@ fun TrashScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(trashed, key = { it.id }) { note ->
-                val hidden = note.isLocked && !sessionUnlocked
+                val hidden = note.isLocked && note.id !in revealedIds
                 if (hidden) {
                     Card(
-                        modifier = Modifier.fillMaxWidth().clickable { onRequestUnlock() },
+                        modifier = Modifier.fillMaxWidth().clickable { onRequestUnlock(note) },
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
@@ -90,10 +90,18 @@ fun TrashScreen(
                         ) {
                             Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(10.dp))
-                            Text(
-                                "Locked note — tap to unlock",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Column {
+                                Text(
+                                    note.title.ifBlank { "Locked note" },
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    "Locked — tap to unlock",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                     return@items

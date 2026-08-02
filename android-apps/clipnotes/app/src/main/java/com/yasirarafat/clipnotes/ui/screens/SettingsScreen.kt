@@ -370,8 +370,8 @@ fun SettingsScreen(vm: NotesViewModel) {
                 Spacer(Modifier.width(8.dp))
                 OutlinedButton(onClick = { showRemovePw = true }) { Text("Remove") }
                 Spacer(Modifier.weight(1f))
-                if (vm.unlocked) {
-                    TextButton(onClick = { vm.lockSession(); toast(context, "Locked") }) { Text("Lock now") }
+                if (vm.revealedIds.isNotEmpty()) {
+                    TextButton(onClick = { vm.lockAll(); toast(context, "Locked") }) { Text("Lock now") }
                 }
             }
             val fingerprintReady = remember { BiometricAuth.isAvailable(context) }

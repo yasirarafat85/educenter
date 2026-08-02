@@ -76,11 +76,41 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
     var pendingSharedText by mutableStateOf<String?>(null)
         private set
 
-    // App lock (master password). lockEnabled = a password is set; unlocked = this session is open.
+    // App lock (master password). lockEnabled = a password is set.
     var lockEnabled by mutableStateOf(prefs.getString("lock_hash", null) != null)
         private set
-    var unlocked by mutableStateOf(false)
+    // Ids of locked notes that are temporarily revealed (per-note, in memory only).
+    var revealedIds by mutableStateOf<Set<Long>>(emptySet())
         private set
+    private val relockJobs = mutableMapOf<Long, Job>()
+
+    fun isRevealed(id: Long): Boolean = id in revealedIds
+
+    /** Reveal one locked note; if it has a timeout, schedule an auto re-lock. */
+    fun revealNote(note: Note) {
+        revealedIds = revealedIds + note.id
+        relockJobs.remove(note.id)?.cancel()
+        if (note.lockTimeoutSecs > 0) {
+            relockJobs[note.id] = viewModelScope.launch {
+                delay(note.lockTimeoutSecs * 1000L)
+                relockNote(note.id)
+            }
+        }
+    }
+
+    /** Hide one note again right now (manual re-lock). */
+    fun relockNote(id: Long) {
+        relockJobs.remove(id)?.cancel()
+        revealedIds = revealedIds - id
+    }
+
+    /** Re-lock every revealed note (used by Settings "Lock now"). */
+    fun lockAll() {
+        relockJobs.values.forEach { it.cancel() }
+        relockJobs.clear()
+        revealedIds = emptySet()
+    }
+
     // Fingerprint unlock (only meaningful while a master password is set).
     var biometricEnabled by mutableStateOf(prefs.getBoolean("biometric", false))
         private set
@@ -89,9 +119,6 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         biometricEnabled = on
         prefs.edit().putBoolean("biometric", on).apply()
     }
-
-    /** Called after a successful fingerprint prompt — opens the session. */
-    fun unlockWithBiometric() { unlocked = true }
 
     private fun hashPw(pw: String): String {
         val digest = java.security.MessageDigest.getInstance("SHA-256")
@@ -103,9 +130,6 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         if (pw.isBlank()) return
         prefs.edit().putString("lock_hash", hashPw(pw)).apply()
         lockEnabled = true
-        // Keep the session LOCKED so any note you lock hides right away until
-        // you unlock with the password (or fingerprint).
-        unlocked = false
     }
 
     fun verifyMaster(pw: String): Boolean {
@@ -124,20 +148,16 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().remove("lock_hash").putBoolean("biometric", false).apply()
         lockEnabled = false
         biometricEnabled = false
-        unlocked = true
+        lockAll()
         viewModelScope.launch { dao.unlockAllNotes() } // nothing to gate anymore
         return true
     }
 
-    fun unlockSession(pw: String): Boolean {
-        if (verifyMaster(pw)) { unlocked = true; return true }
-        return false
-    }
-
-    fun lockSession() { unlocked = false }
-
     fun toggleNoteLock(note: Note) = viewModelScope.launch {
-        dao.updateNote(note.copy(isLocked = !note.isLocked, updatedAt = System.currentTimeMillis()))
+        val nowLocked = !note.isLocked
+        dao.updateNote(note.copy(isLocked = nowLocked, updatedAt = System.currentTimeMillis()))
+        // Locking a note hides it immediately; unlocking clears any reveal state.
+        relockNote(note.id)
         scheduleAutoBackup()
     }
 
@@ -188,7 +208,8 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         categoryId: Long?,
         color: Int = 0,
         isChecklist: Boolean = false,
-        reminderAt: Long? = null
+        reminderAt: Long? = null,
+        lockTimeoutSecs: Int = 0
     ) = viewModelScope.launch {
         val savedId: Long
         if (id == 0L) {
@@ -196,6 +217,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                 Note(
                     title = title, content = content, categoryId = categoryId,
                     color = color, isChecklist = isChecklist, reminderAt = reminderAt,
+                    lockTimeoutSecs = lockTimeoutSecs,
                     updatedAt = System.currentTimeMillis()
                 )
             )
@@ -205,6 +227,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                 existing.copy(
                     title = title, content = content, categoryId = categoryId,
                     color = color, isChecklist = isChecklist, reminderAt = reminderAt,
+                    lockTimeoutSecs = lockTimeoutSecs,
                     updatedAt = System.currentTimeMillis()
                 )
             )
@@ -353,6 +376,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                     o.put("color", n.color)
                     o.put("checklist", n.isChecklist)
                     o.put("locked", n.isLocked)
+                    o.put("lockTimeoutSecs", n.lockTimeoutSecs)
                     o.put("reminderAt", n.reminderAt ?: JSONObject.NULL)
                     noteArr.put(o)
                 }
@@ -426,6 +450,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                             color = o.optInt("color", 0),
                             isChecklist = o.optBoolean("checklist", false),
                             isLocked = o.optBoolean("locked", false),
+                            lockTimeoutSecs = o.optInt("lockTimeoutSecs", 0),
                             reminderAt = reminderAt,
                             updatedAt = System.currentTimeMillis()
                         )

@@ -33,8 +33,8 @@ import java.util.Locale
 @Composable
 fun RemindersScreen(
     reminders: List<Note>,
-    sessionUnlocked: Boolean,
-    onRequestUnlock: () -> Unit,
+    revealedIds: Set<Long>,
+    onRequestUnlock: (Note) -> Unit,
     onOpen: (Note) -> Unit
 ) {
     if (reminders.isEmpty()) {
@@ -50,10 +50,10 @@ fun RemindersScreen(
     ) {
         items(reminders, key = { it.id }) { note ->
             val time = note.reminderAt ?: 0L
-            val hidden = note.isLocked && !sessionUnlocked
+            val hidden = note.isLocked && note.id !in revealedIds
             Card(
                 modifier = Modifier.fillMaxWidth().clickable {
-                    if (hidden) onRequestUnlock() else onOpen(note)
+                    if (hidden) onRequestUnlock(note) else onOpen(note)
                 },
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
@@ -78,7 +78,7 @@ fun RemindersScreen(
                         )
                         Spacer(Modifier.size(2.dp))
                         Text(
-                            if (hidden) "Locked note — tap to unlock"
+                            if (hidden) note.title.ifBlank { "Locked note — tap to unlock" }
                             else note.title.ifBlank { note.content }.ifBlank { "(empty)" },
                             style = MaterialTheme.typography.titleSmall,
                             maxLines = 2,

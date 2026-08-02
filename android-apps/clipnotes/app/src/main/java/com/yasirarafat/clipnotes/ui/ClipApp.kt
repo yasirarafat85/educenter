@@ -102,7 +102,7 @@ fun ClipApp(vm: NotesViewModel) {
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var sortMenuOpen by remember { mutableStateOf(false) }
-    var showUnlock by remember { mutableStateOf(false) }
+    var pendingUnlock by remember { mutableStateOf<Note?>(null) }
 
     val notes by vm.notes.collectAsState()
     val favorites by vm.favorites.collectAsState()
@@ -144,26 +144,29 @@ fun ClipApp(vm: NotesViewModel) {
 
     val fingerprintUnlock = vm.biometricEnabled && BiometricAuth.isAvailable(context)
 
+    fun revealPending() {
+        pendingUnlock?.let { vm.revealNote(it) }
+        pendingUnlock = null
+    }
+
     fun requestFingerprint() {
         context.findFragmentActivity()?.let { act ->
-            BiometricAuth.authenticate(act, onSuccess = {
-                vm.unlockWithBiometric(); showUnlock = false
-            })
+            BiometricAuth.authenticate(act, onSuccess = { revealPending() })
         }
     }
 
-    // When the unlock prompt opens and fingerprint is on, offer it right away.
-    LaunchedEffect(showUnlock) {
-        if (showUnlock && fingerprintUnlock) requestFingerprint()
+    fun requestUnlock(note: Note) { pendingUnlock = note }
+
+    // When an unlock is requested and fingerprint is on, offer it right away.
+    LaunchedEffect(pendingUnlock) {
+        if (pendingUnlock != null && fingerprintUnlock) requestFingerprint()
     }
 
-    if (showUnlock) {
+    pendingUnlock?.let {
         UnlockDialog(
-            onDismiss = { showUnlock = false },
+            onDismiss = { pendingUnlock = null },
             onUnlock = { pw ->
-                if (vm.unlockSession(pw)) {
-                    showUnlock = false; true
-                } else false
+                if (vm.verifyMaster(pw)) { revealPending(); true } else false
             },
             onBiometric = if (fingerprintUnlock) ({ requestFingerprint() }) else null
         )
@@ -290,8 +293,9 @@ fun ClipApp(vm: NotesViewModel) {
                             onShare = { shareText(context, noteCopyText(it)) },
                             onTrash = { vm.moveToTrash(it) },
                             onToggleChecklistItem = { note, idx -> vm.toggleChecklistItem(note, idx) },
-                            sessionUnlocked = vm.unlocked,
-                            onRequestUnlock = { showUnlock = true },
+                            revealedIds = vm.revealedIds,
+                            onRequestUnlock = { requestUnlock(it) },
+                            onRelock = { vm.relockNote(it.id) },
                             onToggleLock = { onToggleLock(it) }
                         )
                     }
@@ -308,8 +312,9 @@ fun ClipApp(vm: NotesViewModel) {
                         onShare = { shareText(context, noteCopyText(it)) },
                         onTrash = { vm.moveToTrash(it) },
                         onToggleChecklistItem = { note, idx -> vm.toggleChecklistItem(note, idx) },
-                        sessionUnlocked = vm.unlocked,
-                        onRequestUnlock = { showUnlock = true },
+                        revealedIds = vm.revealedIds,
+                        onRequestUnlock = { requestUnlock(it) },
+                        onRelock = { vm.relockNote(it.id) },
                         onToggleLock = { onToggleLock(it) }
                     )
                     Screen.Categories -> CategoriesScreen(
@@ -321,15 +326,15 @@ fun ClipApp(vm: NotesViewModel) {
                     )
                     Screen.Reminders -> RemindersScreen(
                         reminders = reminders,
-                        sessionUnlocked = vm.unlocked,
-                        onRequestUnlock = { showUnlock = true },
+                        revealedIds = vm.revealedIds,
+                        onRequestUnlock = { requestUnlock(it) },
                         onOpen = { editingId = it.id }
                     )
                     Screen.Trash -> TrashScreen(
                         trashed = trashed,
                         categories = categories,
-                        sessionUnlocked = vm.unlocked,
-                        onRequestUnlock = { showUnlock = true },
+                        revealedIds = vm.revealedIds,
+                        onRequestUnlock = { requestUnlock(it) },
                         onRestore = { vm.restore(it) },
                         onDeleteForever = { vm.deleteForever(it) },
                         onEmpty = { vm.emptyTrash() }
