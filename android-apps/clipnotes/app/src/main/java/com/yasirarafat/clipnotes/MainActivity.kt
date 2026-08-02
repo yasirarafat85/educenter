@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
     private fun handleShare(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT)
-            if (!text.isNullOrBlank()) vm.setPendingSharedText(text)
+            if (!text.isNullOrBlank()) vm.stashSharedText(text)
         }
     }
 }

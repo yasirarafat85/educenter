@@ -73,7 +73,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putInt("sort", mode).apply()
     }
 
-    fun setPendingSharedText(text: String) {
+    fun stashSharedText(text: String) {
         pendingSharedText = text
     }
 
