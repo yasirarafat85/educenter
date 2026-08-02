@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,7 +31,12 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 @Composable
-fun RemindersScreen(reminders: List<Note>, onOpen: (Note) -> Unit) {
+fun RemindersScreen(
+    reminders: List<Note>,
+    sessionUnlocked: Boolean,
+    onRequestUnlock: () -> Unit,
+    onOpen: (Note) -> Unit
+) {
     if (reminders.isEmpty()) {
         EmptyState("No reminders yet. Open a note and tap Set under Reminder.")
         return
@@ -44,8 +50,11 @@ fun RemindersScreen(reminders: List<Note>, onOpen: (Note) -> Unit) {
     ) {
         items(reminders, key = { it.id }) { note ->
             val time = note.reminderAt ?: 0L
+            val hidden = note.isLocked && !sessionUnlocked
             Card(
-                modifier = Modifier.fillMaxWidth().clickable { onOpen(note) },
+                modifier = Modifier.fillMaxWidth().clickable {
+                    if (hidden) onRequestUnlock() else onOpen(note)
+                },
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
@@ -54,7 +63,7 @@ fun RemindersScreen(reminders: List<Note>, onOpen: (Note) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        Icons.Filled.Notifications,
+                        if (hidden) Icons.Filled.Lock else Icons.Filled.Notifications,
                         contentDescription = null,
                         tint = if (time in 1 until now) MaterialTheme.colorScheme.outline
                         else MaterialTheme.colorScheme.primary
@@ -69,11 +78,13 @@ fun RemindersScreen(reminders: List<Note>, onOpen: (Note) -> Unit) {
                         )
                         Spacer(Modifier.size(2.dp))
                         Text(
-                            note.title.ifBlank { note.content }.ifBlank { "(empty)" },
+                            if (hidden) "Locked note — tap to unlock"
+                            else note.title.ifBlank { note.content }.ifBlank { "(empty)" },
                             style = MaterialTheme.typography.titleSmall,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = if (hidden) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }

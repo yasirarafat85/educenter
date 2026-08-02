@@ -103,7 +103,9 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         if (pw.isBlank()) return
         prefs.edit().putString("lock_hash", hashPw(pw)).apply()
         lockEnabled = true
-        unlocked = true
+        // Keep the session LOCKED so any note you lock hides right away until
+        // you unlock with the password (or fingerprint).
+        unlocked = false
     }
 
     fun verifyMaster(pw: String): Boolean {

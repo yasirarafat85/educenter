@@ -321,11 +321,15 @@ fun ClipApp(vm: NotesViewModel) {
                     )
                     Screen.Reminders -> RemindersScreen(
                         reminders = reminders,
+                        sessionUnlocked = vm.unlocked,
+                        onRequestUnlock = { showUnlock = true },
                         onOpen = { editingId = it.id }
                     )
                     Screen.Trash -> TrashScreen(
                         trashed = trashed,
                         categories = categories,
+                        sessionUnlocked = vm.unlocked,
+                        onRequestUnlock = { showUnlock = true },
                         onRestore = { vm.restore(it) },
                         onDeleteForever = { vm.deleteForever(it) },
                         onEmpty = { vm.emptyTrash() }

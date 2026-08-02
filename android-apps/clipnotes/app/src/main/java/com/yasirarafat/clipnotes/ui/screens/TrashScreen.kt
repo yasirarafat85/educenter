@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -39,6 +41,8 @@ import com.yasirarafat.clipnotes.data.Note
 fun TrashScreen(
     trashed: List<Note>,
     categories: List<Category>,
+    sessionUnlocked: Boolean,
+    onRequestUnlock: () -> Unit,
     onRestore: (Note) -> Unit,
     onDeleteForever: (Note) -> Unit,
     onEmpty: () -> Unit
@@ -73,6 +77,27 @@ fun TrashScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(trashed, key = { it.id }) { note ->
+                val hidden = note.isLocked && !sessionUnlocked
+                if (hidden) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().clickable { onRequestUnlock() },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                "Locked note — tap to unlock",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    return@items
+                }
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
