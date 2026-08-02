@@ -2,9 +2,9 @@ package com.yasirarafat.clipnotes
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
@@ -14,7 +14,7 @@ import com.yasirarafat.clipnotes.ui.ClipApp
 import com.yasirarafat.clipnotes.ui.NotesViewModel
 import com.yasirarafat.clipnotes.ui.theme.ClipNotesTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private val vm: NotesViewModel by viewModels()
 

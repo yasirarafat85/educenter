@@ -55,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.yasirarafat.clipnotes.ui.BiometricAuth
 import com.yasirarafat.clipnotes.ui.NotesViewModel
 import com.yasirarafat.clipnotes.ui.theme.ClipAccents
 
@@ -372,6 +373,26 @@ fun SettingsScreen(vm: NotesViewModel) {
                 if (vm.unlocked) {
                     TextButton(onClick = { vm.lockSession(); toast(context, "Locked") }) { Text("Lock now") }
                 }
+            }
+            val fingerprintReady = remember { BiometricAuth.isAvailable(context) }
+            Spacer(Modifier.size(10.dp))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Unlock with fingerprint", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        if (fingerprintReady)
+                            "Use your fingerprint instead of typing the password to open locked notes."
+                        else
+                            "No fingerprint is set up on this phone. Add one in your phone's Settings first.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = vm.biometricEnabled && fingerprintReady,
+                    enabled = fingerprintReady,
+                    onCheckedChange = { vm.setBiometricEnabled(it) }
+                )
             }
         }
 

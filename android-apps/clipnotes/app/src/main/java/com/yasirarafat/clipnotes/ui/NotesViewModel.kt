@@ -81,6 +81,17 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var unlocked by mutableStateOf(false)
         private set
+    // Fingerprint unlock (only meaningful while a master password is set).
+    var biometricEnabled by mutableStateOf(prefs.getBoolean("biometric", false))
+        private set
+
+    fun setBiometricEnabled(on: Boolean) {
+        biometricEnabled = on
+        prefs.edit().putBoolean("biometric", on).apply()
+    }
+
+    /** Called after a successful fingerprint prompt — opens the session. */
+    fun unlockWithBiometric() { unlocked = true }
 
     private fun hashPw(pw: String): String {
         val digest = java.security.MessageDigest.getInstance("SHA-256")
@@ -108,8 +119,9 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
 
     fun removeMasterPassword(current: String): Boolean {
         if (!verifyMaster(current)) return false
-        prefs.edit().remove("lock_hash").apply()
+        prefs.edit().remove("lock_hash").putBoolean("biometric", false).apply()
         lockEnabled = false
+        biometricEnabled = false
         unlocked = true
         viewModelScope.launch { dao.unlockAllNotes() } // nothing to gate anymore
         return true

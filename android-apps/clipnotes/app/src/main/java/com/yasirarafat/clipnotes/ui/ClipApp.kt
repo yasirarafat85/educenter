@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
@@ -33,6 +34,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
@@ -140,6 +142,21 @@ fun ClipApp(vm: NotesViewModel) {
         }
     }
 
+    val fingerprintUnlock = vm.biometricEnabled && BiometricAuth.isAvailable(context)
+
+    fun requestFingerprint() {
+        context.findFragmentActivity()?.let { act ->
+            BiometricAuth.authenticate(act, onSuccess = {
+                vm.unlockWithBiometric(); showUnlock = false
+            })
+        }
+    }
+
+    // When the unlock prompt opens and fingerprint is on, offer it right away.
+    LaunchedEffect(showUnlock) {
+        if (showUnlock && fingerprintUnlock) requestFingerprint()
+    }
+
     if (showUnlock) {
         UnlockDialog(
             onDismiss = { showUnlock = false },
@@ -147,7 +164,8 @@ fun ClipApp(vm: NotesViewModel) {
                 if (vm.unlockSession(pw)) {
                     showUnlock = false; true
                 } else false
-            }
+            },
+            onBiometric = if (fingerprintUnlock) ({ requestFingerprint() }) else null
         )
     }
 
@@ -368,7 +386,11 @@ private fun DrawerRow(
 }
 
 @Composable
-private fun UnlockDialog(onDismiss: () -> Unit, onUnlock: (String) -> Boolean) {
+private fun UnlockDialog(
+    onDismiss: () -> Unit,
+    onUnlock: (String) -> Boolean,
+    onBiometric: (() -> Unit)? = null
+) {
     var pw by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
     AlertDialog(
@@ -391,6 +413,17 @@ private fun UnlockDialog(onDismiss: () -> Unit, onUnlock: (String) -> Boolean) {
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall
                     )
+                }
+                if (onBiometric != null) {
+                    Spacer(Modifier.size(8.dp))
+                    OutlinedButton(
+                        onClick = onBiometric,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Filled.Fingerprint, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.size(8.dp))
+                        Text("Use fingerprint")
+                    }
                 }
             }
         },
