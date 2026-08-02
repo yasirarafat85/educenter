@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
                 2 -> true
                 else -> systemDark
             }
-            ClipNotesTheme(darkTheme = dark) {
+            ClipNotesTheme(darkTheme = dark, accentIndex = vm.accentIndex) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = androidx.compose.material3.MaterialTheme.colorScheme.background

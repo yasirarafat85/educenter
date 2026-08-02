@@ -59,6 +59,15 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
     var sortMode by mutableStateOf(prefs.getInt("sort", 0))
         private set
 
+    // Accent colour index (see ui.theme.ClipAccents)
+    var accentIndex by mutableStateOf(prefs.getInt("accent", 0))
+        private set
+
+    fun setAccent(index: Int) {
+        accentIndex = index
+        prefs.edit().putInt("accent", index).apply()
+    }
+
     // Text shared into the app from another app (via the Android share sheet)
     var pendingSharedText by mutableStateOf<String?>(null)
         private set

@@ -6,7 +6,10 @@ import android.content.Context
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,8 +19,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
@@ -42,11 +47,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yasirarafat.clipnotes.ui.NotesViewModel
+import com.yasirarafat.clipnotes.ui.theme.ClipAccents
 
 private fun toast(context: Context, msg: String) =
     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
@@ -118,6 +125,41 @@ fun SettingsScreen(vm: NotesViewModel) {
                     Icon(Icons.Filled.Lock, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.size(2.dp))
                     Text("Pro", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+
+        Spacer(Modifier.size(12.dp))
+        Text("App color", style = MaterialTheme.typography.labelLarge)
+        Spacer(Modifier.size(8.dp))
+        Row {
+            ClipAccents.forEachIndexed { index, accent ->
+                val selected = vm.accentIndex == index
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .padding(end = 12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(accent.light)
+                            .border(
+                                width = if (selected) 3.dp else 0.dp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                shape = CircleShape
+                            )
+                            .clickable { vm.setAccent(index) }
+                    )
+                    if (selected) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = "Selected",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp).align(Alignment.Center)
+                        )
+                    }
                 }
             }
         }
@@ -254,8 +296,10 @@ fun SettingsScreen(vm: NotesViewModel) {
             OutlinedTextField(
                 value = keyInput,
                 onValueChange = { keyInput = it },
-                label = { Text("Activation key") },
-                singleLine = true,
+                label = { Text("Activation key (paste it here)") },
+                singleLine = false,
+                minLines = 2,
+                maxLines = 5,
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.size(8.dp))

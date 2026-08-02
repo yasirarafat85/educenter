@@ -281,9 +281,7 @@ private fun DrawerHeader() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                Brush.horizontalGradient(listOf(Color(0xFF2563EB), Color(0xFF1E40AF)))
-            )
+            .background(MaterialTheme.colorScheme.primary)
             .padding(20.dp)
             .padding(top = 24.dp)
     ) {

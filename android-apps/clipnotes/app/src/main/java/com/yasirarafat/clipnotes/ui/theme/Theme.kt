@@ -8,17 +8,25 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val Blue = Color(0xFF2563EB)
-private val BlueDark = Color(0xFF1E40AF)
-private val BlueLight = Color(0xFF60A5FA)
+/** One selectable accent: light-mode primary, dark-mode primary, and container tints. */
+data class ClipAccent(
+    val light: Color,
+    val dark: Color,
+    val container: Color,
+    val onContainer: Color
+)
 
-private val LightColors = lightColorScheme(
-    primary = Blue,
+/** The accent palette the user can pick from in Settings. Order matters (stored as index). */
+val ClipAccents = listOf(
+    ClipAccent(Color(0xFF2563EB), Color(0xFF60A5FA), Color(0xFFDCE7FF), Color(0xFF0B2A6B)), // Blue
+    ClipAccent(Color(0xFF059669), Color(0xFF34D399), Color(0xFFCFF5E7), Color(0xFF04372A)), // Emerald
+    ClipAccent(Color(0xFF7C3AED), Color(0xFFA78BFA), Color(0xFFEADDFF), Color(0xFF2A0A5E)), // Purple
+    ClipAccent(Color(0xFF0D9488), Color(0xFF2DD4BF), Color(0xFFC9F2EC), Color(0xFF00302B)), // Teal
+    ClipAccent(Color(0xFFEA580C), Color(0xFFFB923C), Color(0xFFFFE0CC), Color(0xFF4A1A00))  // Orange
+)
+
+private val LightBase = lightColorScheme(
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFDCE7FF),
-    onPrimaryContainer = Color(0xFF0B2A6B),
-    secondary = Color(0xFF3B82F6),
-    onSecondary = Color.White,
     background = Color(0xFFF5F6FA),
     onBackground = Color(0xFF1A1C1E),
     surface = Color.White,
@@ -28,13 +36,7 @@ private val LightColors = lightColorScheme(
     outline = Color(0xFFC7C9D0)
 )
 
-private val DarkColors = darkColorScheme(
-    primary = BlueLight,
-    onPrimary = Color(0xFF0B2A6B),
-    primaryContainer = BlueDark,
-    onPrimaryContainer = Color(0xFFDCE7FF),
-    secondary = Color(0xFF93C5FD),
-    onSecondary = Color(0xFF0B2A6B),
+private val DarkBase = darkColorScheme(
     background = Color(0xFF111318),
     onBackground = Color(0xFFE3E2E6),
     surface = Color(0xFF1B1E24),
@@ -47,10 +49,29 @@ private val DarkColors = darkColorScheme(
 @Composable
 fun ClipNotesTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    accentIndex: Int = 0,
     content: @Composable () -> Unit
 ) {
+    val accent = ClipAccents.getOrElse(accentIndex) { ClipAccents[0] }
+    val colorScheme = if (darkTheme) {
+        DarkBase.copy(
+            primary = accent.dark,
+            onPrimary = Color(0xFF06121F),
+            primaryContainer = accent.light,
+            onPrimaryContainer = accent.container,
+            secondary = accent.dark
+        )
+    } else {
+        LightBase.copy(
+            primary = accent.light,
+            onPrimary = Color.White,
+            primaryContainer = accent.container,
+            onPrimaryContainer = accent.onContainer,
+            secondary = accent.light
+        )
+    }
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = colorScheme,
         typography = Typography(),
         content = content
     )
