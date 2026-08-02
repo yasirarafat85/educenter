@@ -10,11 +10,14 @@ import kotlinx.coroutines.flow.Flow
 interface AppDao {
 
     // ---- Notes ----
-    @Query("SELECT * FROM notes WHERE isTrashed = 0 ORDER BY isFavorite DESC, updatedAt DESC")
+    @Query("SELECT * FROM notes WHERE isTrashed = 0 ORDER BY isPinned DESC, updatedAt DESC")
     fun activeNotes(): Flow<List<Note>>
 
-    @Query("SELECT * FROM notes WHERE isTrashed = 0 AND isFavorite = 1 ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM notes WHERE isTrashed = 0 AND isFavorite = 1 ORDER BY isPinned DESC, updatedAt DESC")
     fun favoriteNotes(): Flow<List<Note>>
+
+    @Query("UPDATE notes SET copyCount = copyCount + 1 WHERE id = :id")
+    suspend fun incrementCopy(id: Long)
 
     @Query("SELECT * FROM notes WHERE isTrashed = 1 ORDER BY updatedAt DESC")
     fun trashedNotes(): Flow<List<Note>>

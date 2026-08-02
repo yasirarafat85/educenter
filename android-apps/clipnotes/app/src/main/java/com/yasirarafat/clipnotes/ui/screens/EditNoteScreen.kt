@@ -41,10 +41,11 @@ fun EditNoteScreen(
     vm: NotesViewModel,
     noteId: Long,
     categories: List<Category>,
+    initialContent: String? = null,
     onDone: () -> Unit
 ) {
     var title by remember { mutableStateOf("") }
-    var content by remember { mutableStateOf("") }
+    var content by remember { mutableStateOf(if (noteId == 0L) (initialContent ?: "") else "") }
     var categoryId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(noteId) {

@@ -12,5 +12,7 @@ data class Note(
     val categoryId: Long? = null,
     val isFavorite: Boolean = false,
     val isTrashed: Boolean = false,
+    val isPinned: Boolean = false,
+    val copyCount: Int = 0,
     val updatedAt: Long = System.currentTimeMillis()
 )

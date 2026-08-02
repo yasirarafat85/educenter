@@ -54,9 +54,38 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
 
     private var autoBackupJob: Job? = null
 
+    // Sort mode for the notes list: 0 = recent, 1 = alphabetical, 2 = most copied
+    var sortMode by mutableStateOf(prefs.getInt("sort", 0))
+        private set
+
+    // Text shared into the app from another app (via the Android share sheet)
+    var pendingSharedText by mutableStateOf<String?>(null)
+        private set
+
     fun setTheme(mode: Int) {
         themeMode = mode
         prefs.edit().putInt("theme", mode).apply()
+    }
+
+    fun setSort(mode: Int) {
+        sortMode = mode
+        prefs.edit().putInt("sort", mode).apply()
+    }
+
+    fun setPendingSharedText(text: String) {
+        pendingSharedText = text
+    }
+
+    fun consumePendingSharedText() {
+        pendingSharedText = null
+    }
+
+    fun togglePin(note: Note) = viewModelScope.launch {
+        dao.updateNote(note.copy(isPinned = !note.isPinned)); scheduleAutoBackup()
+    }
+
+    fun onCopied(note: Note) = viewModelScope.launch {
+        dao.incrementCopy(note.id)
     }
 
     fun deviceCode(): String = License.deviceCode(getApplication())

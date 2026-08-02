@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -53,19 +54,31 @@ fun NotesList(
     notes: List<Note>,
     categories: List<Category>,
     query: String,
+    sortMode: Int,
     emptyText: String,
     onCopy: (Note) -> Unit,
     onEdit: (Note) -> Unit,
     onToggleFavorite: (Note) -> Unit,
+    onTogglePin: (Note) -> Unit,
     onShare: (Note) -> Unit,
     onTrash: (Note) -> Unit
 ) {
-    val filtered = remember(notes, query) {
-        if (query.isBlank()) notes
+    val filtered = remember(notes, query, sortMode) {
+        val base = if (query.isBlank()) notes
         else notes.filter {
             it.title.contains(query, ignoreCase = true) ||
                 it.content.contains(query, ignoreCase = true)
         }
+        // Pinned notes always first, then by the chosen sort mode.
+        base.sortedWith(
+            compareByDescending<Note> { it.isPinned }.thenComparator { a, b ->
+                when (sortMode) {
+                    1 -> (a.title.ifBlank { a.content }).compareTo(b.title.ifBlank { b.content }, ignoreCase = true)
+                    2 -> b.copyCount.compareTo(a.copyCount)
+                    else -> b.updatedAt.compareTo(a.updatedAt)
+                }
+            }
+        )
     }
     val catMap = remember(categories) { categories.associateBy({ it.id }, { it.name }) }
 
@@ -84,6 +97,7 @@ fun NotesList(
                     onCopy = { onCopy(note) },
                     onEdit = { onEdit(note) },
                     onToggleFavorite = { onToggleFavorite(note) },
+                    onTogglePin = { onTogglePin(note) },
                     onShare = { onShare(note) },
                     onTrash = { onTrash(note) }
                 )
@@ -99,6 +113,7 @@ private fun NoteCard(
     onCopy: () -> Unit,
     onEdit: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onTogglePin: () -> Unit,
     onShare: () -> Unit,
     onTrash: () -> Unit
 ) {
@@ -133,6 +148,15 @@ private fun NoteCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                if (note.isPinned) {
+                    Icon(
+                        Icons.Filled.PushPin,
+                        contentDescription = "Pinned",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.size(4.dp))
+                }
                 IconButton(onClick = onToggleFavorite) {
                     Icon(
                         imageVector = if (note.isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
@@ -146,6 +170,11 @@ private fun NoteCard(
                         Icon(Icons.Filled.MoreVert, contentDescription = "More")
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text(if (note.isPinned) "Unpin" else "Pin to top") },
+                            leadingIcon = { Icon(Icons.Filled.PushPin, null) },
+                            onClick = { menuOpen = false; onTogglePin() }
+                        )
                         DropdownMenuItem(
                             text = { Text("Edit") },
                             leadingIcon = { Icon(Icons.Filled.Edit, null) },
@@ -180,6 +209,14 @@ private fun NoteCard(
                     )
                 }
                 Spacer(Modifier.weight(1f))
+                if (note.copyCount > 0) {
+                    Text(
+                        "copied ${note.copyCount}×",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
                 TextButton(onClick = onCopy) {
                     Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))

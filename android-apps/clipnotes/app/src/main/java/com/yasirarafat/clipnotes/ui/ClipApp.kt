@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
@@ -24,7 +25,10 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -41,9 +45,11 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -84,18 +90,25 @@ fun ClipApp(vm: NotesViewModel) {
     var categoryFilter by rememberSaveable { mutableStateOf(-1L) }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
+    var sortMenuOpen by remember { mutableStateOf(false) }
 
     val notes by vm.notes.collectAsState()
     val favorites by vm.favorites.collectAsState()
     val trashed by vm.trashed.collectAsState()
     val categories by vm.categories.collectAsState()
 
+    // Text shared into the app from another app opens a new note, prefilled.
+    LaunchedEffect(vm.pendingSharedText) {
+        if (vm.pendingSharedText != null && editingId == NOT_EDITING) editingId = 0L
+    }
+
     if (editingId != NOT_EDITING) {
         EditNoteScreen(
             vm = vm,
             noteId = editingId,
             categories = categories,
-            onDone = { editingId = NOT_EDITING }
+            initialContent = if (editingId == 0L) vm.pendingSharedText else null,
+            onDone = { editingId = NOT_EDITING; vm.consumePendingSharedText() }
         )
         return
     }
@@ -161,6 +174,26 @@ fun ClipApp(vm: NotesViewModel) {
                     },
                     actions = {
                         if (screen == Screen.Notes || screen == Screen.Favorites) {
+                            Box {
+                                IconButton(onClick = { sortMenuOpen = true }) {
+                                    Icon(Icons.Filled.SwapVert, contentDescription = "Sort")
+                                }
+                                DropdownMenu(
+                                    expanded = sortMenuOpen,
+                                    onDismissRequest = { sortMenuOpen = false }
+                                ) {
+                                    listOf("Recent first" to 0, "A–Z" to 1, "Most copied" to 2)
+                                        .forEach { (label, mode) ->
+                                            DropdownMenuItem(
+                                                text = { Text(label) },
+                                                trailingIcon = {
+                                                    if (vm.sortMode == mode) Icon(Icons.Filled.Check, null)
+                                                },
+                                                onClick = { vm.setSort(mode); sortMenuOpen = false }
+                                            )
+                                        }
+                                }
+                            }
                             IconButton(onClick = {
                                 if (searchActive) {
                                     searchActive = false; query = ""
@@ -199,10 +232,12 @@ fun ClipApp(vm: NotesViewModel) {
                             notes = list,
                             categories = categories,
                             query = query,
+                            sortMode = vm.sortMode,
                             emptyText = "No notes yet. Tap the + button to save your first text.",
-                            onCopy = { copyToClipboard(context, it.content.ifBlank { it.title }) },
+                            onCopy = { copyToClipboard(context, it.content.ifBlank { it.title }); vm.onCopied(it) },
                             onEdit = { editingId = it.id },
                             onToggleFavorite = { vm.toggleFavorite(it) },
+                            onTogglePin = { vm.togglePin(it) },
                             onShare = { shareText(context, it.content.ifBlank { it.title }) },
                             onTrash = { vm.moveToTrash(it) }
                         )
@@ -211,10 +246,12 @@ fun ClipApp(vm: NotesViewModel) {
                         notes = favorites,
                         categories = categories,
                         query = query,
+                        sortMode = vm.sortMode,
                         emptyText = "No favorites yet. Tap the star on any note to add it here.",
-                        onCopy = { copyToClipboard(context, it.content.ifBlank { it.title }) },
+                        onCopy = { copyToClipboard(context, it.content.ifBlank { it.title }); vm.onCopied(it) },
                         onEdit = { editingId = it.id },
                         onToggleFavorite = { vm.toggleFavorite(it) },
+                        onTogglePin = { vm.togglePin(it) },
                         onShare = { shareText(context, it.content.ifBlank { it.title }) },
                         onTrash = { vm.moveToTrash(it) }
                     )
