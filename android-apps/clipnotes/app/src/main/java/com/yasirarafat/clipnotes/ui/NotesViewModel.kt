@@ -165,8 +165,8 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
             )
         } catch (_: Exception) { /* some providers don't support persistable grants */ }
         backupUri = uri.toString()
-        autoBackup = true
-        prefs.edit().putString("backup_uri", backupUri).putBoolean("auto_backup", true).apply()
+        // Do NOT auto-enable mirroring: keep the file a restore point the user controls.
+        prefs.edit().putString("backup_uri", backupUri).apply()
         writeBackup(uri, onResult)
     }
 
@@ -242,6 +242,8 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                     o.put("category", n.categoryId?.let { catNameById[it] } ?: JSONObject.NULL)
                     o.put("favorite", n.isFavorite)
                     o.put("trashed", n.isTrashed)
+                    o.put("pinned", n.isPinned)
+                    o.put("copyCount", n.copyCount)
                     noteArr.put(o)
                 }
                 root.put("notes", noteArr)
@@ -257,7 +259,11 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         onResult(ok)
     }
 
-    /** Returns number of notes imported, or -1 on failure. Skips exact duplicates. */
+    /**
+     * REPLACE-style restore: clears current notes+categories, then loads everything
+     * from the backup exactly (flags preserved) and applies saved settings.
+     * Returns number of notes restored, or -1 on failure.
+     */
     private fun readBackup(uri: Uri, onResult: (Int) -> Unit) = viewModelScope.launch {
         var importedTheme: Int? = null
         val count = withContext(Dispatchers.IO) {
@@ -272,11 +278,16 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                     if (s.has("theme")) importedTheme = s.optInt("theme", themeMode)
                 }
 
+                // Replace: start clean so the restore matches the backup exactly.
+                dao.deleteAllNotes()
+                dao.deleteAllCategories()
+
+                val nameToId = HashMap<String, Long>()
                 root.optJSONArray("categories")?.let { catArr ->
                     for (i in 0 until catArr.length()) {
                         val name = catArr.getJSONObject(i).optString("name").trim()
-                        if (name.isNotEmpty() && dao.categoryIdByName(name) == null) {
-                            dao.insertCategory(Category(name = name))
+                        if (name.isNotEmpty() && !nameToId.containsKey(name)) {
+                            nameToId[name] = dao.insertCategory(Category(name = name))
                         }
                     }
                 }
@@ -288,11 +299,9 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                     val title = o.optString("title", "")
                     val content = o.optString("content", "")
                     if (title.isBlank() && content.isBlank()) continue
-                    val trashed = o.optBoolean("trashed", false)
-                    if (dao.countMatchingNotes(title, content, trashed) > 0) continue // skip duplicates
                     val catName = if (o.isNull("category")) null else o.optString("category").ifBlank { null }
-                    val catId = catName?.let {
-                        dao.categoryIdByName(it) ?: dao.insertCategory(Category(name = it))
+                    val catId = catName?.let { name ->
+                        nameToId[name] ?: dao.insertCategory(Category(name = name)).also { nameToId[name] = it }
                     }
                     dao.insertNote(
                         Note(
@@ -300,7 +309,9 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                             content = content,
                             categoryId = catId,
                             isFavorite = o.optBoolean("favorite", false),
-                            isTrashed = trashed,
+                            isTrashed = o.optBoolean("trashed", false),
+                            isPinned = o.optBoolean("pinned", false),
+                            copyCount = o.optInt("copyCount", 0),
                             updatedAt = System.currentTimeMillis()
                         )
                     )
@@ -312,6 +323,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         importedTheme?.let { setTheme(it) }
+        ClipWidgetProvider.notifyDataChanged(getApplication())
         onResult(count)
     }
 }

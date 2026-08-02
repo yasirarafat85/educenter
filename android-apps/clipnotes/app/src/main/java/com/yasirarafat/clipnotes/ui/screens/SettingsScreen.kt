@@ -3,6 +3,7 @@ package com.yasirarafat.clipnotes.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -68,24 +70,26 @@ private fun copyText(context: Context, text: String) {
 fun SettingsScreen(vm: NotesViewModel) {
     val context = LocalContext.current
 
-    // Pick (create) the backup file once; after that backups are automatic / one-tap.
+    // Restore is destructive (replace), so confirm first.
+    var confirmRestoreSaved by remember { mutableStateOf(false) }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+
+    // Pick (create) the backup file once; afterwards you can back up / restore with one tap.
     val setupBackupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         if (uri != null) {
             vm.configureBackupFile(uri) { ok ->
-                toast(context, if (ok) "Auto backup set up ✓" else "Could not set up backup")
+                toast(context, if (ok) "Backup file set ✓ — tap 'Back up now' to save" else "Could not set up backup")
             }
         }
     }
-    // Import/restore from a different file (does not change the auto-backup file).
+    // Restore from a different file (replaces current data — confirmed first).
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            vm.importFrom(uri) { n ->
-                toast(context, if (n >= 0) "Imported $n note(s)" else "Import failed — is it a Clip Notes backup?")
-            }
+            pendingImportUri = uri
         }
     }
 
@@ -186,8 +190,7 @@ fun SettingsScreen(vm: NotesViewModel) {
             // First-time setup: choose the backup file once (Google Drive or phone).
             Text(
                 "Choose a backup file once — in Google Drive (cloud) or your phone. " +
-                    "After that, your notes, categories, trash and settings back up " +
-                    "automatically to that file, and you can restore with one tap.",
+                    "Then use 'Back up now' to save your notes, and 'Restore now' to bring them back.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -198,7 +201,7 @@ fun SettingsScreen(vm: NotesViewModel) {
             ) {
                 Icon(Icons.Filled.CloudUpload, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Set up auto backup")
+                Text("Set up backup file")
             }
             Spacer(Modifier.size(8.dp))
             OutlinedButton(
@@ -225,7 +228,15 @@ fun SettingsScreen(vm: NotesViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Auto backup on changes", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Auto mirror on every change", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Keeps the file identical to the app (good for syncing). " +
+                            "Leave OFF if you want the backup to be a restore point you control.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Switch(checked = vm.autoBackup, onCheckedChange = { vm.setAutoBackupEnabled(it) })
             }
             Spacer(Modifier.size(8.dp))
@@ -239,7 +250,7 @@ fun SettingsScreen(vm: NotesViewModel) {
             }
             Spacer(Modifier.size(8.dp))
             OutlinedButton(
-                onClick = { vm.restoreNow { n -> toast(context, if (n >= 0) "Restored $n note(s)" else "Restore failed") } },
+                onClick = { confirmRestoreSaved = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Filled.CloudDownload, null, modifier = Modifier.size(18.dp))
@@ -334,6 +345,37 @@ fun SettingsScreen(vm: NotesViewModel) {
                 "Everything is stored privately on your device — no internet required.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+    if (confirmRestoreSaved) {
+        AlertDialog(
+            onDismissRequest = { confirmRestoreSaved = false },
+            title = { Text("Restore from backup?") },
+            text = { Text("This replaces your current notes and categories with the ones saved in your backup file.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRestoreSaved = false
+                    vm.restoreNow { n -> toast(context, if (n >= 0) "Restored $n note(s)" else "Restore failed") }
+                }) { Text("Restore") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRestoreSaved = false }) { Text("Cancel") } }
+        )
+    }
+    pendingImportUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { pendingImportUri = null },
+            title = { Text("Restore from this file?") },
+            text = { Text("This replaces your current notes and categories with the ones in the selected file.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingImportUri = null
+                    vm.importFrom(uri) { n ->
+                        toast(context, if (n >= 0) "Restored $n note(s)" else "Restore failed — is it a Clip Notes backup?")
+                    }
+                }) { Text("Restore") }
+            },
+            dismissButton = { TextButton(onClick = { pendingImportUri = null }) { Text("Cancel") } }
         )
     }
 }

@@ -68,6 +68,13 @@ interface AppDao {
     @Query("SELECT id FROM categories WHERE name = :name LIMIT 1")
     suspend fun categoryIdByName(name: String): Long?
 
+    // Used by "restore" (replace) to clear current data before loading a backup.
+    @Query("DELETE FROM notes")
+    suspend fun deleteAllNotes()
+
+    @Query("DELETE FROM categories")
+    suspend fun deleteAllCategories()
+
     @Query("SELECT COUNT(*) FROM notes WHERE title = :title AND content = :content AND isTrashed = :trashed")
     suspend fun countMatchingNotes(title: String, content: String, trashed: Boolean): Int
 }
