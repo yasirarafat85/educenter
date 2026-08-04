@@ -57,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yasirarafat.clipnotes.ui.BiometricAuth
 import com.yasirarafat.clipnotes.ui.NotesViewModel
+import com.yasirarafat.clipnotes.ui.PasswordField
 import com.yasirarafat.clipnotes.ui.theme.ClipAccents
 
 private fun toast(context: Context, msg: String) =
@@ -108,35 +109,21 @@ fun SettingsScreen(vm: NotesViewModel) {
     ) {
         // ---- Appearance ----
         SectionTitle("Appearance")
-        val options = listOf("Follow system" to 0, "Light" to 1, "Dark" to 2)
+        val options = listOf("Light" to 1, "Dark" to 2)
         options.forEach { (label, value) ->
-            val locked = value == 2 && !vm.isPro
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
-                        if (locked) toast(context, "Unlock Pro below to use the Dark theme")
-                        else vm.setTheme(value)
-                    }
+                    .clickable { vm.setTheme(value) }
                     .padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 RadioButton(
-                    selected = vm.themeMode == value,
-                    onClick = {
-                        if (locked) toast(context, "Unlock Pro below to use the Dark theme")
-                        else vm.setTheme(value)
-                    },
-                    enabled = !locked
+                    selected = if (value == 2) vm.themeMode == 2 else vm.themeMode != 2,
+                    onClick = { vm.setTheme(value) }
                 )
                 Spacer(Modifier.size(8.dp))
                 Text(label, style = MaterialTheme.typography.bodyLarge)
-                if (locked) {
-                    Spacer(Modifier.size(8.dp))
-                    Icon(Icons.Filled.Lock, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.size(2.dp))
-                    Text("Pro", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                }
             }
         }
 
@@ -177,23 +164,17 @@ fun SettingsScreen(vm: NotesViewModel) {
 
         Divider16()
 
-        // ---- Backup (Pro) ----
+        // ---- Backup ----
         SectionTitle("Backup & Restore")
-        if (!vm.isPro) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.Lock, null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.size(8.dp))
-                Text(
-                    "Unlock Pro (below) to back up and restore your notes.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else if (vm.backupUri == null) {
+        Text(
+            "Your notes are also backed up automatically by Android — if you reinstall on the " +
+                "same Google account (with backup turned on), they come back on their own. " +
+                "The file backup below is an extra copy you control.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.size(10.dp))
+        if (vm.backupUri == null) {
             // First-time setup: choose the backup file once (Google Drive or phone).
             Text(
                 "Choose a backup file once — in Google Drive (cloud) or your phone. " +
@@ -273,71 +254,6 @@ fun SettingsScreen(vm: NotesViewModel) {
                 TextButton(onClick = { importLauncher.launch(arrayOf("*/*")) }) {
                     Text("Restore from another file")
                 }
-            }
-        }
-
-        Divider16()
-
-        // ---- Pro ----
-        SectionTitle("Clip Notes Pro")
-        if (vm.isPro) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.CheckCircle, null, tint = Color(0xFF16A34A))
-                Spacer(Modifier.size(8.dp))
-                Text("Pro is active on this device. Thank you!", style = MaterialTheme.typography.bodyLarge)
-            }
-        } else {
-            var keyInput by remember { mutableStateOf("") }
-            var message by remember { mutableStateOf("") }
-            val deviceCode = remember { vm.deviceCode() }
-
-            Text(
-                "Pro unlocks the Dark theme and Backup & Restore. To activate, share your " +
-                    "Device Code, then enter the key you receive.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.size(10.dp))
-            Text("Your Device Code", style = MaterialTheme.typography.labelLarge)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    deviceCode,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(onClick = { copyText(context, deviceCode) }) {
-                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy device code")
-                }
-            }
-            Spacer(Modifier.size(8.dp))
-            OutlinedTextField(
-                value = keyInput,
-                onValueChange = { keyInput = it },
-                label = { Text("Activation key (paste it here)") },
-                singleLine = false,
-                minLines = 2,
-                maxLines = 5,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.size(8.dp))
-            Button(
-                onClick = {
-                    if (vm.tryUnlock(keyInput)) {
-                        message = ""
-                        toast(context, "Activated! Pro unlocked.")
-                    } else {
-                        message = "That key is not valid for this device. Check and try again."
-                    }
-                },
-                enabled = keyInput.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Activate Pro")
-            }
-            if (message.isNotEmpty()) {
-                Spacer(Modifier.size(6.dp))
-                Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
         }
 
@@ -449,15 +365,9 @@ fun SettingsScreen(vm: NotesViewModel) {
             title = { Text("Set master password") },
             text = {
                 Column {
-                    OutlinedTextField(
-                        p1, { p1 = it }, label = { Text("New password") },
-                        singleLine = true, visualTransformation = PasswordVisualTransformation()
-                    )
+                    PasswordField(p1, { p1 = it }, "New password")
                     Spacer(Modifier.size(8.dp))
-                    OutlinedTextField(
-                        p2, { p2 = it }, label = { Text("Confirm password") },
-                        singleLine = true, visualTransformation = PasswordVisualTransformation()
-                    )
+                    PasswordField(p2, { p2 = it }, "Confirm password")
                 }
             },
             confirmButton = {
@@ -479,15 +389,9 @@ fun SettingsScreen(vm: NotesViewModel) {
             title = { Text("Change master password") },
             text = {
                 Column {
-                    OutlinedTextField(
-                        cur, { cur = it }, label = { Text("Current password") },
-                        singleLine = true, visualTransformation = PasswordVisualTransformation()
-                    )
+                    PasswordField(cur, { cur = it }, "Current password")
                     Spacer(Modifier.size(8.dp))
-                    OutlinedTextField(
-                        nw, { nw = it }, label = { Text("New password") },
-                        singleLine = true, visualTransformation = PasswordVisualTransformation()
-                    )
+                    PasswordField(nw, { nw = it }, "New password")
                 }
             },
             confirmButton = {
@@ -510,10 +414,7 @@ fun SettingsScreen(vm: NotesViewModel) {
                 Column {
                     Text("This unlocks all locked notes. Enter your password to confirm.")
                     Spacer(Modifier.size(8.dp))
-                    OutlinedTextField(
-                        cur, { cur = it }, label = { Text("Current password") },
-                        singleLine = true, visualTransformation = PasswordVisualTransformation()
-                    )
+                    PasswordField(cur, { cur = it }, "Current password")
                 }
             },
             confirmButton = {

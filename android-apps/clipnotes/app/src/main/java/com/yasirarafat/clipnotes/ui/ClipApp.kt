@@ -409,13 +409,7 @@ private fun UnlockDialog(
             Column {
                 Text("Enter your master password to view locked notes.")
                 Spacer(Modifier.size(8.dp))
-                OutlinedTextField(
-                    value = pw,
-                    onValueChange = { pw = it; error = false },
-                    label = { Text("Master password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
-                )
+                PasswordField(pw, { pw = it; error = false }, "Master password")
                 if (error) {
                     Text(
                         "Wrong password",

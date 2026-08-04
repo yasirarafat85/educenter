@@ -7,7 +7,17 @@
 - **প্যাকেজ**: `com.yasirarafat.clipnotes`
 - **টেক**: Kotlin + Jetpack Compose (Material 3), Room (SQLite), single-Activity — সম্পূর্ণ অফলাইন, কোনো সার্ভার নেই
 - **বিল্ড**: শুধু GitHub Actions-এ (`.github/workflows/android-clipnotes.yml`) — লোকালে `dl.google.com` ব্লক
-- **ভার্সন**: versionCode 1, versionName 1.0
+- **ভার্সন**: versionCode 3, versionName 1.1
+
+---
+
+## 🆕 v1.1 আপডেট (৪ আগস্ট ২০২৬)
+
+- **Pro ফিচার এখন সবার জন্য ফ্রি** — Dark থিম ও Backup/Restore আর key লাগে না। key/RSA সিস্টেম কোডে রয়ে গেছে (dormant, ভবিষ্যতে নতুন প্রিমিয়াম ফিচারের জন্য), Settings থেকে "Clip Notes Pro" স্ক্রিন লুকানো।
+- **থিম সরল** — "Follow system" বাদ, শুধু **Light / Dark**; রঙ App color থেকে।
+- **App lock পাসওয়ার্ডে 👁 show/hide (eye) বাটন** — সব পাসওয়ার্ড ফিল্ডে (শেয়ার্ড `PasswordField` কম্পোনেন্ট)।
+- **রিমাইন্ডার আরও নির্ভরযোগ্য** — যেখানে অনুমতি আছে **exact alarm** (Android ১১-বা-নিচে সবসময়), নোটিফিকেশনে **সাউন্ড + ভাইব্রেশন** (CATEGORY_REMINDER, DEFAULT_ALL)। Play-policy ঝুঁকি এড়াতে exact-alarm permission ঘোষণা করা হয়নি — অনুমতি না থাকলে near-exact-এ ফলব্যাক।
+- **Uninstall-এ অটো রিস্টোর** — Android auto-backup আরও নির্ভরযোগ্য (DB + WAL/SHM ইনক্লুড)। একই Google অ্যাকাউন্টে (backup চালু) রিইনস্টলে নোট নিজে থেকে ফেরে।
 
 ---
 

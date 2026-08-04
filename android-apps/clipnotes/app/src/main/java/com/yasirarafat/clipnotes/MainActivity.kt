@@ -5,7 +5,6 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.fragment.app.FragmentActivity
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
@@ -22,13 +21,8 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         handleShare(intent)
         setContent {
-            val systemDark = isSystemInDarkTheme()
-            // Dark theme is a Pro feature: free users always get the light theme.
-            val dark = vm.isPro && when (vm.themeMode) {
-                1 -> false
-                2 -> true
-                else -> systemDark
-            }
+            // Theme is a simple Light/Dark choice (2 = dark, anything else = light).
+            val dark = vm.themeMode == 2
             ClipNotesTheme(darkTheme = dark, accentIndex = vm.accentIndex) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
