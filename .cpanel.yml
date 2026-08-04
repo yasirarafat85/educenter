@@ -1,0 +1,19 @@
+---
+# ============================================================
+# cPanel Git Version Control — ডিপ্লয়মেন্ট নির্দেশনা
+# GitHub-এ push করার পর cPanel → Git Version Control → "Update from Remote"
+# তারপর "Deploy HEAD Commit" ক্লিক করলে এই টাস্কগুলো চলে।
+#
+# 🔴 নিরাপত্তা: rsync ব্যবহার করা হয়েছে --delete ছাড়া — তাই এটা শুধু
+#    ফাইল যোগ/আপডেট করে, public_html-এর কিছু কখনো মোছে না।
+#    ফলে আপনার config.php (পাসওয়ার্ড) আর uploads/ (ছবি) নিরাপদ থাকে
+#    (এগুলো রিপোতে নেই, তাই কপির সময় ছোঁয়াও হয় না)।
+#
+# বাদ দেওয়া হয়: .git (মেটাডেটা), database/schema.sql (পুরো রিসেট—বিপজ্জনক),
+#    build/ (ডেভ টুল), *.md (ডকুমেন্ট), config.example.php।
+#    (migrate-*.sql রাখা হয়েছে যাতে দরকারে phpMyAdmin-এ import করা যায়।)
+# ============================================================
+deployment:
+  tasks:
+    - export DEPLOYPATH=$HOME/public_html
+    - /usr/bin/rsync -a --exclude='.git' --exclude='.gitignore' --exclude='.cpanel.yml' --exclude='database/schema.sql' --exclude='build/' --exclude='*.md' --exclude='config.example.php' ./ "$DEPLOYPATH/"
