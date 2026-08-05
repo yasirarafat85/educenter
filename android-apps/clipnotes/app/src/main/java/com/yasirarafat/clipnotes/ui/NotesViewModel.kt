@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import com.yasirarafat.clipnotes.data.AppDatabase
 import com.yasirarafat.clipnotes.data.Category
 import com.yasirarafat.clipnotes.data.Checklist
@@ -29,7 +30,8 @@ import org.json.JSONObject
 
 class NotesViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val dao = AppDatabase.get(app).dao()
+    private val db = AppDatabase.get(app)
+    private val dao = db.dao()
     private val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
     val notes: StateFlow<List<Note>> =
@@ -376,15 +378,22 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         autoBackupJob?.cancel()
         autoBackupJob = viewModelScope.launch {
             delay(2500) // debounce a burst of edits into one write
-            // Never overwrite a good backup with an empty state.
-            if (notes.value.isEmpty() && trashed.value.isEmpty()) return@launch
-            // 1) Always refresh the automatic local backup.
             withContext(Dispatchers.IO) {
-                try { localBackupFile().writeText(buildBackupJson(), Charsets.UTF_8) } catch (_: Exception) {}
+                try {
+                    // Check the DB directly; never overwrite a good backup with an empty one.
+                    if (dao.allNotesOnce().isEmpty()) return@withContext
+                    val json = buildBackupJson()
+                    // 1) Always refresh the automatic local backup.
+                    localBackupFile().writeText(json, Charsets.UTF_8)
+                    // 2) Mirror to the cloud file too, if the user turned sync on.
+                    val u = backupUri
+                    if (autoBackup && u != null) {
+                        getApplication<Application>().contentResolver.openOutputStream(Uri.parse(u), "wt")?.use {
+                            it.write(json.toByteArray(Charsets.UTF_8))
+                        }
+                    }
+                } catch (_: Exception) {}
             }
-            // 2) Mirror to the cloud file too, if the user turned that on.
-            val u = backupUri
-            if (autoBackup && u != null) writeBackup(Uri.parse(u)) { }
         }
     }
 
@@ -461,69 +470,83 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * REPLACE-style restore: clears current notes+categories, then loads everything
-     * from the backup JSON exactly. Returns number of notes restored, or -1.
+     * REPLACE-style restore: replaces current notes+categories with the backup.
+     * Runs inside a DB transaction so a mid-way failure rolls back (no data loss),
+     * and refuses to wipe anything if the backup has no notes.
+     * Returns notes restored, -2 if the backup is empty, or -1 on failure.
      */
     private suspend fun applyBackupJson(text: String): Int {
         var importedTheme: Int? = null
-        val inserted: Int
+        val restored: Int
         try {
             val root = JSONObject(text)
+            val noteArr = root.optJSONArray("notes") ?: JSONArray()
+
+            // Safety: never delete the user's notes for an empty / invalid backup.
+            var valid = 0
+            for (i in 0 until noteArr.length()) {
+                val o = noteArr.getJSONObject(i)
+                if (o.optString("title").isNotBlank() || o.optString("content").isNotBlank()) valid++
+            }
+            if (valid == 0) return -2
+
             root.optJSONObject("settings")?.let { s ->
                 if (s.has("theme")) importedTheme = s.optInt("theme", themeMode)
             }
-            dao.deleteAllNotes()
-            dao.deleteAllCategories()
 
-            val nameToId = HashMap<String, Long>()
-            root.optJSONArray("categories")?.let { catArr ->
-                for (i in 0 until catArr.length()) {
-                    val name = catArr.getJSONObject(i).optString("name").trim()
-                    if (name.isNotEmpty() && !nameToId.containsKey(name)) {
-                        nameToId[name] = dao.insertCategory(Category(name = name))
+            restored = db.withTransaction {
+                dao.deleteAllNotes()
+                dao.deleteAllCategories()
+
+                val nameToId = HashMap<String, Long>()
+                root.optJSONArray("categories")?.let { catArr ->
+                    for (i in 0 until catArr.length()) {
+                        val name = catArr.getJSONObject(i).optString("name").trim()
+                        if (name.isNotEmpty() && !nameToId.containsKey(name)) {
+                            nameToId[name] = dao.insertCategory(Category(name = name))
+                        }
                     }
                 }
-            }
 
-            val noteArr = root.optJSONArray("notes") ?: JSONArray()
-            var count = 0
-            for (i in 0 until noteArr.length()) {
-                val o = noteArr.getJSONObject(i)
-                val title = o.optString("title", "")
-                val content = o.optString("content", "")
-                if (title.isBlank() && content.isBlank()) continue
-                val catName = if (o.isNull("category")) null else o.optString("category").ifBlank { null }
-                val catId = catName?.let { name ->
-                    nameToId[name] ?: dao.insertCategory(Category(name = name)).also { nameToId[name] = it }
-                }
-                val reminderAt = if (o.isNull("reminderAt")) null else o.optLong("reminderAt").takeIf { it > 0 }
-                val newId = dao.insertNote(
-                    Note(
-                        title = title,
-                        content = content,
-                        categoryId = catId,
-                        isFavorite = o.optBoolean("favorite", false),
-                        isTrashed = o.optBoolean("trashed", false),
-                        isPinned = o.optBoolean("pinned", false),
-                        copyCount = o.optInt("copyCount", 0),
-                        color = o.optInt("color", 0),
-                        isChecklist = o.optBoolean("checklist", false),
-                        isLocked = o.optBoolean("locked", false),
-                        lockTimeoutSecs = o.optInt("lockTimeoutSecs", 0),
-                        reminderAt = reminderAt,
-                        updatedAt = System.currentTimeMillis()
+                var count = 0
+                for (i in 0 until noteArr.length()) {
+                    val o = noteArr.getJSONObject(i)
+                    val title = o.optString("title", "")
+                    val content = o.optString("content", "")
+                    if (title.isBlank() && content.isBlank()) continue
+                    val catName = if (o.isNull("category")) null else o.optString("category").ifBlank { null }
+                    val catId = catName?.let { name ->
+                        nameToId[name] ?: dao.insertCategory(Category(name = name)).also { nameToId[name] = it }
+                    }
+                    val reminderAt = if (o.isNull("reminderAt")) null else o.optLong("reminderAt").takeIf { it > 0 }
+                    val newId = dao.insertNote(
+                        Note(
+                            title = title,
+                            content = content,
+                            categoryId = catId,
+                            isFavorite = o.optBoolean("favorite", false),
+                            isTrashed = o.optBoolean("trashed", false),
+                            isPinned = o.optBoolean("pinned", false),
+                            copyCount = o.optInt("copyCount", 0),
+                            color = o.optInt("color", 0),
+                            isChecklist = o.optBoolean("checklist", false),
+                            isLocked = o.optBoolean("locked", false),
+                            lockTimeoutSecs = o.optInt("lockTimeoutSecs", 0),
+                            reminderAt = reminderAt,
+                            updatedAt = System.currentTimeMillis()
+                        )
                     )
-                )
-                if (reminderAt != null && reminderAt > System.currentTimeMillis()) {
-                    ReminderScheduler.schedule(getApplication(), newId, title, content, reminderAt)
+                    if (reminderAt != null && reminderAt > System.currentTimeMillis()) {
+                        ReminderScheduler.schedule(getApplication(), newId, title, content, reminderAt)
+                    }
+                    count++
                 }
-                count++
+                count
             }
-            inserted = count
         } catch (e: Exception) {
             return -1
         }
         importedTheme?.let { t -> withContext(Dispatchers.Main) { setTheme(t) } }
-        return inserted
+        return restored
     }
 }

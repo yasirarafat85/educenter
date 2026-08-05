@@ -355,7 +355,11 @@ fun SettingsScreen(vm: NotesViewModel) {
                 TextButton(onClick = {
                     confirmLocalRestore = false
                     vm.restoreLocalNow { n ->
-                        toast(context, if (n >= 0) "Restored $n note(s)" else "No local backup found yet")
+                        toast(context, when {
+                            n == -2 -> "Backup is empty — your notes are unchanged"
+                            n >= 0 -> "Restored $n note(s)"
+                            else -> "No local backup found yet"
+                        })
                     }
                 }) { Text("Restore") }
             },
@@ -370,7 +374,11 @@ fun SettingsScreen(vm: NotesViewModel) {
             confirmButton = {
                 TextButton(onClick = {
                     confirmRestoreSaved = false
-                    vm.restoreNow { n -> toast(context, if (n >= 0) "Restored $n note(s)" else "Restore failed") }
+                    vm.restoreNow { n -> toast(context, when {
+                        n == -2 -> "Backup is empty — your notes are unchanged"
+                        n >= 0 -> "Restored $n note(s)"
+                        else -> "Restore failed"
+                    }) }
                 }) { Text("Restore") }
             },
             dismissButton = { TextButton(onClick = { confirmRestoreSaved = false }) { Text("Cancel") } }
@@ -385,7 +393,11 @@ fun SettingsScreen(vm: NotesViewModel) {
                 TextButton(onClick = {
                     pendingImportUri = null
                     vm.importFrom(uri) { n ->
-                        toast(context, if (n >= 0) "Restored $n note(s)" else "Restore failed — is it a Clip Notes backup?")
+                        toast(context, when {
+                            n == -2 -> "That backup is empty — your notes are unchanged"
+                            n >= 0 -> "Restored $n note(s)"
+                            else -> "Restore failed — is it a Clip Notes backup?"
+                        })
                     }
                 }) { Text("Restore") }
             },
