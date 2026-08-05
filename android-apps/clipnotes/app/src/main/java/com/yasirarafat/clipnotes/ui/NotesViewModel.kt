@@ -407,9 +407,9 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         val ok = withContext(Dispatchers.IO) {
             try {
                 val json = buildBackupJson()
-                getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { os ->
-                    os.write(json.toByteArray(Charsets.UTF_8))
-                }
+                val stream = getApplication<Application>().contentResolver.openOutputStream(uri, "wt")
+                    ?: return@withContext false
+                stream.use { it.write(json.toByteArray(Charsets.UTF_8)) }
                 true
             } catch (e: Exception) {
                 false

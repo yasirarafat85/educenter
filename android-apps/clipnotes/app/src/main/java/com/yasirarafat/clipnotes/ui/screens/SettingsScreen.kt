@@ -89,7 +89,8 @@ fun SettingsScreen(vm: NotesViewModel) {
     ) { uri ->
         if (uri != null) {
             vm.configureBackupFile(uri) { ok ->
-                toast(context, if (ok) "Backup file set ✓ — tap 'Back up now' to save" else "Could not set up backup")
+                if (ok) toast(context, "Cloud backup set up ✓")
+                else { vm.clearBackupFile(); toast(context, "Could not use that file — please try again") }
             }
         }
     }
@@ -242,7 +243,18 @@ fun SettingsScreen(vm: NotesViewModel) {
             }
             Spacer(Modifier.size(8.dp))
             Button(
-                onClick = { vm.backupNow { ok -> toast(context, if (ok) "Backed up ✓" else "Backup failed") } },
+                onClick = {
+                    vm.backupNow { ok ->
+                        if (ok) {
+                            toast(context, "Backed up to cloud ✓")
+                        } else {
+                            // The saved file lost access (e.g. after reinstall) — reset so
+                            // the user can simply pick it again.
+                            vm.clearBackupFile()
+                            toast(context, "Cloud file access was lost — set it up again")
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Filled.CloudUpload, null, modifier = Modifier.size(18.dp))
