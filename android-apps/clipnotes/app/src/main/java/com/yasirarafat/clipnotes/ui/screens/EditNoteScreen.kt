@@ -72,6 +72,7 @@ fun EditNoteScreen(
     var isChecklist by remember { mutableStateOf(false) }
     var reminderAt by remember { mutableStateOf<Long?>(null) }
     var lockTimeoutSecs by remember { mutableStateOf(0) }
+    var lockOn by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val notifPermissionLauncher = rememberLauncherForActivityResult(
@@ -110,6 +111,7 @@ fun EditNoteScreen(
                 isChecklist = note.isChecklist
                 reminderAt = note.reminderAt
                 lockTimeoutSecs = note.lockTimeoutSecs
+                lockOn = note.isLocked
             }
         }
     }
@@ -126,7 +128,7 @@ fun EditNoteScreen(
                 actions = {
                     TextButton(
                         onClick = {
-                            vm.saveNote(noteId, title.trim(), content.trim(), categoryId, colorIndex, isChecklist, reminderAt, lockTimeoutSecs)
+                            vm.saveNote(noteId, title.trim(), content.trim(), categoryId, colorIndex, isChecklist, reminderAt, lockTimeoutSecs, lockOn)
                             onDone()
                         },
                         enabled = title.isNotBlank() || content.isNotBlank()
@@ -200,23 +202,39 @@ fun EditNoteScreen(
                 }) { Text("Set") }
             }
             Spacer(Modifier.size(12.dp))
-            Text("Auto-lock timer", style = MaterialTheme.typography.labelLarge)
-            Text(
-                "After you unlock this note, re-lock it automatically. Applies when the note is locked.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.size(6.dp))
-            val lockOptions = listOf(
-                "Manual" to 0, "10s" to 10, "30s" to 30, "1 min" to 60, "5 min" to 300
-            )
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(lockOptions, key = { it.second }) { (label, secs) ->
-                    FilterChip(
-                        selected = lockTimeoutSecs == secs,
-                        onClick = { lockTimeoutSecs = secs },
-                        label = { Text(label) }
-                    )
+            Text("Lock this note", style = MaterialTheme.typography.labelLarge)
+            if (!vm.lockEnabled) {
+                Text(
+                    "Set a master password in Settings first to lock notes.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    "Off = not locked. Immediate = locks the moment you leave. " +
+                        "10s–5 min = re-locks after that time. Manual = stays open until you lock it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.size(6.dp))
+                // label, isLocked, timeoutSecs
+                val lockModes = listOf(
+                    Triple("Off", false, 0),
+                    Triple("Immediate", true, -1),
+                    Triple("10s", true, 10),
+                    Triple("30s", true, 30),
+                    Triple("1 min", true, 60),
+                    Triple("5 min", true, 300),
+                    Triple("Manual", true, 0)
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(lockModes) { (label, on, secs) ->
+                        FilterChip(
+                            selected = lockOn == on && lockTimeoutSecs == secs,
+                            onClick = { lockOn = on; lockTimeoutSecs = secs },
+                            label = { Text(label) }
+                        )
+                    }
                 }
             }
 

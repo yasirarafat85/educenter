@@ -75,6 +75,7 @@ fun SettingsScreen(vm: NotesViewModel) {
 
     // Restore is destructive (replace), so confirm first.
     var confirmRestoreSaved by remember { mutableStateOf(false) }
+    var confirmLocalRestore by remember { mutableStateOf(false) }
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
 
     // App-lock dialogs
@@ -166,30 +167,44 @@ fun SettingsScreen(vm: NotesViewModel) {
 
         // ---- Backup ----
         SectionTitle("Backup & Restore")
+
+        // On-phone automatic backup (no file, no path).
+        Text("On this phone (automatic)", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         Text(
-            "Your notes are also backed up automatically by Android — if you reinstall on the " +
-                "same Google account (with backup turned on), they come back on their own. " +
-                "The file backup below is an extra copy you control.",
+            "Your notes are saved on this phone automatically and updated on every change. " +
+                "Tap Restore to bring them back — no file or path needed. Reinstalling on the " +
+                "same Google account (with backup on) also restores them on its own.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(Modifier.size(10.dp))
+        Spacer(Modifier.size(8.dp))
+        OutlinedButton(
+            onClick = { confirmLocalRestore = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Filled.CloudDownload, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Restore from this phone")
+        }
+
+        Spacer(Modifier.size(16.dp))
+
+        // Optional cloud copy (Google Drive / file).
+        Text("Cloud backup (optional)", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         if (vm.backupUri == null) {
-            // First-time setup: choose the backup file once (Google Drive or phone).
             Text(
-                "Choose a backup file once — in Google Drive (cloud) or your phone. " +
-                    "Then use 'Back up now' to save your notes, and 'Restore now' to bring them back.",
-                style = MaterialTheme.typography.bodyMedium,
+                "Keep an extra copy in Google Drive or your phone storage.",
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(Modifier.size(12.dp))
+            Spacer(Modifier.size(8.dp))
             Button(
                 onClick = { setupBackupLauncher.launch("clipnotes-backup.json") },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Filled.CloudUpload, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Set up backup file")
+                Text("Set up cloud backup")
             }
             Spacer(Modifier.size(8.dp))
             OutlinedButton(
@@ -201,12 +216,11 @@ fun SettingsScreen(vm: NotesViewModel) {
                 Text("Restore from a file")
             }
         } else {
-            // Configured: automatic + one-tap, no picker needed.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.CheckCircle, null, tint = Color(0xFF16A34A), modifier = Modifier.size(18.dp))
                 Spacer(Modifier.size(8.dp))
                 Text(
-                    "Backup file is set. Notes, categories, trash & settings are saved here.",
+                    "Cloud backup is set up.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -217,10 +231,9 @@ fun SettingsScreen(vm: NotesViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Auto mirror on every change", style = MaterialTheme.typography.bodyLarge)
+                    Text("Sync to cloud on every change", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        "Keeps the file identical to the app (good for syncing). " +
-                            "Leave OFF if you want the backup to be a restore point you control.",
+                        "Keeps the cloud copy always up to date.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -234,7 +247,7 @@ fun SettingsScreen(vm: NotesViewModel) {
             ) {
                 Icon(Icons.Filled.CloudUpload, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Back up now")
+                Text("Back up to cloud now")
             }
             Spacer(Modifier.size(8.dp))
             OutlinedButton(
@@ -243,7 +256,7 @@ fun SettingsScreen(vm: NotesViewModel) {
             ) {
                 Icon(Icons.Filled.CloudDownload, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Restore now")
+                Text("Restore from cloud")
             }
             Spacer(Modifier.size(6.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -316,7 +329,7 @@ fun SettingsScreen(vm: NotesViewModel) {
 
         // ---- About ----
         SectionTitle("About")
-        Text("Clip Notes  •  version 1.0", style = MaterialTheme.typography.bodyMedium)
+        Text("Clip Notes  •  version 1.2", style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.size(6.dp))
         Text(
             "Save the text you use often and copy it with a single tap. " +
@@ -324,13 +337,36 @@ fun SettingsScreen(vm: NotesViewModel) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Spacer(Modifier.size(12.dp))
+        Text(
+            "Developed by Md. Yasir Arafat",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 
+    if (confirmLocalRestore) {
+        AlertDialog(
+            onDismissRequest = { confirmLocalRestore = false },
+            title = { Text("Restore from this phone?") },
+            text = { Text("This replaces your current notes and categories with the automatic on-phone backup.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmLocalRestore = false
+                    vm.restoreLocalNow { n ->
+                        toast(context, if (n >= 0) "Restored $n note(s)" else "No local backup found yet")
+                    }
+                }) { Text("Restore") }
+            },
+            dismissButton = { TextButton(onClick = { confirmLocalRestore = false }) { Text("Cancel") } }
+        )
+    }
     if (confirmRestoreSaved) {
         AlertDialog(
             onDismissRequest = { confirmRestoreSaved = false },
-            title = { Text("Restore from backup?") },
-            text = { Text("This replaces your current notes and categories with the ones saved in your backup file.") },
+            title = { Text("Restore from cloud?") },
+            text = { Text("This replaces your current notes and categories with the ones saved in your cloud backup file.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRestoreSaved = false

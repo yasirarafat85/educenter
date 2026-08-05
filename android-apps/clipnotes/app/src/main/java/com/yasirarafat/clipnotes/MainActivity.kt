@@ -40,6 +40,12 @@ class MainActivity : FragmentActivity() {
         handleShare(intent)
     }
 
+    override fun onStop() {
+        super.onStop()
+        // Notes set to "Immediate" re-lock the moment you leave the app.
+        vm.relockOnLeave()
+    }
+
     /** If launched via the Android share sheet with text, stash it for a new note. */
     private fun handleShare(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {

@@ -6,14 +6,14 @@ plugins {
 
 android {
     namespace = "com.yasirarafat.clipnotes"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.yasirarafat.clipnotes"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 4
-        versionName = "1.1"
+        targetSdk = 36
+        versionCode = 5
+        versionName = "1.2"
         vectorDrawables { useSupportLibrary = true }
     }
 
