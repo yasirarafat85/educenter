@@ -1,19 +1,19 @@
 ---
 # ============================================================
 # cPanel Git Version Control — ডিপ্লয়মেন্ট নির্দেশনা
-# GitHub-এ push করার পর cPanel → Git Version Control → "Update from Remote"
-# তারপর "Deploy HEAD Commit" ক্লিক করলে এই টাস্কগুলো চলে।
+# GitHub push → cPanel "Update from Remote" + "Deploy HEAD Commit" করলে চলে।
 #
-# 🔴 নিরাপত্তা: rsync ব্যবহার করা হয়েছে --delete ছাড়া — তাই এটা শুধু
-#    ফাইল যোগ/আপডেট করে, public_html-এর কিছু কখনো মোছে না।
-#    ফলে আপনার config.php (পাসওয়ার্ড) আর uploads/ (ছবি) নিরাপদ থাকে
-#    (এগুলো রিপোতে নেই, তাই কপির সময় ছোঁয়াও হয় না)।
-#
-# বাদ দেওয়া হয়: .git (মেটাডেটা), database/schema.sql (পুরো রিসেট—বিপজ্জনক),
-#    build/ (ডেভ টুল), *.md (ডকুমেন্ট), config.example.php।
-#    (migrate-*.sql রাখা হয়েছে যাতে দরকারে phpMyAdmin-এ import করা যায়।)
+# ⚠️ এই হোস্টে rsync নেই — তাই cp দিয়ে কপি করা হয়।
+# 🔴 নিরাপত্তা: cp শুধু repo-র ফাইল public_html-এ কপি/আপডেট করে; যেসব ফাইল
+#    repo-তে নেই (config.php = পাসওয়ার্ড, uploads/ = ছবি) সেগুলো কপির উৎসেই
+#    নেই, তাই কখনো ছোঁয়া/মোছা হয় না — সম্পূর্ণ নিরাপদ।
+# কপির পর অপ্রয়োজনীয়/সংবেদনশীল জিনিস public_html থেকে সরানো হয়:
+#    .git (হিস্ট্রি), .gitignore, .cpanel.yml, build/ (ডেভ), database/ (SQL —
+#    মাইগ্রেশন phpMyAdmin-এ চলে, লাইভে দরকার নেই), *.md (ডকুমেন্ট), config.example.php
 # ============================================================
 deployment:
   tasks:
     - export DEPLOYPATH=$HOME/public_html
-    - /usr/bin/rsync -a --exclude='.git' --exclude='.gitignore' --exclude='.cpanel.yml' --exclude='database/schema.sql' --exclude='build/' --exclude='*.md' --exclude='config.example.php' ./ "$DEPLOYPATH/"
+    - /bin/cp -Rf . "$DEPLOYPATH"
+    - /bin/rm -rf "$DEPLOYPATH/.git" "$DEPLOYPATH/.gitignore" "$DEPLOYPATH/.cpanel.yml" "$DEPLOYPATH/build" "$DEPLOYPATH/database" "$DEPLOYPATH/config.example.php"
+    - /bin/rm -f "$DEPLOYPATH"/*.md
