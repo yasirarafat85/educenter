@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-08-06 (🚀 git auto-deploy সেটআপ — cPanel Git Version Control)
+
+- **ইউজার চেয়েছেন**: প্রতিবার জিপ বানিয়ে আপলোডের বদলে git থেকে সরাসরি হোস্টিং আপডেট।
+- **`.cpanel.yml`** যোগ (deploy কনফিগ)। ওয়ার্কফ্লো: `git push` → cPanel → Git Version Control → Manage → **Pull or Deploy → "Update from Remote" → "Deploy HEAD Commit"** → ফাইল public_html-এ কপি।
+- **সেটআপ শেখা (ভবিষ্যতের রেফারেন্স)**: রিপো `repositories/educenter` (public_html-এর বাইরে ক্লোন), **SSH deploy key** দিয়ে auth (`~/.ssh/github_deploy` + `~/.ssh/config`)। **🔴 কী passphrase-মুক্ত হতেই হবে** (নাহলে auto-pull পাসওয়ার্ড চেয়ে আটকায়; cPanel UI key-gen পাসওয়ার্ড বাধ্য করে বলে Terminal `ssh-keygen` + `ssh-keygen -p` দিয়ে passphrase সরানো)। **HTTPS token-in-URL এই হোস্টে কাজ করেনি** (clone নীরবে ব্যর্থ, ফোল্ডার খালি) — SSH key-ই কাজ করেছে। **🔴 এই হোস্টে `rsync` নেই** → `.cpanel.yml` `cp -Rf . $HOME/public_html` তারপর `.git`/`database`/`build`/`*.md`/`config.example.php` rm (config.php+uploads repo-তে না থাকায় অক্ষত, non-destructive)।
+- **জিপ পদ্ধতি এখন শুধু ব্যাকআপ**। DB মাইগ্রেশন এখনো আলাদা (phpMyAdmin-এ SQL) — course_interests টেবিল লাইভে যোগ হয়েছে।
+
 ## 2026-07-21 (🔜 "আসছে শীঘ্রই" সেকশন + আগ্রহ-ফর্ম / ওয়েটিং লিস্ট)
 
 - **ইউজারের চাওয়া**: রেজিস্ট্রেশন বন্ধ কোর্স আলাদা সেকশনে দেখানো + সেগুলোর জন্য ছোট আগ্রহ-ফর্ম (লিড সংগ্রহ)।
