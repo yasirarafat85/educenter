@@ -73,19 +73,35 @@ if (!$selectedCourse):
             <p class="text-fuchsia-100 text-sm sm:text-base">এই কোর্সের রেজিস্ট্রেশন এখন বন্ধ — আগ্রহ জানিয়ে রাখুন, নতুন ব্যাচ খুললে আমরা যোগাযোগ করব।</p>
         </div>
 
-        <?php $flash = get_flash(); if ($flash): ?>
-            <div class="mb-5 p-4 rounded-xl text-sm sm:text-base <?= $flash['type'] === 'error' ? 'bg-red-500/40 text-white' : 'bg-green-500/40 text-white' ?>">
-                <?= e($flash['message']) ?>
-            </div>
-        <?php endif; ?>
+        <?php
+        $flash = get_flash();
+        $justSubmitted = $flash && ($flash['type'] ?? '') === 'success';
+        ?>
 
-        <?php if ($selectedCourse['registration_open']): ?>
+        <?php if ($justSubmitted): ?>
+            <!-- আলাদা "ধন্যবাদ" ভিউ — সফল সাবমিটের পর ফর্মের বদলে এটাই দেখায় (ইউজারের ফিডব্যাক) -->
+            <div class="bg-white/15 border border-white/30 rounded-2xl p-6 sm:p-8 text-center">
+                <div class="inline-flex w-16 h-16 items-center justify-center rounded-full bg-white/25 mb-4">
+                    <i data-lucide="check" class="w-8 h-8 text-white"></i>
+                </div>
+                <p class="text-white font-black text-xl mb-2">ধন্যবাদ!</p>
+                <p class="text-fuchsia-100 text-sm sm:text-base mb-6"><?= e($flash['message']) ?></p>
+                <div class="flex flex-col sm:flex-row gap-3 justify-center">
+                    <a href="courses" class="bg-white/20 hover:bg-white/30 text-white px-5 py-3 rounded-xl font-semibold text-sm">← সব কোর্স দেখুন</a>
+                    <a href="course-interest?course_id=<?= $selectedCourse['id'] ?>" class="bg-white/10 hover:bg-white/20 text-white px-5 py-3 rounded-xl font-semibold text-sm">আরেকজনের জন্য জানান</a>
+                </div>
+            </div>
+        <?php elseif ($selectedCourse['registration_open']): ?>
             <div class="bg-white/15 border border-white/30 rounded-xl p-6 text-center">
                 <p class="text-white font-bold text-lg mb-1">সুখবর! এই কোর্সের রেজিস্ট্রেশন এখন খোলা।</p>
                 <p class="text-fuchsia-100 text-sm mb-4">আপনি সরাসরি রেজিস্ট্রেশন করতে পারেন।</p>
                 <a href="course-register?course_id=<?= $selectedCourse['id'] ?>" class="inline-block bg-white/20 hover:bg-white/30 text-white px-5 py-2.5 rounded-xl font-semibold text-sm">রেজিস্ট্রেশন করুন →</a>
             </div>
         <?php else: ?>
+
+        <?php if ($flash): // এরর হলে ফর্মের উপরে দেখাও ?>
+            <div class="mb-5 p-4 rounded-xl text-sm sm:text-base bg-red-500/40 text-white"><?= e($flash['message']) ?></div>
+        <?php endif; ?>
 
         <form method="post" action="course-interest-submit.php" class="space-y-4" id="course-interest-form">
             <?= csrf_field() ?>
