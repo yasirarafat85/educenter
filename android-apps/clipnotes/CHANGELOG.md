@@ -7,12 +7,13 @@
 - **প্যাকেজ**: `com.yasirarafat.clipnotes`
 - **টেক**: Kotlin + Jetpack Compose (Material 3), Room (SQLite), single-Activity — সম্পূর্ণ অফলাইন, কোনো সার্ভার নেই
 - **বিল্ড**: শুধু GitHub Actions-এ (`.github/workflows/android-clipnotes.yml`) — লোকালে `dl.google.com` ব্লক
-- **ভার্সন**: versionCode 5, versionName 1.2
+- **ভার্সন**: versionCode 8, versionName 1.2
 
 ---
 
-## 🆕 v1.2 আপডেট (৫ আগস্ট ২০২৬)
+## 🆕 v1.2 আপডেট (৫–৬ আগস্ট ২০২৬)
 
+- **🔧 ব্যাকআপ/রিস্টোর বাগ ফিক্স (versionCode 8)** — আগে "Restored 9 note(s)" দেখাত কিন্তু All Notes-এ কিছুই আসত না, আর সংখ্যা পুরনো/বাসি দেখাত। **কারণ ও সমাধান**: (১) লোকাল ব্যাকআপ এখন প্রতিটা পরিবর্তনে **সাথে সাথে** লেখা হয় (আগে ২.৫s ডিবাউন্স ছিল বলে সর্বশেষ নোটগুলো ব্যাকআপে যেত না — তাই পুরনো ৯-নোটের ব্যাকআপ রিস্টোর হতো)। (২) রিস্টোরের সময় `withTransaction` র‍্যাপার বাদ (প্রমাণিত sequential delete+insert লিস্ট ঠিকমতো রিফ্রেশ করে)। (৩) রিস্টোর করা নোট সবসময় **দৃশ্যমান** হয় (Trash-এ পড়ে না — `isTrashed=false`)। নতুন **"Back up now"** বাটন (Settings → On this phone) — চাইলে রিস্টোরের আগে সর্বশেষ অবস্থা ম্যানুয়ালি সেভ করা যায়। খালি ব্যাকআপে রিস্টোর করলে নোট আর মুছে যায় না ("Backup is empty — your notes are unchanged")।
 - **নোট লক পুনর্গঠন** — এডিটরে "Lock this note": **Off / Immediate / 10s / 30s / 1 min / 5 min / Manual**। এখন টাইমার সেট করলেই নোট লক হয় (আগে আলাদা করে ⋮ থেকে লক করতে হতো বলে টাইমার "কাজ করত না")। **Immediate** = সেভ করার সাথে সাথে লক, আর অ্যাপ ব্যাকগ্রাউন্ডে গেলেই আবার লক (`MainActivity.onStop → relockOnLeave`)।
 - **ব্যাকআপ দুই স্তর** — **On this phone (automatic):** পাথ/ফাইল ছাড়াই অ্যাপ-স্টোরেজে প্রতিটা পরিবর্তনে অটো লোকাল ব্যাকআপ, এক ট্যাপে Restore। **Cloud (optional):** Google Drive/ফাইলে অতিরিক্ত কপি (আগের SAF)। JSON build/apply শেয়ার্ড হেল্পারে রিফ্যাক্টর।
 - **About-এ "Developed by Md. Yasir Arafat"** যোগ; version 1.2।

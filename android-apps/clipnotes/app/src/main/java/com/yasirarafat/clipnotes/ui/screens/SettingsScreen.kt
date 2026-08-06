@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -178,6 +179,19 @@ fun SettingsScreen(vm: NotesViewModel) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Spacer(Modifier.size(8.dp))
+        Button(
+            onClick = {
+                vm.backupLocalNow { ok ->
+                    toast(context, if (ok) "Backed up on this phone ✓" else "Nothing to back up yet")
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Filled.Save, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Back up now")
+        }
         Spacer(Modifier.size(8.dp))
         OutlinedButton(
             onClick = { confirmLocalRestore = true },
