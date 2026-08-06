@@ -207,7 +207,7 @@ if (!$selectedCourse):
                 if (!data || !data.found) return;
                 setIfEmpty('child_name', data.child_name);
                 setIfEmpty('facebook_name', data.facebook_name);
-                setIfEmpty('remarks', data.remarks);
+                // মন্তব্য (remarks) ইচ্ছাকৃতভাবে অটো-ফিল করা হয় না — প্রতিবার নতুন করে লেখা হবে
                 if (data.phone_owner === 'father') {
                     var f = document.querySelector('input[name="phone_owner"][value="father"]');
                     if (f) { f.checked = true; f.dispatchEvent(new Event('change')); }

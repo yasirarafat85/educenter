@@ -36,33 +36,23 @@ if (!is_valid_bd_phone($phone)) {
 }
 
 // সবচেয়ে সাম্প্রতিক আগ্রহ-এন্ট্রি থেকে তথ্য (একই পরিবার সাধারণত একই নাম/ফেসবুক ব্যবহার করে)
+// remarks ইচ্ছাকৃতভাবে আনা হয় না — মন্তব্য প্রতিবার নতুন করে লেখা হয় (ইউজারের স্পষ্ট চাওয়া,
+// প্রতিটা আগ্রহের মন্তব্য আলাদা হতে পারে বলে আগেরটা টেনে আনা ঠিক না)। নাম/ফেসবুক/মা-বাবা আসে।
 $stmt = $db->prepare(
-    'SELECT child_name, facebook_name, phone_owner, remarks
-     FROM course_interests WHERE contact_phone = :phone ORDER BY created_at DESC LIMIT 20'
+    'SELECT child_name, facebook_name, phone_owner
+     FROM course_interests WHERE contact_phone = :phone ORDER BY created_at DESC LIMIT 1'
 );
 $stmt->execute(['phone' => $phone]);
-$rows = $stmt->fetchAll();
+$row = $stmt->fetch();
 
-if (!$rows) {
+if (!$row) {
     echo json_encode(['found' => false]);
     exit;
 }
 
-// প্রতিটা ফিল্ডের সাম্প্রতিকতম non-empty মান — সর্বশেষ এন্ট্রিতে কোনো ঘর খালি থাকলেও
-// আগের এন্ট্রি থেকে ভরে আনে (যেমন মন্তব্য আগে একবার দেওয়া থাকলে সেটাই ফিরিয়ে আনে)
-$latest = function (string $key) use ($rows) {
-    foreach ($rows as $r) {
-        if (trim((string) ($r[$key] ?? '')) !== '') {
-            return $r[$key];
-        }
-    }
-    return null;
-};
-
 echo json_encode([
     'found'         => true,
-    'child_name'    => $latest('child_name'),
-    'facebook_name' => $latest('facebook_name'),
-    'phone_owner'   => $rows[0]['phone_owner'],
-    'remarks'       => $latest('remarks'),
+    'child_name'    => $row['child_name'],
+    'facebook_name' => $row['facebook_name'],
+    'phone_owner'   => $row['phone_owner'],
 ]);
