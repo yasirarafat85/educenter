@@ -67,6 +67,7 @@ fun NotesList(
     sortMode: Int,
     emptyText: String,
     onCopy: (Note) -> Unit,
+    onOpenDetail: (Note) -> Unit,
     onEdit: (Note) -> Unit,
     onToggleFavorite: (Note) -> Unit,
     onTogglePin: (Note) -> Unit,
@@ -110,6 +111,7 @@ fun NotesList(
                     note = note,
                     categoryName = note.categoryId?.let { catMap[it] },
                     onCopy = { onCopy(note) },
+                    onOpenDetail = { onOpenDetail(note) },
                     onEdit = { onEdit(note) },
                     onToggleFavorite = { onToggleFavorite(note) },
                     onTogglePin = { onTogglePin(note) },
@@ -131,6 +133,7 @@ private fun NoteCard(
     note: Note,
     categoryName: String?,
     onCopy: () -> Unit,
+    onOpenDetail: () -> Unit,
     onEdit: () -> Unit,
     onToggleFavorite: () -> Unit,
     onTogglePin: () -> Unit,
@@ -148,7 +151,7 @@ private fun NoteCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { if (hidden) onRequestUnlock() else onCopy() },
+            .clickable { if (hidden) onRequestUnlock() else onOpenDetail() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {

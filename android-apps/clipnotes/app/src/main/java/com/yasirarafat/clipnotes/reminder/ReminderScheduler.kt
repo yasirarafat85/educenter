@@ -7,9 +7,13 @@ import android.content.Intent
 import android.os.Build
 
 /**
- * Schedules/cancels a note's reminder alarm. Fires exactly on older Android and
- * whenever exact alarms are permitted; otherwise falls back to a near-exact alarm
- * (no special permission required, so it never crashes and stays Play-policy safe).
+ * Schedules/cancels a note's reminder alarm.
+ *
+ * Uses [AlarmManager.setAlarmClock] as the primary path: it always fires exactly
+ * (even in Doze) and — unlike setExactAndAllowWhileIdle — needs NO
+ * SCHEDULE_EXACT_ALARM permission, so reminders are punctual on every Android
+ * version while staying fully Play-policy safe. Falls back to exact/inexact
+ * alarms only if the alarm-clock path is unavailable, so it never crashes.
  */
 object ReminderScheduler {
 
@@ -28,19 +32,35 @@ object ReminderScheduler {
         )
     }
 
+    /** PendingIntent that opens the app when the user taps the alarm-clock icon. */
+    private fun showApp(context: Context, noteId: Long): PendingIntent {
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: Intent()
+        return PendingIntent.getActivity(
+            context,
+            noteId.toInt(),
+            launch,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     fun schedule(context: Context, noteId: Long, title: String, text: String, timeMillis: Long) {
         if (timeMillis <= System.currentTimeMillis()) return
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pi = pending(context, noteId, title, text)
-        val canExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) am.canScheduleExactAlarms() else true
         try {
-            if (canExact) {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, timeMillis, pi)
-            } else {
+            // Exact, wakes from Doze, needs no special permission.
+            am.setAlarmClock(AlarmManager.AlarmClockInfo(timeMillis, showApp(context, noteId)), pi)
+        } catch (e: Exception) {
+            // Extremely unlikely, but never let a reminder crash the save.
+            try {
+                val canExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                    am.canScheduleExactAlarms() else true
+                if (canExact) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, timeMillis, pi)
+                else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, timeMillis, pi)
+            } catch (e2: SecurityException) {
                 am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, timeMillis, pi)
             }
-        } catch (e: SecurityException) {
-            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, timeMillis, pi)
         }
     }
 

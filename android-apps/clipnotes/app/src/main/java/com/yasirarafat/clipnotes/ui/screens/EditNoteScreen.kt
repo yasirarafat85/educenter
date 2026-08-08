@@ -63,11 +63,13 @@ fun EditNoteScreen(
     noteId: Long,
     categories: List<Category>,
     initialContent: String? = null,
+    initialCategoryId: Long? = null,
     onDone: () -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf(if (noteId == 0L) (initialContent ?: "") else "") }
-    var categoryId by remember { mutableStateOf<Long?>(null) }
+    // A new note started inside a category is pre-assigned to it.
+    var categoryId by remember { mutableStateOf(if (noteId == 0L) initialCategoryId else null) }
     var colorIndex by remember { mutableStateOf(0) }
     var isChecklist by remember { mutableStateOf(false) }
     var reminderAt by remember { mutableStateOf<Long?>(null) }

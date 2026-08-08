@@ -41,6 +41,14 @@ interface AppDao {
     @Update
     suspend fun updateNote(note: Note)
 
+    /** Atomic move-to-trash by id (robust: never writes a stale in-memory copy). */
+    @Query("UPDATE notes SET isTrashed = 1, isFavorite = 0, updatedAt = :now WHERE id = :id")
+    suspend fun trashNote(id: Long, now: Long)
+
+    /** Atomic restore-from-trash by id. */
+    @Query("UPDATE notes SET isTrashed = 0, updatedAt = :now WHERE id = :id")
+    suspend fun untrashNote(id: Long, now: Long)
+
     @Query("DELETE FROM notes WHERE id = :id")
     suspend fun deleteNoteHard(id: Long)
 

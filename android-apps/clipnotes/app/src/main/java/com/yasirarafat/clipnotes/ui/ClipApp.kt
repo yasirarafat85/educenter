@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -71,6 +72,7 @@ import com.yasirarafat.clipnotes.data.Checklist
 import com.yasirarafat.clipnotes.data.Note
 import com.yasirarafat.clipnotes.ui.screens.CategoriesScreen
 import com.yasirarafat.clipnotes.ui.screens.EditNoteScreen
+import com.yasirarafat.clipnotes.ui.screens.NoteDetailScreen
 import com.yasirarafat.clipnotes.ui.screens.NotesList
 import com.yasirarafat.clipnotes.ui.screens.RemindersScreen
 import com.yasirarafat.clipnotes.ui.screens.SettingsScreen
@@ -98,6 +100,7 @@ fun ClipApp(vm: NotesViewModel) {
     var screenName by rememberSaveable { mutableStateOf(Screen.Notes.name) }
     val screen = Screen.valueOf(screenName)
     var editingId by rememberSaveable { mutableStateOf(NOT_EDITING) }
+    var viewingId by rememberSaveable { mutableStateOf(NOT_EDITING) }
     var categoryFilter by rememberSaveable { mutableStateOf(-1L) }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -121,6 +124,8 @@ fun ClipApp(vm: NotesViewModel) {
             noteId = editingId,
             categories = categories,
             initialContent = if (editingId == 0L) vm.pendingSharedText else null,
+            // New note started inside a category → pre-assign that category.
+            initialCategoryId = if (editingId == 0L && categoryFilter > 0) categoryFilter else null,
             onDone = { editingId = NOT_EDITING; vm.consumePendingSharedText() }
         )
         return
@@ -157,6 +162,30 @@ fun ClipApp(vm: NotesViewModel) {
 
     fun requestUnlock(note: Note) { pendingUnlock = note }
 
+    // Tapping a note opens a read-only detail view (full content visible).
+    if (viewingId != NOT_EDITING) {
+        val detailNote = notes.firstOrNull { it.id == viewingId }
+        if (detailNote != null) {
+            val catName = detailNote.categoryId?.let { id -> categories.firstOrNull { it.id == id }?.name }
+            NoteDetailScreen(
+                note = detailNote,
+                categoryName = catName,
+                onBack = { viewingId = NOT_EDITING },
+                onEdit = { editingId = detailNote.id; viewingId = NOT_EDITING },
+                onCopy = { copyToClipboard(context, noteCopyText(detailNote)); vm.onCopied(detailNote) },
+                onShare = { shareText(context, noteCopyText(detailNote)) },
+                onToggleFavorite = { vm.toggleFavorite(detailNote) },
+                onTogglePin = { vm.togglePin(detailNote) },
+                onTrash = { vm.moveToTrash(detailNote); viewingId = NOT_EDITING },
+                onToggleLock = { onToggleLock(detailNote) },
+                onToggleChecklistItem = { idx -> vm.toggleChecklistItem(detailNote, idx) }
+            )
+            return
+        }
+        // Note no longer exists (trashed/deleted elsewhere) — leave detail view.
+        viewingId = NOT_EDITING
+    }
+
     // When an unlock is requested and fingerprint is on, offer it right away.
     LaunchedEffect(pendingUnlock) {
         if (pendingUnlock != null && fingerprintUnlock) requestFingerprint()
@@ -191,8 +220,20 @@ fun ClipApp(vm: NotesViewModel) {
             topBar = {
                 TopAppBar(
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                        // Back arrow on any secondary screen (or a category view);
+                        // the hamburger menu stays only on the All Notes home.
+                        val showBack = screen != Screen.Notes || categoryFilter > 0
+                        IconButton(onClick = {
+                            when {
+                                categoryFilter > 0 -> goTo(Screen.Categories)
+                                screen != Screen.Notes -> goTo(Screen.Notes)
+                                else -> scope.launch { drawerState.open() }
+                            }
+                        }) {
+                            Icon(
+                                if (showBack) Icons.AutoMirrored.Filled.ArrowBack else Icons.Filled.Menu,
+                                contentDescription = if (showBack) "Back" else "Menu"
+                            )
                         }
                     },
                     title = {
@@ -287,6 +328,7 @@ fun ClipApp(vm: NotesViewModel) {
                             sortMode = vm.sortMode,
                             emptyText = "No notes yet. Tap the + button to save your first text.",
                             onCopy = { copyToClipboard(context, noteCopyText(it)); vm.onCopied(it) },
+                            onOpenDetail = { viewingId = it.id },
                             onEdit = { editingId = it.id },
                             onToggleFavorite = { vm.toggleFavorite(it) },
                             onTogglePin = { vm.togglePin(it) },
@@ -306,6 +348,7 @@ fun ClipApp(vm: NotesViewModel) {
                         sortMode = vm.sortMode,
                         emptyText = "No favorites yet. Tap the star on any note to add it here.",
                         onCopy = { copyToClipboard(context, noteCopyText(it)); vm.onCopied(it) },
+                        onOpenDetail = { viewingId = it.id },
                         onEdit = { editingId = it.id },
                         onToggleFavorite = { vm.toggleFavorite(it) },
                         onTogglePin = { vm.togglePin(it) },

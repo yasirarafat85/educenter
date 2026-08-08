@@ -281,11 +281,14 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
 
     fun moveToTrash(note: Note) = viewModelScope.launch {
         ReminderScheduler.cancel(getApplication(), note.id)
-        dao.updateNote(note.copy(isTrashed = true, isFavorite = false, updatedAt = System.currentTimeMillis())); scheduleAutoBackup()
+        // Atomic UPDATE by id — reliable on every device (no stale-object risk).
+        dao.trashNote(note.id, System.currentTimeMillis())
+        relockNote(note.id)
+        scheduleAutoBackup()
     }
 
     fun restore(note: Note) = viewModelScope.launch {
-        dao.updateNote(note.copy(isTrashed = false, updatedAt = System.currentTimeMillis()))
+        dao.untrashNote(note.id, System.currentTimeMillis())
         note.reminderAt?.let { if (it > System.currentTimeMillis()) ReminderScheduler.schedule(getApplication(), note.id, note.title, note.content, it) }
         scheduleAutoBackup()
     }
