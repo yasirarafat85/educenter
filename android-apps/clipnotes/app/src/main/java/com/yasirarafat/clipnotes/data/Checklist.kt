@@ -25,6 +25,9 @@ object Checklist {
     private fun serialize(items: List<ChecklistItem>): String =
         items.joinToString("\n") { if (it.checked) "[x] ${it.text}" else it.text }
 
+    /** Build note content from a list of items (used after a drag-reorder). */
+    fun build(items: List<ChecklistItem>): String = serialize(items)
+
     /** Flip the checked state of the item at [index], returning the new content. */
     fun toggleAt(content: String, index: Int): String {
         val items = parse(content).toMutableList()

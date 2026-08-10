@@ -284,6 +284,16 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         scheduleAutoBackup()
     }
 
+    /** Save a drag-reordered checklist (the full new item order). */
+    fun setChecklistItems(note: Note, items: List<com.yasirarafat.clipnotes.data.ChecklistItem>) =
+        viewModelScope.launch {
+            val newContent = Checklist.build(items)
+            if (newContent != note.content) {
+                dao.updateNote(note.copy(content = newContent, updatedAt = System.currentTimeMillis()))
+                scheduleAutoBackup()
+            }
+        }
+
     fun toggleFavorite(note: Note) = viewModelScope.launch {
         dao.updateNote(note.copy(isFavorite = !note.isFavorite)); scheduleAutoBackup()
     }

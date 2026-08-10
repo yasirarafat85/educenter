@@ -1,5 +1,6 @@
 package com.yasirarafat.clipnotes.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,13 +12,18 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Lock
@@ -41,17 +47,21 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.yasirarafat.clipnotes.data.Checklist
+import com.yasirarafat.clipnotes.data.ChecklistItem
 import com.yasirarafat.clipnotes.data.Note
 import com.yasirarafat.clipnotes.ui.theme.NoteStripColors
 import java.text.SimpleDateFormat
@@ -75,7 +85,8 @@ fun NoteDetailScreen(
     onTogglePin: () -> Unit,
     onTrash: () -> Unit,
     onToggleLock: () -> Unit,
-    onToggleChecklistItem: (Int) -> Unit
+    onToggleChecklistItem: (Int) -> Unit,
+    onReorderChecklist: (List<ChecklistItem>) -> Unit = {}
 ) {
     var menuOpen by remember { mutableStateOf(false) }
 
@@ -151,70 +162,95 @@ fun NoteDetailScreen(
             }
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
-        ) {
-            // Meta chips (category + reminder), if any.
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (categoryName != null) {
-                    AssistChip(
-                        onClick = { },
-                        label = { Text(categoryName) },
-                        leadingIcon = { Icon(Icons.Filled.Folder, null, modifier = Modifier.size(16.dp)) },
-                        colors = AssistChipDefaults.assistChipColors()
-                    )
-                }
-                note.reminderAt?.let { at ->
-                    AssistChip(
-                        onClick = { },
-                        label = {
-                            Text(SimpleDateFormat("MMM d • h:mm a", Locale.getDefault()).format(at))
-                        },
-                        leadingIcon = { Icon(Icons.Filled.Notifications, null, modifier = Modifier.size(16.dp)) },
-                        colors = AssistChipDefaults.assistChipColors()
-                    )
+        if (note.isChecklist) {
+            // Draggable checklist: long-press a row and drag to reorder.
+            val working = remember(note.id) {
+                mutableStateListOf<ChecklistItem>().apply { addAll(Checklist.parse(note.content)) }
+            }
+            val listState = rememberLazyListState()
+            val dragState = rememberDragDropState(
+                listState = listState,
+                onMove = { from, to -> working.add(to, working.removeAt(from)) },
+                onDrop = { onReorderChecklist(working.toList()) }
+            )
+            // Re-sync from the note whenever its content changes and we're not dragging.
+            LaunchedEffect(note.content) {
+                if (dragState.draggingItemIndex == null) {
+                    working.clear()
+                    working.addAll(Checklist.parse(note.content))
                 }
             }
-
-            if (note.title.isNotBlank()) {
-                Spacer(Modifier.size(12.dp))
-                Text(
-                    note.title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-
-            Spacer(Modifier.size(16.dp))
-
-            if (note.isChecklist) {
-                val items = remember(note.content) { Checklist.parse(note.content) }
-                if (items.isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+                DetailHeader(note, categoryName)
+                Spacer(Modifier.size(8.dp))
+                if (working.isEmpty()) {
                     Text("(empty)", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
-                    items.forEachIndexed { index, item ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = item.checked,
-                                onCheckedChange = { onToggleChecklistItem(index) }
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = item.text,
-                                style = MaterialTheme.typography.bodyLarge,
-                                textDecoration = if (item.checked) TextDecoration.LineThrough else null,
-                                color = if (item.checked) MaterialTheme.colorScheme.onSurfaceVariant
-                                else MaterialTheme.colorScheme.onSurface
-                            )
+                    Text(
+                        "Long-press an item and drag to reorder.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .dragContainer(dragState)
+                    ) {
+                        itemsIndexed(working) { index, item ->
+                            DraggableItem(dragState, index) { dragging ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(
+                                            if (dragging) MaterialTheme.colorScheme.surfaceVariant
+                                            else Color.Transparent
+                                        )
+                                        .padding(vertical = 2.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.DragIndicator,
+                                        contentDescription = "Drag",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Checkbox(
+                                        checked = item.checked,
+                                        onCheckedChange = { onToggleChecklistItem(index) }
+                                    )
+                                    Text(
+                                        text = item.text,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        textDecoration = if (item.checked) TextDecoration.LineThrough else null,
+                                        color = if (item.checked) MaterialTheme.colorScheme.onSurfaceVariant
+                                        else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-            } else {
+                CopyCountLabel(note)
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
+            ) {
+                DetailHeader(note, categoryName)
+                Spacer(Modifier.size(16.dp))
                 SelectionContainer {
                     Text(
                         text = note.content.ifBlank { "(empty)" },
@@ -223,16 +259,53 @@ fun NoteDetailScreen(
                         else MaterialTheme.colorScheme.onSurface
                     )
                 }
-            }
-
-            if (note.copyCount > 0) {
-                Spacer(Modifier.size(20.dp))
-                Text(
-                    "Copied ${note.copyCount}×",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                CopyCountLabel(note)
             }
         }
+    }
+}
+
+/** Category / reminder chips + the note title, shown at the top of the detail view. */
+@Composable
+private fun DetailHeader(note: Note, categoryName: String?) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (categoryName != null) {
+            AssistChip(
+                onClick = { },
+                label = { Text(categoryName) },
+                leadingIcon = { Icon(Icons.Filled.Folder, null, modifier = Modifier.size(16.dp)) },
+                colors = AssistChipDefaults.assistChipColors()
+            )
+        }
+        note.reminderAt?.let { at ->
+            AssistChip(
+                onClick = { },
+                label = { Text(SimpleDateFormat("MMM d • h:mm a", Locale.getDefault()).format(at)) },
+                leadingIcon = { Icon(Icons.Filled.Notifications, null, modifier = Modifier.size(16.dp)) },
+                colors = AssistChipDefaults.assistChipColors()
+            )
+        }
+    }
+    if (note.title.isNotBlank()) {
+        Spacer(Modifier.size(12.dp))
+        Text(
+            note.title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+/** "Copied N×" footer, if the note has ever been copied. */
+@Composable
+private fun CopyCountLabel(note: Note) {
+    if (note.copyCount > 0) {
+        Spacer(Modifier.size(12.dp))
+        Text(
+            "Copied ${note.copyCount}×",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

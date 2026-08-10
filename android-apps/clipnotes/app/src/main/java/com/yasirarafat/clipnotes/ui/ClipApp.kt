@@ -178,7 +178,8 @@ fun ClipApp(vm: NotesViewModel) {
                 onTogglePin = { vm.togglePin(detailNote) },
                 onTrash = { vm.moveToTrash(detailNote); viewingId = NOT_EDITING },
                 onToggleLock = { onToggleLock(detailNote) },
-                onToggleChecklistItem = { idx -> vm.toggleChecklistItem(detailNote, idx) }
+                onToggleChecklistItem = { idx -> vm.toggleChecklistItem(detailNote, idx) },
+                onReorderChecklist = { items -> vm.setChecklistItems(detailNote, items) }
             )
             return
         }
