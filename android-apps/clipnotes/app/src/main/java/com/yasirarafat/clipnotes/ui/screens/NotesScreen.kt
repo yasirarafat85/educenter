@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -44,7 +46,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -77,8 +81,68 @@ fun NotesList(
     revealedIds: Set<Long>,
     onRequestUnlock: (Note) -> Unit,
     onRelock: (Note) -> Unit,
-    onToggleLock: (Note) -> Unit
+    onToggleLock: (Note) -> Unit,
+    allowReorder: Boolean = false,
+    onReorder: (List<Note>) -> Unit = {}
 ) {
+    val catMap = remember(categories) { categories.associateBy({ it.id }, { it.name }) }
+
+    // One place that renders a card, reused by the normal and drag-order lists.
+    @Composable
+    fun card(note: Note) {
+        NoteCard(
+            note = note,
+            categoryName = note.categoryId?.let { catMap[it] },
+            onCopy = { onCopy(note) },
+            onOpenDetail = { onOpenDetail(note) },
+            onEdit = { onEdit(note) },
+            onToggleFavorite = { onToggleFavorite(note) },
+            onTogglePin = { onTogglePin(note) },
+            onShare = { onShare(note) },
+            onTrash = { onTrash(note) },
+            onToggleItem = { index -> onToggleChecklistItem(note, index) },
+            revealed = note.id in revealedIds,
+            onRequestUnlock = { onRequestUnlock(note) },
+            onRelock = { onRelock(note) },
+            onToggleLock = { onToggleLock(note) }
+        )
+    }
+
+    // Manual (drag) order — only on the full notes list, not while searching
+    // or viewing a filtered subset (favorites / a single category).
+    val isManual = allowReorder && sortMode == 3 && query.isBlank()
+    if (isManual) {
+        val working = remember { mutableStateListOf<Note>().apply { addAll(notes.sortedBy { it.position }) } }
+        val listState = rememberLazyListState()
+        val dragState = rememberDragDropState(
+            listState = listState,
+            onMove = { from, to -> working.add(to, working.removeAt(from)) },
+            onDrop = { onReorder(working.toList()) }
+        )
+        // Re-sync from the database whenever notes change and we're not dragging.
+        LaunchedEffect(notes) {
+            if (dragState.draggingItemIndex == null) {
+                working.clear()
+                working.addAll(notes.sortedBy { it.position })
+            }
+        }
+        if (working.isEmpty()) {
+            EmptyState(emptyText)
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize().dragContainer(dragState),
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                itemsIndexed(working, key = { _, n -> n.id }) { index, note ->
+                    DraggableItem(dragState, index) { _ -> card(note) }
+                }
+            }
+        }
+        return
+    }
+
     val filtered = remember(notes, query, sortMode) {
         val base = if (query.isBlank()) notes
         else notes.filter {
@@ -96,7 +160,6 @@ fun NotesList(
             }
         )
     }
-    val catMap = remember(categories) { categories.associateBy({ it.id }, { it.name }) }
 
     if (filtered.isEmpty()) {
         EmptyState(emptyText)
@@ -107,22 +170,7 @@ fun NotesList(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(filtered, key = { it.id }) { note ->
-                NoteCard(
-                    note = note,
-                    categoryName = note.categoryId?.let { catMap[it] },
-                    onCopy = { onCopy(note) },
-                    onOpenDetail = { onOpenDetail(note) },
-                    onEdit = { onEdit(note) },
-                    onToggleFavorite = { onToggleFavorite(note) },
-                    onTogglePin = { onTogglePin(note) },
-                    onShare = { onShare(note) },
-                    onTrash = { onTrash(note) },
-                    onToggleItem = { index -> onToggleChecklistItem(note, index) },
-                    revealed = note.id in revealedIds,
-                    onRequestUnlock = { onRequestUnlock(note) },
-                    onRelock = { onRelock(note) },
-                    onToggleLock = { onToggleLock(note) }
-                )
+                card(note)
             }
         }
     }

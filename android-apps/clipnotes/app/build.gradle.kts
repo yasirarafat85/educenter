@@ -12,8 +12,8 @@ android {
         applicationId = "com.yasirarafat.clipnotes"
         minSdk = 24
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.3.1"
+        versionCode = 11
+        versionName = "1.4"
         vectorDrawables { useSupportLibrary = true }
     }
 

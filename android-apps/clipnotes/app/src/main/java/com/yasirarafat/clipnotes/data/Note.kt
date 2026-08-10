@@ -19,5 +19,6 @@ data class Note(
     val isLocked: Boolean = false,
     val lockTimeoutSecs: Int = 0,   // after unlocking, auto re-lock after N secs; 0 = manual only
     val reminderAt: Long? = null,   // epoch millis of a reminder, or null
+    val position: Int = 0,          // manual drag-order (used only in "Manual" sort mode)
     val updatedAt: Long = System.currentTimeMillis()
 )

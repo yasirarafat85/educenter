@@ -34,6 +34,14 @@ object Checklist {
         return serialize(items)
     }
 
+    /** Move the item at [from] to [to] (drag-reorder), returning the new content. */
+    fun move(content: String, from: Int, to: Int): String {
+        val items = parse(content).toMutableList()
+        if (from !in items.indices || to !in items.indices || from == to) return content
+        items.add(to, items.removeAt(from))
+        return serialize(items)
+    }
+
     /** Plain text (no markers) — used when copying a checklist note. */
     fun plainText(content: String): String =
         parse(content).joinToString("\n") { it.text }

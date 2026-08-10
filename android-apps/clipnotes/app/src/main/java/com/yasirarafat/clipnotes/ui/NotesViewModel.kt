@@ -60,9 +60,18 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
 
     private var autoBackupJob: Job? = null
 
-    // Sort mode for the notes list: 0 = recent, 1 = alphabetical, 2 = most copied
+    // Sort mode for the notes list:
+    // 0 = recent, 1 = alphabetical, 2 = most copied, 3 = manual (drag order)
     var sortMode by mutableStateOf(prefs.getInt("sort", 0))
         private set
+
+    /** Save a new manual drag-order (position = index in the given list). */
+    fun persistNoteOrder(ordered: List<Note>) = viewModelScope.launch(Dispatchers.IO) {
+        ordered.forEachIndexed { index, note ->
+            if (note.position != index) dao.updatePosition(note.id, index)
+        }
+        scheduleAutoBackup()
+    }
 
     // Accent colour index (see ui.theme.ClipAccents)
     var accentIndex by mutableStateOf(prefs.getInt("accent", 0))
@@ -479,6 +488,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
             o.put("checklist", n.isChecklist)
             o.put("locked", n.isLocked)
             o.put("lockTimeoutSecs", n.lockTimeoutSecs)
+            o.put("position", n.position)
             o.put("reminderAt", n.reminderAt ?: JSONObject.NULL)
             noteArr.put(o)
         }
@@ -551,6 +561,7 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
                         isChecklist = o.optBoolean("checklist", false),
                         isLocked = o.optBoolean("locked", false),
                         lockTimeoutSecs = o.optInt("lockTimeoutSecs", 0),
+                        position = o.optInt("position", 0),
                         reminderAt = reminderAt,
                         updatedAt = System.currentTimeMillis()
                     )

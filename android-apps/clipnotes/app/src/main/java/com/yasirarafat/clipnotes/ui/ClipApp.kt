@@ -275,7 +275,7 @@ fun ClipApp(vm: NotesViewModel) {
                                     expanded = sortMenuOpen,
                                     onDismissRequest = { sortMenuOpen = false }
                                 ) {
-                                    listOf("Recent first" to 0, "A–Z" to 1, "Most copied" to 2)
+                                    listOf("Recent first" to 0, "A–Z" to 1, "Most copied" to 2, "Manual (drag)" to 3)
                                         .forEach { (label, mode) ->
                                             DropdownMenuItem(
                                                 text = { Text(label) },
@@ -338,7 +338,10 @@ fun ClipApp(vm: NotesViewModel) {
                             revealedIds = vm.revealedIds,
                             onRequestUnlock = { requestUnlock(it) },
                             onRelock = { vm.relockNote(it.id) },
-                            onToggleLock = { onToggleLock(it) }
+                            onToggleLock = { onToggleLock(it) },
+                            // Drag-to-reorder only on the full list (not a category view).
+                            allowReorder = categoryFilter <= 0,
+                            onReorder = { vm.persistNoteOrder(it) }
                         )
                     }
                     Screen.Favorites -> NotesList(
