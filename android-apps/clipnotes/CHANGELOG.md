@@ -7,7 +7,14 @@
 - **প্যাকেজ**: `com.yasirarafat.clipnotes`
 - **টেক**: Kotlin + Jetpack Compose (Material 3), Room (SQLite), single-Activity — সম্পূর্ণ অফলাইন, কোনো সার্ভার নেই
 - **বিল্ড**: শুধু GitHub Actions-এ (`.github/workflows/android-clipnotes.yml`) — লোকালে `dl.google.com` ব্লক
-- **ভার্সন**: versionCode 9, versionName 1.3
+- **ভার্সন**: versionCode 10, versionName 1.3.1
+
+---
+
+## 🆕 v1.3.1 আপডেট (৯ আগস্ট ২০২৬)
+
+- **Copy বাটন আর সিস্টেম নেভিগেশন বারের পেছনে যায় না** — নোট details স্ক্রিনের নিচের Copy বাটনে `navigationBarsPadding()` যোগ করা হয়েছে। targetSdk 36-এ Android অটোমেটিক edge-to-edge আঁকে বলে বাটনটা নেভ বারের নিচে ঢুকে যাচ্ছিল (৩-বাটন/জেসচার বার দিয়ে ঢাকা পড়ত)।
+- **৮+ আইটেমের চেকলিস্ট এখন পুরো দেখা যায়** — একই কারণে details ভিউতে শেষ আইটেমগুলো Copy বাটনের পেছনে ঢাকা পড়ত (তাই "+N more"/স্ক্রল করেও দেখা যেত না কিছু ডিভাইসে); বাটন উপরে ওঠায় এখন সব আইটেম স্ক্রল করে দেখা যায়।
 
 ---
 
