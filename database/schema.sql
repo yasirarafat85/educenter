@@ -113,6 +113,8 @@ CREATE TABLE course_batches (
     duration VARCHAR(100),
     instructor VARCHAR(100),
     description TEXT,
+    fb_group_url VARCHAR(500) DEFAULT NULL,        -- এই কোর্স কেনা অভিভাবক অ্যাকাউন্টে দেখবেন (প্রাইভেট FB গ্রুপ)
+    messenger_group_url VARCHAR(500) DEFAULT NULL, -- একইভাবে Messenger গ্রুপ
     hide_parcel TINYINT(1) NOT NULL DEFAULT 0, -- Yes হলে রেজিস্ট্রেশন ফর্মে রিসিভার নাম/নম্বর/ঠিকানা হাইড থাকবে (ফুল অনলাইন ব্যাচের জন্য)
     registration_open TINYINT(1) NOT NULL DEFAULT 1, -- এই নির্দিষ্ট ব্যাচের রেজিস্ট্রেশন চালু/বন্ধ (is_active থেকে আলাদা — বন্ধ হলে ব্যাচ সাইটে দেখাবে কিন্তু রেজিস্ট্রেশন ফর্ম আসবে না)
     is_active TINYINT(1) NOT NULL DEFAULT 1, -- এই ব্যাচ সাইটে দেখাবে কিনা
@@ -579,6 +581,36 @@ CREATE TABLE course_interests (
     INDEX idx_ci_phone (contact_phone),
     INDEX idx_ci_status (status),
     INDEX idx_ci_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- users : অভিভাবক (পাবলিক) অ্যাকাউন্ট — কোর্স কেনা অভিভাবক লগইন করে নিজের ড্যাশবোর্ড
+-- (কেনা কোর্স, খরচ, প্রাইভেট গ্রুপ লিংক) দেখেন। phone = রেজিস্ট্রেশনের মোবাইল (পরিচয়-চাবি)।
+-- অ্যাডমিন approve না দিলে লগইন করা যায় না। USER-ACCOUNT-PLAN.md দ্রষ্টব্য।
+-- ------------------------------------------------------------
+CREATE TABLE users (
+    id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    phone         VARCHAR(20)  NOT NULL,
+    password_hash VARCHAR(255) DEFAULT NULL,
+    google_id     VARCHAR(64)  DEFAULT NULL,          -- ধাপ ২ (Google) — এখন NULL
+    email         VARCHAR(150) DEFAULT NULL,
+    full_name     VARCHAR(100) DEFAULT NULL,
+    status        VARCHAR(20)  NOT NULL DEFAULT 'pending', -- pending/approved/rejected/blocked
+    created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    approved_at   TIMESTAMP    NULL DEFAULT NULL,
+    approved_by   INT UNSIGNED DEFAULT NULL,
+    UNIQUE KEY uq_phone (phone),
+    UNIQUE KEY uq_google (google_id),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE user_login_attempts (
+    id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    ip_address   VARCHAR(45),
+    phone        VARCHAR(20),
+    success      TINYINT(1) DEFAULT 0,
+    attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_phone_time (phone, attempted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

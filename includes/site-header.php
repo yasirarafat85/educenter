@@ -18,6 +18,7 @@ $navigation = [
     ['id' => 'about', 'label' => 'About', 'icon' => 'info', 'url' => 'about'],
     ['id' => 'gallery', 'label' => 'Gallery', 'icon' => 'image', 'url' => 'gallery'],
     ['id' => 'faqs', 'label' => 'FAQs', 'icon' => 'help-circle', 'url' => 'faqs'],
+    ['id' => 'account', 'label' => !empty($_SESSION['user_id']) ? 'My Account' : 'Login', 'icon' => 'user-circle', 'url' => 'account'],
 ];
 
 $activePage = $activePage ?? '';

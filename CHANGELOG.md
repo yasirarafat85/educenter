@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-08-12 (👪 অভিভাবক অ্যাকাউন্ট সিস্টেম — ধাপ ১: ফোন পথ + ড্যাশবোর্ড)
+
+- **ইউজারের চাওয়া**: কোর্স কেনা অভিভাবকরা লগইন করে নিজের কেনা কোর্স, খরচ, প্রাইভেট গ্রুপ লিংক দেখবেন। প্ল্যান `USER-ACCOUNT-PLAN.md`।
+- **নতুন টেবিল**: `users` (phone=পরিচয়-চাবি, password_hash, google_id[ধাপ ২], status: pending/approved/rejected/blocked), `user_login_attempts` (রেট-লিমিট)। `course_batches`-এ `fb_group_url`+`messenger_group_url`। মাইগ্রেশন `database/migrate-user-accounts.sql` (non-destructive)।
+- **ইউজার অথ** `includes/user-auth.php` — অ্যাডমিন সেশন থেকে আলাদা (`user_id` কী)। `user_require_login()`/`user_current()` (approved না হলে অটো-লগআউট)।
+- **পাবলিক পেজ**: `account-signup.php`(+submit — ফোন registration-এ আছে কিনা চেক, status=pending), `account-login.php`(+submit — শুধু approved, pending/blocked আলাদা বার্তা, রেট-লিমিট), `account.php` (ড্যাশবোর্ড: কেনা কোর্স+খরচ+গ্রুপ লিংক), `account-password.php`, `account-logout.php`। হেডারে "My Account/Login" লিংক।
+- **অ্যাডমিন** `admin/users.php` (সাইডবার "অভিভাবক অ্যাকাউন্ট"): approve/reject/block/unblock, পাসওয়ার্ড রিসেট (র‍্যান্ডম temp), ডিলিট, status ফিল্টার। `course-batches.php`-এ গ্রুপ লিংক ২ ফিল্ড।
+- **🔴 প্রাইভেসি**: ড্যাশবোর্ড শুধু session-এর নিজের phone দিয়ে কোয়েরি — isolated টেস্টে যাচাই: অভিভাবক A অভিভাবক B-এর ডেটা দেখে না (leak=0)। signup(কাস্টমার+নন-কাস্টমার রিজেক্ট)/pending-login-block/approve/login/পাসওয়ার্ড-বদল/block-এ-সেশন-রিভোক — সব E2E পাস। schema.sql + Tailwind রিবিল্ড।
+- **ধাপ ২ (Google) পরে।** DB মাইগ্রেশন `migrate-user-accounts.sql` লাইভে চালাতে হবে।
+
 ## 2026-08-06 (🚀 git auto-deploy সেটআপ — cPanel Git Version Control)
 
 - **ইউজার চেয়েছেন**: প্রতিবার জিপ বানিয়ে আপলোডের বদলে git থেকে সরাসরি হোস্টিং আপডেট।

@@ -34,6 +34,8 @@ $batchFields = [
     'duration' => ['label' => 'মেয়াদ (যেমন ৩ মাস)', 'type' => 'text'],
     'instructor' => ['label' => 'প্রশিক্ষক', 'type' => 'text'],
     'description' => ['label' => 'বিবরণ', 'type' => 'textarea'],
+    'fb_group_url' => ['label' => 'প্রাইভেট Facebook গ্রুপ লিংক', 'type' => 'text', 'help' => 'এই কোর্স কেনা অভিভাবক তাঁর অ্যাকাউন্টে এই গ্রুপ লিংক দেখবেন (ঐচ্ছিক)।'],
+    'messenger_group_url' => ['label' => 'প্রাইভেট Messenger গ্রুপ লিংক', 'type' => 'text', 'help' => 'এই কোর্স কেনা অভিভাবক তাঁর অ্যাকাউন্টে এই গ্রুপ লিংক দেখবেন (ঐচ্ছিক)।'],
     'features' => ['label' => 'বৈশিষ্ট্য (প্রতি লাইনে একটি)', 'type' => 'lines'],
     'hide_parcel' => ['label' => 'পার্সেল হাইড (Yes হলে রেজিস্ট্রেশন ফর্মে রিসিভার নাম/নম্বর/ঠিকানা হাইড থাকবে — ফুল অনলাইন ব্যাচের জন্য)', 'type' => 'checkbox', 'default' => 0, 'warn_off' => true, 'toggle_label' => 'পার্সেল হাইড'],
     'registration_open' => ['label' => 'রেজিস্ট্রেশন খোলা (Running)? — বন্ধ (No) করলে ব্যাচ সাইটে দেখাবে কিন্তু নতুন রেজিস্ট্রেশন নেওয়া যাবে না', 'type' => 'checkbox', 'default' => 1, 'warn_off' => true, 'toggle_label' => 'রেজিস্ট্রেশন খোলা রাখা'],
