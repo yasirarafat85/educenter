@@ -142,7 +142,7 @@ body {
     position: absolute;
     top: 16px; right: -40px;
     transform: rotate(45deg);
-    background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+    background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
     color: #fff; font-weight: 800; font-size: 11px; letter-spacing: .3px;
     padding: 5px 44px;
     box-shadow: 0 3px 10px rgba(0, 0, 0, .28);
