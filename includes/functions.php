@@ -415,10 +415,11 @@ function render_item_card(array $item, string $type): string
     $actionLabel = $registrationClosed ? 'রেজিস্ট্রেশন বন্ধ' : ($type === 'course' ? 'রেজিস্ট্রেশন করুন' : 'অর্ডার করুন');
     $actionUrl = $type === 'course' ? 'course-register?course_id=' . $id : 'register?type=' . e($type) . '&id=' . $id;
     $image = $item['image'] ?: 'https://placehold.co/400x300?text=No+Image';
-    $closedBadge = $registrationClosed ? '<div class="absolute top-3 left-3 bg-gray-900/80 text-white px-3 py-1.5 rounded-full font-semibold text-xs">রেজিস্ট্রেশন বন্ধ</div>' : '';
+    $closedBadge = $registrationClosed ? '<div class="card-ribbon">🔜 আসছে</div>' : '';
 
     $ctaBtn = $registrationClosed
-        ? '<a href="course-interest?course_id=' . $id . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">জানিয়ে রাখুন</a>'
+        ? '<a href="course-interest?course_id=' . $id . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">🔔 জানিয়ে রাখুন</a>'
+            . '<p class="text-center text-xs text-gray-500 mt-1.5">নতুন ব্যাচ খুললে আপনাকে জানাবো</p>'
         : '<a href="' . $actionUrl . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">' . $actionLabel . '</a>';
 
     return '

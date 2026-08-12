@@ -137,6 +137,18 @@ body {
 .pricing-cta:hover { filter: brightness(1.08); transform: translateY(-1px); }
 .pricing-cta:active { transform: translateY(0); }
 
+/* "আসছে শীঘ্রই" কোর্স কার্ডের কোণে তির্যক রিবন (render_item_card, বন্ধ কোর্সে) — কার্ডের overflow-hidden ক্লিপ করে */
+.card-ribbon {
+    position: absolute;
+    top: 16px; right: -40px;
+    transform: rotate(45deg);
+    background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+    color: #fff; font-weight: 800; font-size: 11px; letter-spacing: .3px;
+    padding: 5px 44px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, .28);
+    z-index: 3; white-space: nowrap; pointer-events: none;
+}
+
 /* ── "উপরে যান" বাটন (২০২৬-০৭-২০) ─────────────────────────────────
    নিচে স্ক্রল করলে (JS `.show` ক্লাস বসায়) ডান-নিচে ভেসে ওঠে। রঙ সাইট
    থিম থেকে (rgb(var(--c-primary))), তাই থিম বদলালে এটাও বদলাবে।
