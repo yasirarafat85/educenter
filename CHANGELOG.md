@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-08-12 (🔵 অভিভাবক অ্যাকাউন্ট — ধাপ ২: Google লগইন)
+
+- **Google OAuth 2.0 (সার্ভার-সাইড, authorization code flow)** — Composer/লাইব্রেরি ছাড়া, curl দিয়ে (`includes/google-oauth.php`)। ক্রেডেনশিয়াল অ্যাডমিন সেটিংসে (settings টেবিল: `google_client_id`/`google_client_secret` — `admin/settings.php`-এ নতুন গ্রুপ; দুটোই সেট থাকলে বাটন আসে)। **নতুন DB মাইগ্রেশন লাগে না** (google_id ধাপ ১-এ যোগ)।
+- **পেজ**: `account-google-start.php` (state তৈরি → Google-এ redirect), `account-google-callback.php` (state যাচাই → code→token→userinfo → পরিচিত google_id হলে লগইন/status-বার্তা; নতুন হলে ফোন-লিংকে), `account-google-link.php` (নতুন Google ইউজার রেজিস্ট্রেশনের ফোন দেয় → registration যাচাই → status=pending → admin approve; ফোনে আগে অ্যাকাউন্ট থাকলে পাসওয়ার্ড-লগইনে পাঠায়)। login/signup পেজে "Google দিয়ে লগইন/সাইনআপ" বাটন (google-এর অফিসিয়াল রঙিন G আইকন, inline SVG)।
+- **Redirect URI**: `SITE_URL . '/account-google-callback'` — Google Cloud-এ হুবহু রেজিস্টার থাকতে হবে। isolated টেস্ট: enabled/disabled বাটন, start→Google auth URL (client_id+redirect_uri+state+scope), callback state-যাচাই, link-guard — সব পাস। আসল Google রাউন্ড-ট্রিপ লাইভে টেস্ট।
+
 ## 2026-08-12 (👪 অভিভাবক অ্যাকাউন্ট সিস্টেম — ধাপ ১: ফোন পথ + ড্যাশবোর্ড)
 
 - **ইউজারের চাওয়া**: কোর্স কেনা অভিভাবকরা লগইন করে নিজের কেনা কোর্স, খরচ, প্রাইভেট গ্রুপ লিংক দেখবেন। প্ল্যান `USER-ACCOUNT-PLAN.md`।

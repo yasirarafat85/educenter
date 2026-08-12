@@ -97,6 +97,10 @@ $groups = [
         'about_feature3_title' => 'বিশেষত্ব ৩ — শিরোনাম',
         'about_feature3_text'  => ['label' => 'বিশেষত্ব ৩ — বিবরণ', 'type' => 'textarea'],
     ],
+    'Google লগইন (অভিভাবক অ্যাকাউন্ট)' => [
+        'google_client_id'     => ['label' => 'Google Client ID', 'type' => 'text', 'help' => 'Google Cloud → Clients থেকে (শেষে .apps.googleusercontent.com)। দুটোই বসালে অভিভাবক লগইন/সাইনআপে "Google দিয়ে লগইন" বাটন আসবে।'],
+        'google_client_secret' => ['label' => 'Google Client Secret', 'type' => 'text', 'help' => 'GOCSPX-... — গোপন, শুধু এখানে (DB-তে) রাখুন। Redirect URI Google-এ বসাতে হবে: https://shishurmedhabikash.com/account-google-callback'],
+    ],
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_verify()) {
