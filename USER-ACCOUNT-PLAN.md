@@ -94,6 +94,20 @@ admin/course-batches.php থেকে সেট হবে। ইউজারে�
 
 ---
 
+## 🏷️ Google Brand Verification — লোগো/নাম দেখানো (ঐচ্ছিক, পরে করা হবে)
+
+**বর্তমান অবস্থা (২০২৬-০৮-১২)**: Google লগইন **লাইভ ও কাজ করছে** (OAuth client `Shishur Medha Login` তৈরি, ক্রেডেনশিয়াল অ্যাডমিন সেটিংসে বসানো, বাটন আসছে, ইউজার টেস্ট করেছেন)। **basic scope (email/profile/openid) বলে verification ছাড়াই যেকোনো Google ইউজার লগইন করতে পারে — Testing/Production দুটোতেই** (ডকুমেন্ট-যাচাইকৃত, support.google.com/cloud/answer/15549945)। তাই Publish/verification লগইনের জন্য **বাধ্যতামূলক নয়**।
+
+**এখন Google-এর "Choose an account" স্ক্রিনে ডোমেইন দেখায়** ("continue to shishurmedhabikash.com") — **লোগো/নাম নয়**। লোগো + অ্যাপ-নাম দেখাতে চাইলে **brand verification** লাগবে:
+
+1. **Privacy Policy + Terms পেজ নিজের ডোমেইনে** (`shishurmedhabikash.com`) — 🔴 Google Site/অন্য ডোমেইন **চলবে না** (নিয়ম: privacy policy হোমপেজের same verified domain-এ হতে হবে; support.google.com/cloud/answer/13806988)। **AI বানাবে**: `privacy.php` + `terms.php` (স্ট্যান্ডার্ড টেমপ্লেট, ইউজার রিভিউ করবেন) + হোমপেজ/ফুটারে লিংক।
+2. Google Branding-এ **Home page + Privacy + Terms URL** বসানো।
+3. **App name** "login System" → "Shishur Medha Bikash" (Branding → Save)।
+4. **Google Search Console-এ shishurmedhabikash.com ডোমেইন verify** (মালিকানা প্রমাণ)।
+5. **Audience → Publish app → Submit for verification** → Google রিভিউ (কয়েক দিন-সপ্তাহ)।
+
+**দ্রষ্টব্য**: লোগো আপলোড করা থাকলেও unverified অবস্থায় শুধু ডোমেইন দেখায়, লগইন ভাঙে না। App name change verification ছাড়া consent স্ক্রিনে দেখায় না (তখনও ডোমেইন)।
+
 ## 🔮 ধাপ ৩ — পরে (ইনক্রিমেন্টাল)
 রেজাল্ট/অগ্রগতি (নতুন টেবিল + অ্যাডমিন এন্ট্রি) · উপস্থিতি · বকেয়া ফি · রসিদ/সার্টিফিকেট ·
 ক্লাস রুটিন · নোটিফিকেশন · কোর্স রিনিউ · রেফারেল · হোমওয়ার্ক জমা।
