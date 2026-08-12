@@ -29,7 +29,7 @@ $actionUrl = $type === 'course' ? ('course-register?course_id=' . (int) $item['i
 require __DIR__ . '/includes/site-header.php';
 ?>
 
-<div class="max-w-3xl mx-auto pb-28 sm:pb-0">
+<div class="max-w-3xl mx-auto pb-10">
     <a href="<?= e($backUrl) ?>" class="inline-flex items-center gap-1.5 text-indigo-600 font-semibold text-sm mb-5 hover:gap-2.5 transition-all">
         <i data-lucide="arrow-left" class="w-4 h-4"></i> ফিরে যান
     </a>
@@ -40,7 +40,7 @@ require __DIR__ . '/includes/site-header.php';
         <img src="<?= e($item['image'] ?: 'https://placehold.co/800x600?text=No+Image') ?>" alt="<?= e($item['title']) ?>" class="w-full object-cover rounded-xl mb-6 shadow-lg bg-white" style="aspect-ratio:4/3;">
 
         <div class="space-y-6">
-            <p class="text-gray-700 text-base sm:text-lg leading-relaxed"><?= nl2br(e($item['description'] ?? '')) ?></p>
+            <p class="text-gray-700 text-base sm:text-lg leading-relaxed break-words" style="overflow-wrap:anywhere;"><?= nl2br(e($item['description'] ?? '')) ?></p>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="flex items-center gap-3 bg-gradient-to-r from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
@@ -89,28 +89,20 @@ require __DIR__ . '/includes/site-header.php';
             </div>
             <?php endif; ?>
 
-            <a href="<?= e($actionUrl) ?>" class="hidden sm:block w-full text-center py-4 px-6 rounded-xl font-bold text-lg shadow-lg <?= $registrationClosed ? 'bg-gray-300 text-gray-600' : 'btn-primary text-white' ?>">
+            <?php if ($registrationClosed): ?>
+            <div>
+                <a href="course-interest?course_id=<?= (int) $item['id'] ?>" class="block w-full text-center py-4 px-6 rounded-xl font-bold text-lg shadow-lg btn-primary text-white">
+                    জানিয়ে রাখুন
+                </a>
+                <p class="text-center text-gray-500 text-sm mt-2">এই কোর্সের রেজিস্ট্রেশন এখন বন্ধ — আগ্রহ জানিয়ে রাখুন</p>
+            </div>
+            <?php else: ?>
+            <a href="<?= e($actionUrl) ?>" class="block w-full text-center py-4 px-6 rounded-xl font-bold text-lg shadow-lg btn-primary text-white">
                 <?= e($actionLabel) ?>
             </a>
+            <?php endif; ?>
         </div>
     </div>
 </div>
-
-<!-- মোবাইলে নিচে স্থির (sticky) CTA বার — স্ক্রল করলেও সবসময় দেখা যায়, রেজিস্ট্রেশন সহজ করে (ডেস্কটপে লুকানো) -->
-<?php if ($registrationClosed): ?>
-<div class="sm:hidden fixed inset-x-0 bottom-0 z-40 bg-gray-100 border-t border-gray-200 px-4 py-3 text-center text-gray-600 font-bold" style="box-shadow:0 -4px 20px rgba(0,0,0,0.08);">
-    রেজিস্ট্রেশন বন্ধ
-</div>
-<?php else: ?>
-<div class="sm:hidden fixed inset-x-0 bottom-0 z-40 bg-white border-t border-gray-200 px-4 py-3 flex items-center gap-3" style="box-shadow:0 -4px 20px rgba(0,0,0,0.08);">
-    <div class="flex-shrink-0 min-w-0">
-        <p class="text-xs text-gray-500 leading-none mb-0.5">মূল্য</p>
-        <p class="font-black text-lg leading-none truncate" style="color:rgb(var(--c-primary));"><?= e($item['price'] ?? '') ?></p>
-    </div>
-    <a href="<?= e($actionUrl) ?>" class="flex-1 text-center py-3 rounded-xl font-bold text-white shadow-lg" style="background:linear-gradient(135deg,rgb(var(--c-primary-2)),rgb(var(--c-primary)));">
-        <?= e($actionLabel) ?>
-    </a>
-</div>
-<?php endif; ?>
 
 <?php require __DIR__ . '/includes/site-footer.php'; ?>
