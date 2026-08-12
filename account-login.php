@@ -20,8 +20,7 @@ require __DIR__ . '/includes/site-header.php';
         <div class="relative z-10">
             <div class="text-center mb-6">
                 <div class="inline-flex w-14 h-14 items-center justify-center rounded-full bg-white/20 mb-3"><i data-lucide="log-in" class="w-7 h-7 text-white"></i></div>
-                <h1 class="text-xl sm:text-2xl font-black text-white mb-1">অভিভাবক লগইন</h1>
-                <p class="text-fuchsia-100 text-sm">আপনার কোর্স, খরচ ও গ্রুপ লিংক দেখুন</p>
+                <h1 class="text-xl sm:text-2xl font-black text-white">অভিভাবক লগইন</h1>
             </div>
 
             <?php $flash = get_flash(); if ($flash): ?>
