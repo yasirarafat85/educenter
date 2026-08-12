@@ -47,8 +47,9 @@ require __DIR__ . '/includes/site-header.php';
                 <a href="courses" class="inline-flex items-center justify-center gap-2 bg-white text-indigo-700 px-8 sm:px-10 py-4 sm:py-5 rounded-2xl text-lg sm:text-xl font-bold shadow-lg hover:shadow-2xl transition-all transform hover:-translate-y-1 w-full sm:w-auto">
                     <i data-lucide="rocket" class="w-5 h-5"></i> কোর্স দেখুন
                 </a>
-                <a href="about" class="inline-flex items-center justify-center gap-2 btn-outline-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl text-lg sm:text-xl font-bold w-full sm:w-auto">
-                    আমাদের সম্পর্কে
+                <?php $loggedIn = !empty($_SESSION['user_id']); ?>
+                <a href="<?= $loggedIn ? 'account' : 'account-login' ?>" class="inline-flex items-center justify-center gap-2 btn-outline-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl text-lg sm:text-xl font-bold w-full sm:w-auto">
+                    <i data-lucide="<?= $loggedIn ? 'layout-dashboard' : 'log-in' ?>" class="w-5 h-5"></i> <?= $loggedIn ? 'আপনার ড্যাশবোর্ড' : 'অভিভাবক লগইন' ?>
                 </a>
             </div>
         </div>
