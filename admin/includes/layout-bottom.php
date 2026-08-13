@@ -59,6 +59,37 @@
         document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
     })();
 
+    // সাইডবার সার্চ — টাইপ করলে সাইডবারের লিংক ফিল্টার হয় (ক্লায়েন্ট-সাইড, রিলোড ছাড়া)
+    (function () {
+        var input = document.getElementById('sidebar-search');
+        var nav = document.getElementById('admin-nav');
+        var empty = document.getElementById('sidebar-search-empty');
+        if (!input || !nav) return;
+
+        function filter() {
+            var q = input.value.trim().toLowerCase();
+            var links = nav.querySelectorAll('.nav-link');
+            var anyVisible = false;
+            links.forEach(function (a) {
+                var match = !q || a.textContent.toLowerCase().indexOf(q) !== -1;
+                a.style.display = match ? '' : 'none';
+                if (match && q) anyVisible = true;
+            });
+            // যে সেকশন-হেডারের নিচে দৃশ্যমান লিংক নেই সেটাও লুকানো (সার্চ চলাকালীন)
+            nav.querySelectorAll('.nav-section').forEach(function (h) {
+                var vis = false, el = h.nextElementSibling;
+                while (el && !el.classList.contains('nav-section')) {
+                    if (el.classList.contains('nav-link') && el.style.display !== 'none') { vis = true; break; }
+                    el = el.nextElementSibling;
+                }
+                h.style.display = (!q || vis) ? '' : 'none';
+            });
+            if (empty) empty.classList.toggle('hidden', !(q && !anyVisible));
+        }
+        input.addEventListener('input', filter);
+        input.addEventListener('keydown', function (e) { if (e.key === 'Escape') { input.value = ''; filter(); } });
+    })();
+
     // টোস্ট নোটিফিকেশন — ৪.৫ সেকেন্ড পর নিজে নিজে মিলিয়ে যায় (ফ্ল্যাশ মেসেজ এখন টোস্ট হিসেবে দেখায়)
     (function () {
         document.querySelectorAll('[data-toast]').forEach(function (t) {

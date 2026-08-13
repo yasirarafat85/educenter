@@ -251,7 +251,15 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </div>
-        <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
+        <div class="px-3 pt-3 flex-shrink-0">
+            <div class="relative">
+                <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <input type="search" id="sidebar-search" placeholder="পেজ খুঁজুন..." autocomplete="off"
+                    class="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200">
+            </div>
+            <p id="sidebar-search-empty" class="hidden text-xs text-gray-400 text-center mt-2">কিছু পাওয়া যায়নি</p>
+        </div>
+        <nav id="admin-nav" class="flex-1 p-3 space-y-1 overflow-y-auto">
             <a href="index.php" class="nav-link <?= nav_active('index.php', $currentFile) ?>"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> ড্যাশবোর্ড</a>
             <a href="guide.php" class="nav-link <?= nav_active('guide.php', $currentFile) ?>"><i data-lucide="help-circle" class="w-4 h-4"></i> গাইড / সাহায্য</a>
             <p class="nav-section">কনটেন্ট</p>
