@@ -118,6 +118,7 @@ CLAUDE.md এ টেকনিক্যাল/আর্কিটেকচার �
 - ✅ **#৪ সাইডবার সার্চ** — সাইডবারের উপরে সার্চ বক্স, টাইপ করলে nav-লিংক ফিল্টার (JS, layout-top+bottom)। **সম্পন্ন** → পুরো অ্যাডমিন সহজীকরণ উদ্যোগ শেষ।
 
 ### 🔮 আরও চাওয়া (লিপিবদ্ধ, পরে):
+- 🔨 **গ্রুপ-যোগ ও মাসিক পার্সেল ট্র্যাকিং** (ইউজার ২০২৬-০৮-১৩ চেয়েছেন) — পূর্ণ প্ল্যান `GROUP-PARCEL-TRACKING-PLAN.md`-এ। **অংশ ক**: confirm-এর পর কাস্টমার FB/Messenger গ্রুপে যোগ হয়েছে কিনা ট্র্যাক (registrations-এ ২ কলাম + registrations.php টগল)। **অংশ খ**: কোর্সভেদে পার্সেল-সংখ্যা (course_batches.total_parcels) + প্রতি শিক্ষার্থীর প্রতি-মাস "এই মাসে যাবে/না(declined)/পাঠানো" ট্র্যাক (courier_batches.send_status='declined')। প্রভাবিত: registrations/courier/courier-prepare/courier-tracking + ভবিষ্যৎ স্টক। ধাপ ১ (গ্রুপ, ছোট) → ধাপ ২ (পার্সেল, মাঝারি)।
 - ⬜ **প্রতি রেজিস্ট্রেশন Google Sheet-এ অটো পাঠানো** (এক্সট্রা ব্যাকআপ) — Google Apps Script Web App পদ্ধতি (ফ্রি, curl POST, settings-এ URL)। ইউজার Sheet+Script বানাবেন, AI কোড+সেটিংস যোগ করবে। কোর্স/অর্ডার/আগ্রহ কোনগুলো পাঠাবে ঠিক করতে হবে।
 - ⬜ **অভিভাবক অ্যাকাউন্ট Google brand verification** (লোগো/নাম consent স্ক্রিনে) — `USER-ACCOUNT-PLAN.md`-এ প্ল্যান।
 - ⬜ **অভিভাবক লগইন "মনে রাখো"** (দীর্ঘ সেশন) — এখন ব্রাউজার বন্ধ=লগআউট।
