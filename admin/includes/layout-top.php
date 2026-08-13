@@ -3,6 +3,7 @@
 // এই ফাইল ব্যবহার করার আগে admin_require_login() কল করা থাকতে হবে
 
 require_once __DIR__ . '/entities.php'; // সাইডবার নেভিগেশনের জন্য get_entities() প্রয়োজন
+require_once __DIR__ . '/page-help.php'; // হেডারের "?" সাহায্য বাটনের টেক্সট
 
 $currentFile = basename($_SERVER['SCRIPT_NAME']);
 $currentEntity = $_GET['entity'] ?? '';
@@ -331,7 +332,13 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                         <span class="text-gray-500 font-medium truncate"><?= isset($pageTitle) ? e($pageTitle) : '' ?></span>
                     </div>
                     <?php endif; ?>
-                    <h2 class="font-bold text-gray-800 text-base sm:text-lg truncate leading-tight"><?= isset($pageTitle) ? e($pageTitle) : '' ?></h2>
+                    <div class="flex items-center gap-2 min-w-0">
+                        <h2 class="font-bold text-gray-800 text-base sm:text-lg truncate leading-tight"><?= isset($pageTitle) ? e($pageTitle) : '' ?></h2>
+                        <?php $pageHelp = admin_page_help($currentFile); if ($pageHelp): ?>
+                        <button type="button" onclick="showPageHelp(this)" data-help-title="<?= e($pageHelp[0]) ?>" data-help-text="<?= e($pageHelp[1]) ?>"
+                            class="flex-shrink-0 w-6 h-6 inline-flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 font-bold text-sm leading-none" title="এই পেজ সম্পর্কে সাহায্য" aria-label="সাহায্য">?</button>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
             <!-- মোবাইলে (sm এর নিচে) পুরো ডান ক্লাস্টার (থিম পিকার + নাম) লুকানো — নাহলে ৮টা রঙের ডট

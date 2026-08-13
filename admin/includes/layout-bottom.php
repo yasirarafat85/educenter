@@ -21,8 +21,43 @@
     </div>
 </div>
 
+<!-- পেজ-সাহায্য মডাল — হেডারের "?" বাটনে খোলে (page-help.php থেকে টেক্সট) -->
+<div id="help-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+        <div class="flex items-start gap-3 mb-5">
+            <div class="w-11 h-11 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                <i data-lucide="help-circle" class="w-5 h-5 text-indigo-600"></i>
+            </div>
+            <div>
+                <h3 id="help-modal-title" class="font-bold text-gray-900 mb-1"></h3>
+                <p id="help-modal-text" class="text-sm text-gray-600 leading-relaxed"></p>
+            </div>
+        </div>
+        <div class="flex gap-3 justify-end items-center">
+            <a href="guide.php" class="text-sm font-semibold text-indigo-600">সব গাইড দেখুন →</a>
+            <button type="button" id="help-modal-close" class="px-4 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white">বুঝেছি</button>
+        </div>
+    </div>
+</div>
+
 <script>
     lucide.createIcons();
+
+    // পেজ-সাহায্য মডাল ("?" বাটন) — data-attribute থেকে টেক্সট নিয়ে দেখায়
+    function showPageHelp(btn) {
+        var m = document.getElementById('help-modal');
+        document.getElementById('help-modal-title').textContent = btn.getAttribute('data-help-title') || 'সাহায্য';
+        document.getElementById('help-modal-text').textContent = btn.getAttribute('data-help-text') || '';
+        m.classList.remove('hidden');
+    }
+    (function () {
+        var m = document.getElementById('help-modal');
+        if (!m) return;
+        var close = function () { m.classList.add('hidden'); };
+        document.getElementById('help-modal-close').addEventListener('click', close);
+        m.addEventListener('click', function (e) { if (e.target === m) close(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    })();
 
     // টোস্ট নোটিফিকেশন — ৪.৫ সেকেন্ড পর নিজে নিজে মিলিয়ে যায় (ফ্ল্যাশ মেসেজ এখন টোস্ট হিসেবে দেখায়)
     (function () {
