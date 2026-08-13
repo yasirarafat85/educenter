@@ -50,6 +50,32 @@ total_parcels + পাঠানো-সংখ্যা থেকে **কত প�
 
 ---
 
+## 🔄 রিফাইনমেন্ট (ইউজার, ২০২৬-০৮-১৩) — নতুন পেজ + courier-prepare রিকনসিলিয়েশন
+
+**ইউজারের স্পষ্ট চাওয়া**: (১) registrations.php **পরিষ্কার থাকবে** (নতুন কলাম/ভিড় না) — confirm ওখানেই। (২) গ্রুপ-যোগ + পার্সেল ট্র্যাকিং একটা **নতুন পেজে**। (৩) "পার্সেল কয়বার যাবে" (N) দিলে প্রতি শিক্ষার্থীর **N টা স্লট অটো**। (৪) কাউকে "অফ" করলে সে আর **পার্সেল প্রস্তুত লিস্টে আসবে না**। (৫) **courier-prepare-এর সাথে সংঘর্ষ/ডুপ্লিকেট নয়**।
+
+### বিদ্যমান courier-prepare (যাচাই করা)
+কোর্স-ব্যাচ বাছাই → সেই ব্যাচের সব **confirmed** রেজিস্ট্রেশন কার্ড → **সক্রিয়**(`registrations.courier_active`, স্থায়ী)/**নির্বাচন**(এই দফা)/**কালেকশন**(অটো) → **মাস লেবেল বাধ্যতামূলক** → `courier_batches` (period_label + send_status draft→sent)। **courier_active=0 হলে কার্ড dimmed+disabled** (এখন লুকায় না)।
+
+### রিকনসাইল-করা ডিজাইন (দায়িত্ব ভাগ, ডুপ্লিকেট নয়)
+- **courier-prepare = "করা"** (পার্সেল তৈরি+পাঠানো) — অপরিবর্তিত, শুধু: **`courier_active=0` লিস্টে লুকানো** (নিচে "X জন নিষ্ক্রিয় — দেখুন" টগল)। এতে "অফ করলে prepare-এ আসবে না" পূরণ, নতুন ফ্ল্যাগ লাগে না।
+- **নতুন `admin/course-tracking.php` = "দেখা/ট্র্যাক"** (পার্সেল তৈরি/পাঠায় না)। কোর্স-ব্যাচ বাছাই → উপরে **"মোট পার্সেল সংখ্যা" N** (`course_batches.total_parcels`) → প্রতি confirmed শিক্ষার্থীর রো: নাম · **FB গ্রুপ ✓** · **Messenger গ্রুপ ✓** · **সক্রিয়** টগল (courier_active) · **N টা স্লট** (courier_batches থেকে ✅পাঠানো/⏳draft/❌declined/⬜না; স্লট↔`courier_batches.parcel_no`) · প্রতি স্লটে **"❌ না" মার্ক** · **প্রগ্রেস "৩/৬"**।
+- **শেয়ার্ড ডেটা**: স্লট=`courier_batches`, অফ=`courier_active` (দুটোই prepare যা ব্যবহার করে) — ট্র্যাকিং পেজ শুধু দেখায়+টগল+declined মার্ক করে। **courier-tracking.php**-এও declined ❌ + N-প্রগ্রেস যোগ হবে।
+
+### সংশোধিত স্কিমা
+- `registrations.fb_group_added`, `messenger_group_added` (TINYINT 0)
+- `course_batches.total_parcels` (INT 0)
+- `courier_batches.parcel_no` (TINYINT NULL) + `send_status`-এ `'declined'`
+- **registrations.php-তে নতুন কলাম UI নয়** (পরিষ্কার থাকবে)
+
+### সংশোধিত ধাপ
+1. স্কিমা মাইগ্রেশন (non-destructive)।
+2. **`admin/course-tracking.php`** (সাইডবার "কোর্স ট্র্যাকিং") — গ্রুপ টগল + N স্লট + প্রগ্রেস + অফ + declined।
+3. **courier-prepare.php**: নিষ্ক্রিয় লুকানো + পার্সেল তৈরিতে `parcel_no` বসানো।
+4. **courier-tracking.php**: declined ❌ + N-প্রগ্রেস।
+
+---
+
 ## 🧪 টেস্ট ও নিয়ম
 - সব schema পরিবর্তন **isolated `educenter_test`-এ** যাচাই → real DB ব্যাকআপ → non-destructive apply → লাইভে মাইগ্রেশন (git deploy শুধু ফাইল)।
 - 🔴 **কুরিয়ার "পাঠান" কখনো লোকালে টেস্ট করবেন না** (আসল Pathao ক্রেডেনশিয়াল → সত্যিকারের অর্ডার) — declined/প্রগ্রেস লজিক DB-রো বসিয়ে ও রেন্ডার দেখে যাচাই করুন। (CLAUDE.md দ্রষ্টব্য)।
