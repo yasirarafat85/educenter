@@ -252,6 +252,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
         </div>
         <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
             <a href="index.php" class="nav-link <?= nav_active('index.php', $currentFile) ?>"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> ড্যাশবোর্ড</a>
+            <a href="guide.php" class="nav-link <?= nav_active('guide.php', $currentFile) ?>"><i data-lucide="help-circle" class="w-4 h-4"></i> গাইড / সাহায্য</a>
             <p class="nav-section">কনটেন্ট</p>
             <?php foreach (get_entities() as $navEntityKey => $navEntityConf): ?>
                 <a href="manage.php?entity=<?= e($navEntityKey) ?>" class="nav-link <?= nav_active('manage.php', $currentFile, $navEntityKey, $currentEntity) ?>"><i data-lucide="file-text" class="w-4 h-4"></i> <?= e($navEntityConf['label_plural']) ?></a>

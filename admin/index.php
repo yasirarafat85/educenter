@@ -124,6 +124,34 @@ require __DIR__ . '/includes/layout-top.php';
     </div>
 </div>
 
+<!-- কাজের লঞ্চার — দরকারি কাজ এক ট্যাপে (সাইডবার হাতড়াতে হয় না)। রঙ-ক্লাস পূর্ণ লিটারাল (ডাইনামিক না) যাতে Tailwind স্ক্যানার ধরে -->
+<?php
+$quickTasks = [
+    ['url' => 'manage.php?entity=courses',      'icon' => 'book-open',       'label' => 'কোর্স',           'desc' => 'কোর্স/ব্যাচ যোগ-এডিট', 'cls' => 'bg-indigo-100 text-indigo-600'],
+    ['url' => 'registrations.php',               'icon' => 'clipboard-list',  'label' => 'অর্ডার',          'desc' => 'রেজিস্ট্রেশন দেখুন',    'cls' => 'bg-blue-100 text-blue-600'],
+    ['url' => 'users.php',                       'icon' => 'users',           'label' => 'অভিভাবক',         'desc' => 'অ্যাকাউন্ট approve',    'cls' => 'bg-green-100 text-green-600'],
+    ['url' => 'course-interests.php',            'icon' => 'heart-handshake', 'label' => 'আগ্রহ তালিকা',     'desc' => 'ওয়েটিং লিস্ট',         'cls' => 'bg-pink-100 text-pink-600'],
+    ['url' => 'courier-prepare.php',             'icon' => 'package',         'label' => 'পার্সেল প্রস্তুত',   'desc' => 'কুরিয়ার তৈরি',         'cls' => 'bg-amber-100 text-amber-600'],
+    ['url' => 'courier.php',                     'icon' => 'truck',           'label' => 'কুরিয়ার',         'desc' => 'পাঠান ও ট্র্যাক',       'cls' => 'bg-purple-100 text-purple-600'],
+    ['url' => 'finance.php',                     'icon' => 'pie-chart',       'label' => 'আয়-ব্যয়',         'desc' => 'হিসাব দেখুন',           'cls' => 'bg-emerald-100 text-emerald-600'],
+    ['url' => 'guide.php',                       'icon' => 'help-circle',     'label' => 'গাইড / সাহায্য',   'desc' => 'কোনটা কীসের কাজ',      'cls' => 'bg-fuchsia-100 text-fuchsia-600'],
+];
+?>
+<div class="mb-6">
+    <h3 class="text-sm font-bold text-gray-500 mb-3 flex items-center gap-2"><i data-lucide="zap" class="w-4 h-4"></i> কী করতে চান?</h3>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <?php foreach ($quickTasks as $t): ?>
+        <a href="<?= e($t['url']) ?>" class="bg-white rounded-2xl shadow p-4 flex items-start gap-3 hover:shadow-lg hover:-translate-y-0.5 transition-all">
+            <span class="inline-flex w-10 h-10 items-center justify-center rounded-xl flex-shrink-0 <?= $t['cls'] ?>"><i data-lucide="<?= e($t['icon']) ?>" class="w-5 h-5"></i></span>
+            <div class="min-w-0">
+                <p class="font-bold text-gray-800 text-sm leading-tight"><?= e($t['label']) ?></p>
+                <p class="text-gray-400 text-xs mt-0.5 leading-tight"><?= e($t['desc']) ?></p>
+            </div>
+        </a>
+        <?php endforeach; ?>
+    </div>
+</div>
+
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
     <div class="bg-white rounded-2xl shadow p-5 flex items-center gap-4">
         <span class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-100 text-indigo-600"><i data-lucide="calendar-check" class="w-6 h-6"></i></span>
