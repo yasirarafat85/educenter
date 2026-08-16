@@ -1,6 +1,6 @@
 # GROUP-PARCEL-TRACKING-PLAN.md — গ্রুপ-যোগ ও মাসিক পার্সেল ট্র্যাকিং (পরিকল্পনা)
 
-> স্ট্যাটাস: **পরিকল্পনা** (এখনো বানানো হয়নি)। ইউজার ২০২৬-০৮-১৩ এ চেয়েছেন। context হারালেও এখান থেকে শুরু করা যাবে।
+> স্ট্যাটাস: **✅ সম্পন্ন (২০২৬-০৮-১৩)**। বানানো হয়েছে: `admin/course-tracking.php` (নতুন পেজ), `registrations.fb_group_added`/`messenger_group_added` + `course_batches.total_parcels` কলাম (`database/migrate-course-tracking.sql`), `send_status='declined'` মান, `courier-prepare.php`-এ নিষ্ক্রিয় লুকানো (`prep_card()` রিফ্যাক্টর), `courier-tracking.php`-এ declined রেন্ডার। isolated টেস্টে যাচাইকৃত। বিস্তারিত CLAUDE.md ও CHANGELOG দেখুন। (নিচের মূল পরিকল্পনা ঐতিহাসিক রেফারেন্স হিসেবে রাখা।)
 
 ## 🎯 ইউজারের চাওয়া (হুবহু প্রেক্ষাপট)
 
@@ -67,6 +67,9 @@ total_parcels + পাঠানো-সংখ্যা থেকে **কত প�
 - `course_batches.total_parcels` (INT 0)
 - `courier_batches.parcel_no` (TINYINT NULL) + `send_status`-এ `'declined'`
 - **registrations.php-তে নতুন কলাম UI নয়** (পরিষ্কার থাকবে)
+
+### কলাম সিদ্ধান্ত (ইউজার নিশ্চিত ২০২৬-০৮-১৩)
+মূল কলাম: **শিশুর নাম · মোবাইল (মা) · ফেসবুক আইডি নাম** — তারপর FB/Messenger গ্রুপ টগল · সক্রিয় · N স্লট · প্রগ্রেস। **রিসিভার নাম/নম্বর/ঠিকানা** = প্রতি রো "বিস্তারিত" expand-এ (মূল টেবিল পরিষ্কার)। আইটেম/ব্যাচ পেজ-হেডারে; জন্মতারিখ/বাবার মোবাইল বাদ।
 
 ### সংশোধিত ধাপ
 1. স্কিমা মাইগ্রেশন (non-destructive)।

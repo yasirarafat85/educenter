@@ -197,44 +197,21 @@ function prep_field(string $label, ?string $value, string $icon = ''): string
         . '<span class="text-xs font-semibold text-gray-800 break-words min-w-0">' . ($val !== '' ? e($val) : '<span class="text-gray-300 font-normal">—</span>') . '</span>'
         . '</div>';
 }
-?>
-<div class="max-w-2xl">
-    <a href="courier-prepare.php" class="inline-flex items-center gap-1 text-indigo-600 font-semibold text-sm mb-3 py-1"><i data-lucide="arrow-left" class="w-4 h-4"></i> সব কোর্স-ব্যাচ</a>
 
-    <form method="post" id="prepForm">
-        <?= csrf_field() ?>
-        <input type="hidden" name="action" id="prepAction" value="save-drafts">
-        <input type="hidden" name="item_id" value="<?= (int) $itemId ?>">
+// সক্রিয় ও নিষ্ক্রিয় আলাদা করা হয় — নিষ্ক্রিয় (courier_active=0) শিক্ষার্থী ডিফল্টে লিস্টে দেখাবে না
+// (ইউজারের স্পষ্ট চাওয়া: "অফ করে দিলে সেই গুলো আর পার্সেল প্রস্তুত লিস্টে যাবে না")। তবে নিচে একটা
+// ভাঁজ-করা সেকশনে রাখা হয় যাতে দরকার হলে আবার সক্রিয় করা যায়।
+$activeRegs   = array_values(array_filter($regs, fn($r) => (int) ($r['courier_active'] ?? 1) === 1));
+$inactiveRegs = array_values(array_filter($regs, fn($r) => (int) ($r['courier_active'] ?? 1) !== 1));
 
-        <div class="bg-white rounded-2xl shadow p-4 mb-4">
-            <div class="flex items-start justify-between gap-3 flex-wrap">
-                <div class="min-w-0">
-                    <div class="text-xs text-gray-400">কোর্স</div>
-                    <div class="font-bold text-gray-800 break-words"><?= e($course['title'] ?? '') ?></div>
-                    <div class="text-xs text-gray-400 mt-1">ব্যাচ</div>
-                    <div class="font-semibold text-indigo-600 text-sm break-words"><?= e($course['batch_name'] ?? '') ?></div>
-                    <div class="text-xs text-gray-500 mt-2">মান্থলি ফি (কোর্স-ফি): ৳<?= e(number_format($courseFee)) ?> · প্রিসেট: ঢাকা ৳<?= (int) $dc['dhaka'] ?> · কাছে ৳<?= (int) $dc['near'] ?> · বাইরে ৳<?= (int) $dc['outside'] ?> · ওজন+ ৳<?= (int) $wxExtra ?></div>
-                </div>
-                <label class="text-xs text-gray-600 flex-shrink-0">
-                    মাস/পার্সেল <span class="text-red-500 font-bold">*</span>
-                    <input type="text" name="period" id="periodInput" value="<?= e($period) ?>" required placeholder="যেমন: ১ম মাস"
-                           class="block border rounded-lg px-3 py-2 text-sm mt-1" style="width:150px;" list="periodList">
-                    <datalist id="periodList"><option value="১ম মাস"><option value="২য় মাস"><option value="৩য় মাস"><option value="৪র্থ মাস"><option value="৫ম মাস"><option value="৬ষ্ঠ মাস"></datalist>
-                    <span class="block text-[11px] text-gray-400 mt-1" style="max-width:150px;">না দিলে পার্সেল তৈরি বা পাঠানো যাবে না</span>
-                </label>
-            </div>
-        </div>
-
-        <?php if (!$regs): ?>
-            <div class="bg-white rounded-2xl shadow empty-state"><div class="empty-ic"><i data-lucide="users" class="w-8 h-8"></i></div>এই ব্যাচে কোনো confirmed রেজিস্ট্রেশন নেই।</div>
-        <?php else: ?>
-            <div class="space-y-3 pb-32">
-            <?php foreach ($regs as $r):
-                $rid = (int) $r['id'];
-                $notes = $notesByReg[$rid] ?? [];
-                $active = (int) ($r['courier_active'] ?? 1);
-                $done = $alreadyThisPeriod[$rid] ?? null;
-            ?>
+/** একটা রেজিস্ট্রেশন কার্ড রেন্ডার করে (সক্রিয় ও নিষ্ক্রিয় দুই তালিকাতেই একই মার্কআপ রিইউজ) */
+function prep_card(array $r, float $courseFee, array $notesByReg, array $alreadyThisPeriod, int $itemId, string $period): void
+{
+    $rid    = (int) $r['id'];
+    $notes  = $notesByReg[$rid] ?? [];
+    $active = (int) ($r['courier_active'] ?? 1);
+    $done   = $alreadyThisPeriod[$rid] ?? null;
+    ?>
                 <div class="stu bg-white rounded-2xl shadow p-4 <?= $active ? '' : 'opacity-60' ?>" data-fee="<?= (int) $courseFee ?>">
                     <input type="hidden" name="bd[<?= $rid ?>][present]" value="1">
 
@@ -303,10 +280,63 @@ function prep_field(string $label, ?string $value, string $icon = ''): string
                         </div>
                     </div>
                 </div>
-            <?php endforeach; ?>
-            </div>
+    <?php
+}
+?>
+<div class="max-w-2xl">
+    <a href="courier-prepare.php" class="inline-flex items-center gap-1 text-indigo-600 font-semibold text-sm mb-3 py-1"><i data-lucide="arrow-left" class="w-4 h-4"></i> সব কোর্স-ব্যাচ</a>
 
-            <?php // ── স্টিকি অ্যাকশন বার ── ?>
+    <form method="post" id="prepForm">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" id="prepAction" value="save-drafts">
+        <input type="hidden" name="item_id" value="<?= (int) $itemId ?>">
+
+        <div class="bg-white rounded-2xl shadow p-4 mb-4">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="text-xs text-gray-400">কোর্স</div>
+                    <div class="font-bold text-gray-800 break-words"><?= e($course['title'] ?? '') ?></div>
+                    <div class="text-xs text-gray-400 mt-1">ব্যাচ</div>
+                    <div class="font-semibold text-indigo-600 text-sm break-words"><?= e($course['batch_name'] ?? '') ?></div>
+                    <div class="text-xs text-gray-500 mt-2">মান্থলি ফি (কোর্স-ফি): ৳<?= e(number_format($courseFee)) ?> · প্রিসেট: ঢাকা ৳<?= (int) $dc['dhaka'] ?> · কাছে ৳<?= (int) $dc['near'] ?> · বাইরে ৳<?= (int) $dc['outside'] ?> · ওজন+ ৳<?= (int) $wxExtra ?></div>
+                </div>
+                <label class="text-xs text-gray-600 flex-shrink-0">
+                    মাস/পার্সেল <span class="text-red-500 font-bold">*</span>
+                    <input type="text" name="period" id="periodInput" value="<?= e($period) ?>" required placeholder="যেমন: ১ম মাস"
+                           class="block border rounded-lg px-3 py-2 text-sm mt-1" style="width:150px;" list="periodList">
+                    <datalist id="periodList"><option value="১ম মাস"><option value="২য় মাস"><option value="৩য় মাস"><option value="৪র্থ মাস"><option value="৫ম মাস"><option value="৬ষ্ঠ মাস"></datalist>
+                    <span class="block text-[11px] text-gray-400 mt-1" style="max-width:150px;">না দিলে পার্সেল তৈরি বা পাঠানো যাবে না</span>
+                </label>
+            </div>
+        </div>
+
+        <?php if (!$regs): ?>
+            <div class="bg-white rounded-2xl shadow empty-state"><div class="empty-ic"><i data-lucide="users" class="w-8 h-8"></i></div>এই ব্যাচে কোনো confirmed রেজিস্ট্রেশন নেই।</div>
+        <?php elseif (!$activeRegs && $inactiveRegs): ?>
+            <div class="bg-white rounded-2xl shadow empty-state"><div class="empty-ic"><i data-lucide="user-x" class="w-8 h-8"></i></div>এই ব্যাচের সব শিক্ষার্থী নিষ্ক্রিয় করা — নিচে থেকে সক্রিয় করলে তবেই পার্সেল তৈরি করা যাবে।</div>
+        <?php endif; ?>
+
+        <?php if ($activeRegs): ?>
+            <div class="space-y-3 pb-32">
+            <?php foreach ($activeRegs as $r) { prep_card($r, $courseFee, $notesByReg, $alreadyThisPeriod, $itemId, $period); } ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($inactiveRegs): ?>
+            <details class="mt-2 mb-32">
+                <summary class="cursor-pointer select-none text-sm font-semibold text-gray-500 py-2 px-1 flex items-center gap-1.5">
+                    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                    নিষ্ক্রিয় শিক্ষার্থী (<?= e(number_format(count($inactiveRegs))) ?> জন) — এরা পার্সেল লিস্টে নেই, দেখতে/আবার সক্রিয় করতে ক্লিক করুন
+                </summary>
+                <div class="space-y-3 mt-3">
+                <?php foreach ($inactiveRegs as $r) { prep_card($r, $courseFee, $notesByReg, $alreadyThisPeriod, $itemId, $period); } ?>
+                </div>
+            </details>
+        <?php endif; ?>
+
+        <?php if ($regs): ?>
+
+            <?php // ── স্টিকি অ্যাকশন বার (নিষ্ক্রিয় থেকে কেউ আবার সক্রিয় করলেও সেভ করা যায় বলে সবসময় দেখানো হয়) ── ?>
             <div class="fixed inset-x-0 bottom-0 bg-white border-t border-gray-200 px-4 py-3 z-30" style="box-shadow:0 -4px 20px rgba(0,0,0,0.08);">
                 <div class="max-w-2xl mx-auto flex items-center gap-3 flex-wrap">
                     <label class="flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer flex-shrink-0">

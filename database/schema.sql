@@ -115,6 +115,7 @@ CREATE TABLE course_batches (
     description TEXT,
     fb_group_url VARCHAR(500) DEFAULT NULL,        -- এই কোর্স কেনা অভিভাবক অ্যাকাউন্টে দেখবেন (প্রাইভেট FB গ্রুপ)
     messenger_group_url VARCHAR(500) DEFAULT NULL, -- একইভাবে Messenger গ্রুপ
+    total_parcels INT NOT NULL DEFAULT 0, -- এই কোর্স-ব্যাচে মোট কয়বার পার্সেল যাবে (কোর্স ট্র্যাকিং স্লট-সংখ্যা)
     hide_parcel TINYINT(1) NOT NULL DEFAULT 0, -- Yes হলে রেজিস্ট্রেশন ফর্মে রিসিভার নাম/নম্বর/ঠিকানা হাইড থাকবে (ফুল অনলাইন ব্যাচের জন্য)
     registration_open TINYINT(1) NOT NULL DEFAULT 1, -- এই নির্দিষ্ট ব্যাচের রেজিস্ট্রেশন চালু/বন্ধ (is_active থেকে আলাদা — বন্ধ হলে ব্যাচ সাইটে দেখাবে কিন্তু রেজিস্ট্রেশন ফর্ম আসবে না)
     is_active TINYINT(1) NOT NULL DEFAULT 1, -- এই ব্যাচ সাইটে দেখাবে কিনা
@@ -328,6 +329,8 @@ CREATE TABLE registrations (
     courier_provider VARCHAR(50),
     courier_consignment_id VARCHAR(100),
     courier_active TINYINT(1) NOT NULL DEFAULT 1, -- অ্যাডমিন এটা বন্ধ করলে এই রেজিস্ট্রেশন কুরিয়ার লিস্টে দেখা যাবে (ইতিহাসের জন্য) কিন্তু বাল্ক-সিলেক্ট/পাঠানোর জন্য বাছাই করা যাবে না — যেমন "এটা কুরিয়ারে যাবে না" এমন confirmed অর্ডার
+    fb_group_added TINYINT(1) NOT NULL DEFAULT 0, -- Facebook গ্রুপে যোগ হয়েছে? (কোর্স ট্র্যাকিং)
+    messenger_group_added TINYINT(1) NOT NULL DEFAULT 0, -- Messenger গ্রুপে যোগ হয়েছে? (কোর্স ট্র্যাকিং)
     income_approved TINYINT(1) NOT NULL DEFAULT 0, -- এই অর্ডার থেকে আয় হিসেবে অনুমোদন করা হয়েছে কিনা (income টেবিলে ডুপ্লিকেট এন্ট্রি ঠেকাতে)
     income_amount DECIMAL(10,2) NULL,               -- অনুমোদনের সময় যে পরিমাণ আয় ধরা হয়েছিল
     approved_at TIMESTAMP NULL,

@@ -11,9 +11,10 @@ $pageTitle = 'কুরিয়ার ট্র্যাকিং';
 $itemId = (int) ($_GET['item_id'] ?? 0);
 
 $statusMeta = [
-    'draft'  => ['প্রস্তুত', 'bg-gray-100 text-gray-600', 'clock'],
-    'sent'   => ['পাঠানো', 'bg-green-100 text-green-700', 'check'],
-    'failed' => ['ব্যর্থ', 'bg-red-100 text-red-700', 'x'],
+    'draft'    => ['প্রস্তুত', 'bg-gray-100 text-gray-600', 'clock'],
+    'sent'     => ['পাঠানো', 'bg-green-100 text-green-700', 'check'],
+    'failed'   => ['ব্যর্থ', 'bg-red-100 text-red-700', 'x'],
+    'declined' => ['এই দফা না', 'bg-red-50 text-red-600', 'x-circle'],
 ];
 
 require __DIR__ . '/includes/layout-top.php';
@@ -129,7 +130,7 @@ $periods = array_keys($periods);
                     <div class="font-bold text-gray-800 text-sm break-words"><?= e($p) ?></div>
                     <div class="text-xl font-black text-gray-900 mt-1">৳<?= e(number_format($ps['amount'])) ?></div>
                     <div class="flex flex-wrap gap-1 mt-2">
-                        <?php foreach (['sent', 'draft', 'failed'] as $st): if (empty($ps[$st])) continue; $m = $statusMeta[$st]; ?>
+                        <?php foreach (['sent', 'draft', 'failed', 'declined'] as $st): if (empty($ps[$st])) continue; $m = $statusMeta[$st]; ?>
                             <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold <?= $m[1] ?>"><i data-lucide="<?= $m[2] ?>" class="w-3 h-3"></i><?= (int) $ps[$st] ?></span>
                         <?php endforeach; ?>
                         <span class="text-[11px] text-gray-400 self-center"><?= (int) $ps['total'] ?>/<?= count($regs) ?> জন</span>
