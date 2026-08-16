@@ -248,6 +248,10 @@ $notesByReg = fetch_registration_notes($db, array_map(fn($r) => (int) $r['id'], 
 $activeRegs   = array_values(array_filter($regs, fn($r) => (int) ($r['courier_active'] ?? 1) === 1));
 $inactiveRegs = array_values(array_filter($regs, fn($r) => (int) ($r['courier_active'] ?? 1) !== 1));
 
+// নিষ্ক্রিয় কিন্তু এখনো FB/Messenger গ্রুপে (✅) আছে — এদের গ্রুপ থেকে বাদ দিতে হবে (নাহলে টাস্ক হারিয়ে যায়)।
+// নিষ্ক্রিয় করলে ভাঁজে চলে যায় বলে এটা সহজে চোখে পড়ে না — তাই উপরে সতর্কতা + ভাঁজ auto-খোলা।
+$pendingGroupRemoval = array_values(array_filter($inactiveRegs, fn($r) => !empty($r['fb_group_added']) || !empty($r['messenger_group_added'])));
+
 // নির্বাচিত মাসে আগে থেকে কোনো (সক্রিয়) শিক্ষার্থীর ব্যাচ আছে কিনা → সেভে "পরিবর্তন" ওয়ার্নিং
 $periodHasExisting = false;
 if ($selLabel) { foreach ($activeRegs as $r) { if (isset($byRegPeriod[(int) $r['id']][$selLabel])) { $periodHasExisting = true; break; } } }
@@ -324,6 +328,21 @@ function cp_cell(?array $b): array
     <?php require __DIR__ . '/includes/layout-bottom.php'; exit; ?>
 <?php endif; ?>
 
+<?php // ── নিষ্ক্রিয় কিন্তু এখনো গ্রুপে — "বাদ দিতে হবে" সতর্কতা ── ?>
+<?php if ($pendingGroupRemoval): ?>
+    <div class="rounded-2xl shadow p-4 mb-4 bg-red-50 border border-red-200">
+        <div class="font-bold text-red-800">⚠ <?= cp_bn(count($pendingGroupRemoval)) ?> জন নিষ্ক্রিয় শিক্ষার্থী এখনো গ্রুপে আছে</div>
+        <p class="text-sm text-red-900 mt-1">এদের FB/Messenger গ্রুপ থেকে বাদ দিন, তারপর নিচের "নিষ্ক্রিয় শিক্ষার্থী" অংশে গিয়ে সেই টিক (✅) তুলে দিন — তাহলে বোঝা যাবে কাজটা হয়ে গেছে।</p>
+        <div class="flex flex-wrap gap-1.5 mt-2">
+            <?php foreach ($pendingGroupRemoval as $pr): ?>
+                <span class="text-xs px-2 py-1 rounded-lg bg-white border border-red-200 text-red-800 font-semibold">
+                    <?= e($pr['customer_name']) ?><?= !empty($pr['fb_group_added']) ? ' · FB' : '' ?><?= !empty($pr['messenger_group_added']) ? ' · Msngr' : '' ?>
+                </span>
+            <?php endforeach; ?>
+        </div>
+    </div>
+<?php endif; ?>
+
 <?php // ══════════ Section 1 — অবস্থা (শিক্ষার্থী × মাস ম্যাট্রিক্স) ══════════ ?>
 <div class="flex items-center gap-2 mb-2"><span class="text-sm font-bold text-gray-700">১ · অবস্থা</span><span class="text-xs text-gray-400">গ্রুপে যোগ · সক্রিয়/নিষ্ক্রিয় · কোন মাসে কী (মাসে ক্লিক করে নিচে কাজ করুন)</span></div>
 
@@ -336,8 +355,9 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
     $sentCount = 0;
     for ($i = 1; $i <= $months; $i++) { if (($byRegPeriod[$rid][cp_month_label($i)]['send_status'] ?? '') === 'sent') { $sentCount++; } }
     ?>
+    <?php $needsRemoval = !$active && ($fbOn || $msgOn); ?>
     <tr class="border-b last:border-0 hover:bg-gray-50 <?= $active ? '' : 'opacity-60' ?>">
-        <td class="py-2.5 px-3 font-semibold text-gray-900 whitespace-nowrap"><?= e($r['customer_name']) ?><div class="text-[11px] text-gray-400 font-normal font-mono"><?= e($r['phone']) ?></div></td>
+        <td class="py-2.5 px-3 font-semibold text-gray-900 whitespace-nowrap"><?= e($r['customer_name']) ?><div class="text-[11px] text-gray-400 font-normal font-mono"><?= e($r['phone']) ?></div><?php if ($needsRemoval): ?><div class="text-[11px] text-red-600 font-semibold mt-0.5">⚠ গ্রুপ থেকে বাদ দিন</div><?php endif; ?></td>
         <td class="py-2.5 px-2 text-center">
             <form method="post" action="course-parcel.php" class="inline" onsubmit="return <?= $fbOn ? "confirmSubmit(this, 'FB গ্রুপ থেকে টিক তুলে ফেলবেন?', 'টিক তুলবেন?')" : 'true' ?>;"><?= csrf_field() ?>
                 <input type="hidden" name="action" value="group"><input type="hidden" name="field" value="fb"><input type="hidden" name="item_id" value="<?= $itemId ?>"><input type="hidden" name="id" value="<?= $rid ?>"><input type="hidden" name="month" value="<?= $selMonth ?>"><input type="hidden" name="value" value="<?= $fbOn ? 0 : 1 ?>">
@@ -406,9 +426,9 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
 <?php else: ?><div class="mb-6"></div><?php endif; ?>
 
 <?php if ($inactiveRegs): ?>
-    <details class="mb-6">
-        <summary class="cursor-pointer select-none text-sm font-semibold text-gray-500 py-2 px-1 flex items-center gap-1.5">
-            <i data-lucide="chevron-right" class="w-4 h-4"></i> নিষ্ক্রিয় শিক্ষার্থী (<?= cp_bn(count($inactiveRegs)) ?> জন) — দেখতে/আবার সক্রিয় করতে ক্লিক করুন
+    <details class="mb-6" <?= $pendingGroupRemoval ? 'open' : '' ?>>
+        <summary class="cursor-pointer select-none text-sm font-semibold <?= $pendingGroupRemoval ? 'text-red-600' : 'text-gray-500' ?> py-2 px-1 flex items-center gap-1.5">
+            <i data-lucide="chevron-right" class="w-4 h-4"></i> নিষ্ক্রিয় শিক্ষার্থী (<?= cp_bn(count($inactiveRegs)) ?> জন)<?= $pendingGroupRemoval ? ' — ' . cp_bn(count($pendingGroupRemoval)) . ' জন এখনো গ্রুপে (বাদ দিন)' : ' — দেখতে/আবার সক্রিয় করতে ক্লিক করুন' ?>
         </summary>
         <div class="bg-white rounded-2xl shadow overflow-x-auto mt-2"><table class="w-full text-sm"><tbody>
         <?php foreach ($inactiveRegs as $r) { $render_row($r); } ?>
