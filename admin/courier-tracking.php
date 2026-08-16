@@ -113,7 +113,7 @@ $periods = array_keys($periods);
             প্রতিটা ঘরে ঐ মাসের কালেকশন — <span class="text-green-700 font-semibold">✅ পাঠানো</span> ·
             <span class="text-gray-600 font-semibold">⏳ প্রস্তুত (এখনো পাঠানো হয়নি)</span> ·
             <span class="text-red-700 font-semibold">✗ ব্যর্থ</span> · — এখনো তৈরি হয়নি।
-            <a href="courier-prepare.php?item_id=<?= (int) $itemId ?>" class="text-indigo-600 font-semibold inline-block py-1">নতুন পার্সেল প্রস্তুত করুন →</a>
+            <a href="course-parcel.php?item_id=<?= (int) $itemId ?>" class="text-indigo-600 font-semibold inline-block py-1">নতুন পার্সেল প্রস্তুত করুন →</a>
         </p>
     </div>
 

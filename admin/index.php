@@ -131,7 +131,7 @@ $quickTasks = [
     ['url' => 'registrations.php',               'icon' => 'clipboard-list',  'label' => 'অর্ডার',          'desc' => 'রেজিস্ট্রেশন দেখুন',    'cls' => 'bg-blue-100 text-blue-600'],
     ['url' => 'users.php',                       'icon' => 'users',           'label' => 'অভিভাবক',         'desc' => 'অ্যাকাউন্ট approve',    'cls' => 'bg-green-100 text-green-600'],
     ['url' => 'course-interests.php',            'icon' => 'heart-handshake', 'label' => 'আগ্রহ তালিকা',     'desc' => 'ওয়েটিং লিস্ট',         'cls' => 'bg-pink-100 text-pink-600'],
-    ['url' => 'courier-prepare.php',             'icon' => 'package',         'label' => 'পার্সেল প্রস্তুত',   'desc' => 'কুরিয়ার তৈরি',         'cls' => 'bg-amber-100 text-amber-600'],
+    ['url' => 'course-parcel.php',              'icon' => 'package-check',   'label' => 'কোর্স পার্সেল',    'desc' => 'গ্রুপ+পার্সেল ট্র্যাক', 'cls' => 'bg-amber-100 text-amber-600'],
     ['url' => 'courier.php',                     'icon' => 'truck',           'label' => 'কুরিয়ার',         'desc' => 'পাঠান ও ট্র্যাক',       'cls' => 'bg-purple-100 text-purple-600'],
     ['url' => 'finance.php',                     'icon' => 'pie-chart',       'label' => 'আয়-ব্যয়',         'desc' => 'হিসাব দেখুন',           'cls' => 'bg-emerald-100 text-emerald-600'],
     ['url' => 'guide.php',                       'icon' => 'help-circle',     'label' => 'গাইড / সাহায্য',   'desc' => 'কোনটা কীসের কাজ',      'cls' => 'bg-fuchsia-100 text-fuchsia-600'],

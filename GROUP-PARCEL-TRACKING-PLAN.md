@@ -1,6 +1,6 @@
 # GROUP-PARCEL-TRACKING-PLAN.md — গ্রুপ-যোগ ও মাসিক পার্সেল ট্র্যাকিং (পরিকল্পনা)
 
-> স্ট্যাটাস: **✅ সম্পন্ন (২০২৬-০৮-১৩)**। বানানো হয়েছে: `admin/course-tracking.php` (নতুন পেজ), `registrations.fb_group_added`/`messenger_group_added` + `course_batches.total_parcels` কলাম (`database/migrate-course-tracking.sql`), `send_status='declined'` মান, `courier-prepare.php`-এ নিষ্ক্রিয় লুকানো (`prep_card()` রিফ্যাক্টর), `courier-tracking.php`-এ declined রেন্ডার। isolated টেস্টে যাচাইকৃত। বিস্তারিত CLAUDE.md ও CHANGELOG দেখুন। (নিচের মূল পরিকল্পনা ঐতিহাসিক রেফারেন্স হিসেবে রাখা।)
+> স্ট্যাটাস: **✅ সম্পন্ন (২০২৬-০৮-১৩), তারপর ২০২৬-০৮-১৬-এ ডিজাইন সহজীকরণ**। প্রথমে আলাদা `admin/course-tracking.php` বানানো হয়েছিল; ইউজারের ডিজাইন-রিভিউ ফিডব্যাকে সেটা "পার্সেল প্রস্তুত"-এর সাথে **এক পেজে মিলিয়ে `admin/course-parcel.php`** করা হয়েছে (পুরনো দুই ফাইল এখন রিডাইরেক্ট)। স্কিমা একই (`registrations.fb_group_added`/`messenger_group_added` + `course_batches.total_parcels`, `database/migrate-course-tracking.sql`; `send_status='declined'`)। নতুন: hide_parcel বাদ, upsert (ডুপ্লিকেট নেই), প্রথমবার-ছাড়া-পরে ওয়ার্নিং। বিস্তারিত CLAUDE.md ("কোর্স পার্সেল") ও CHANGELOG (২০২৬-০৮-১৬) দেখুন। (নিচের মূল পরিকল্পনা ঐতিহাসিক রেফারেন্স।)
 
 ## 🎯 ইউজারের চাওয়া (হুবহু প্রেক্ষাপট)
 

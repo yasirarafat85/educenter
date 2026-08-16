@@ -381,7 +381,7 @@ require __DIR__ . '/includes/layout-top.php';
     <button id="courierBulkBtn" type="button" onclick="submitBulkCourier()" disabled class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white font-semibold px-5 py-3 rounded-xl text-sm">
         <i data-lucide="truck" class="w-4 h-4 inline"></i> নির্বাচিত (<span id="courierSelCount">০</span>) টি কুরিয়ারে পাঠান
     </button>
-    <span class="text-xs text-gray-400">নতুন পার্সেল তৈরি করতে <a href="courier-prepare.php" class="text-indigo-600 font-semibold">পার্সেল প্রস্তুত</a> পেজে যান।</span>
+    <span class="text-xs text-gray-400">নতুন পার্সেল তৈরি করতে <a href="course-parcel.php" class="text-indigo-600 font-semibold">কোর্স পার্সেল</a> পেজে যান।</span>
 </div>
 <?php endif; ?>
 
@@ -421,7 +421,7 @@ require __DIR__ . '/includes/layout-top.php';
         <tbody>
         <?php if (!$rows): ?>
             <tr><td colspan="13" class="py-6 px-4 text-center text-gray-400">
-                <?= $activeCourierFilters ? 'এই ফিল্টারে কোনো পার্সেল পাওয়া যায়নি।' : 'এখনো কোনো পার্সেল তৈরি হয়নি — <a href="courier-prepare.php" class="text-indigo-600 font-semibold">পার্সেল প্রস্তুত</a> পেজ থেকে কোর্স-ব্যাচ বেছে নিয়ে তৈরি করুন।' ?>
+                <?= $activeCourierFilters ? 'এই ফিল্টারে কোনো পার্সেল পাওয়া যায়নি।' : 'এখনো কোনো পার্সেল তৈরি হয়নি — <a href="course-parcel.php" class="text-indigo-600 font-semibold">কোর্স পার্সেল</a> পেজ থেকে কোর্স-ব্যাচ বেছে নিয়ে তৈরি করুন।' ?>
             </td></tr>
         <?php endif; ?>
         <?php foreach ($rows as $row):
