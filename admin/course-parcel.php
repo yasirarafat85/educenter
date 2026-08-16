@@ -98,26 +98,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         $insDeclined = $db->prepare('INSERT INTO courier_batches (registration_id, period_label, amount_to_collect, send_status) VALUES (:r, :p, 0, "declined")');
         $updDeclined = $db->prepare('UPDATE courier_batches SET send_status="declined", amount_to_collect=0 WHERE id = :id');
+        // পাঠানো ব্যাচের ফিল্ড আপডেট (রেকর্ড সংশোধন) — send_status ছোঁয় না
+        $updSent = $db->prepare('UPDATE courier_batches SET item_description=:d, amount_to_collect=:amt, delivery_zone=:z, weight_extra=:wx, adjustment=:adj, adjustment_reason=:rs WHERE id = :id');
 
-        $prep = 0; $declined = 0; $sent = 0; $failed = []; $skipped = 0;
+        $prep = 0; $declined = 0; $sent = 0; $resent = 0; $failed = []; $editedSent = 0;
         foreach (($_POST['bd'] ?? []) as $rid => $row) {
             $rid = (int) $rid;
             if (empty($row['present']) || !isset($regMap[$rid])) { continue; }
             $decision = ($row['decision'] ?? 'go') === 'no' ? 'no' : 'go';
+            $resend   = !empty($row['resend']); // পাঠানো কার্ডে "আবার পাঠান" armed কিনা
 
             $findBatch->execute(['r' => $rid, 'p' => $period]);
             $existing = $findBatch->fetch();
             $existId = $existing ? (int) $existing['id'] : 0;
             $alreadySent = $existing && $existing['send_status'] === 'sent';
 
-            if ($decision === 'no') {
-                if ($alreadySent) { $skipped++; continue; }
-                if ($existId) { $updDeclined->execute(['id' => $existId]); }
-                else { $insDeclined->execute(['r' => $rid, 'p' => $period]); }
-                $declined++;
-                continue;
-            }
-
+            // কালেকশন (নতুন/সংশোধন/আবার-পাঠানো সব ক্ষেত্রে দরকার)
             $zone = in_array($row['zone'] ?? '', ['dhaka', 'near', 'outside'], true) ? $row['zone'] : 'dhaka';
             $wx   = !empty($row['wx']);
             $adj  = (float) ($row['adj'] ?? 0);
@@ -126,7 +122,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $desc   = trim($row['desc'] ?? '') ?: null;
             $reason = trim($row['reason'] ?? '') ?: null;
 
-            if ($alreadySent) { $skipped++; continue; }
+            // ── ইতিমধ্যে পাঠানো ব্যাচ: আনলক করা না থাকলে অপরিবর্তিত (দুর্ঘটনা এড়াতে) ──
+            if ($alreadySent) {
+                if (empty($row['unlocked'])) { continue; } // 🔓 আনলক না করলে ছোঁয়া হবে না
+                $updSent->execute(['d' => $desc, 'amt' => $amt, 'z' => $zone, 'wx' => $wx ? 1 : 0, 'adj' => $adj, 'rs' => $reason, 'id' => $existId]);
+                if ($mode === 'send' && $resend) {
+                    try {
+                        $res = send_courier_batch($db, $provider, $regMap[$rid], [], $existId); // নতুন consignment
+                        if (!empty($res['success'])) { $sent++; $resent++; }
+                        else { $failed[] = ['name' => $regMap[$rid]['customer_name'], 'reason' => (string) ($res['message'] ?? 'অজানা কারণ')]; }
+                    } catch (Throwable $e) { $failed[] = ['name' => $regMap[$rid]['customer_name'], 'reason' => $e->getMessage()]; }
+                } else {
+                    $editedSent++; // শুধু তথ্য আপডেট, আবার পাঠানো হয়নি
+                }
+                continue;
+            }
+
+            if ($decision === 'no') {
+                if ($existId) { $updDeclined->execute(['id' => $existId]); }
+                else { $insDeclined->execute(['r' => $rid, 'p' => $period]); }
+                $declined++;
+                continue;
+            }
 
             if ($existId) {
                 $updDraft->execute(['d' => $desc, 'amt' => $amt, 'z' => $zone, 'wx' => $wx ? 1 : 0, 'adj' => $adj, 'rs' => $reason, 'id' => $existId]);
@@ -149,12 +166,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($mode === 'send') {
-            $_SESSION['cp_result'] = ['item' => $itemId, 'period' => cp_month_display($month), 'sent' => $sent, 'prep' => $prep, 'declined' => $declined, 'failed' => $failed, 'skipped' => $skipped];
+            $_SESSION['cp_result'] = ['item' => $itemId, 'period' => cp_month_display($month), 'sent' => $sent, 'resent' => $resent, 'prep' => $prep, 'declined' => $declined, 'failed' => $failed, 'edited' => $editedSent];
         } else {
             $bits = [];
-            if ($prep)     { $bits[] = $prep . ' জন প্রস্তুত'; }
-            if ($declined) { $bits[] = $declined . ' জন "না"'; }
-            if ($skipped)  { $bits[] = $skipped . ' জন বাদ (আগেই পাঠানো)'; }
+            if ($prep)       { $bits[] = $prep . ' জন প্রস্তুত'; }
+            if ($declined)   { $bits[] = $declined . ' জন "না"'; }
+            if ($editedSent) { $bits[] = $editedSent . ' জন (পাঠানো) তথ্য আপডেট'; }
             set_flash($bits ? 'success' : 'error', $bits ? (cp_month_display($month) . ' — ' . implode(', ', $bits) . '। (এখনো পাঠানো হয়নি)') : 'কিছু করা হয়নি — অন্তত একজন সক্রিয় শিক্ষার্থী থাকতে হবে।');
         }
         redirect(cp_url($itemId, $month));
@@ -300,9 +317,9 @@ function cp_cell(?array $b): array
             <a href="<?= e(cp_url($itemId, $selMonth)) ?>" class="text-xs text-gray-500 hover:text-gray-800">✕ বন্ধ</a>
         </div>
         <div class="flex flex-wrap gap-2 mt-2 text-sm">
-            <span class="px-2 py-1 rounded-lg bg-green-100 text-green-800 font-semibold">✓ সফল: <?= (int) $sr['sent'] ?></span>
+            <span class="px-2 py-1 rounded-lg bg-green-100 text-green-800 font-semibold">✓ সফল: <?= (int) $sr['sent'] ?><?= !empty($sr['resent']) ? ' (আবার-পাঠানো ' . (int) $sr['resent'] . ')' : '' ?></span>
             <?php if ($hasFail): ?><span class="px-2 py-1 rounded-lg bg-red-100 text-red-800 font-semibold">✕ ব্যর্থ: <?= count($sr['failed']) ?></span><?php endif; ?>
-            <?php if ($sr['skipped']): ?><span class="px-2 py-1 rounded-lg bg-gray-100 text-gray-700 font-semibold">বাদ: <?= (int) $sr['skipped'] ?></span><?php endif; ?>
+            <?php if (!empty($sr['edited'])): ?><span class="px-2 py-1 rounded-lg bg-gray-100 text-gray-700 font-semibold">তথ্য আপডেট: <?= (int) $sr['edited'] ?></span><?php endif; ?>
         </div>
         <?php if ($hasFail): ?>
             <div class="mt-3 text-sm text-red-900"><div class="font-semibold mb-1">যাদের পাঠানো যায়নি (কারণ সহ):</div>
@@ -454,6 +471,8 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
                 <div class="stu bg-white rounded-2xl shadow p-4 <?= $isNo ? 'opacity-60' : '' ?>" data-fee="<?= (int) $courseFee ?>" data-sent="<?= $isSent ? 1 : 0 ?>">
                     <input type="hidden" name="bd[<?= $rid ?>][present]" value="1">
                     <input type="hidden" name="bd[<?= $rid ?>][decision]" class="decision" value="<?= $isNo ? 'no' : 'go' ?>">
+                    <input type="hidden" name="bd[<?= $rid ?>][unlocked]" class="unlocked" value="">
+                    <input type="hidden" name="bd[<?= $rid ?>][resend]" class="resend" value="">
                     <div class="flex items-start gap-2.5 mb-3">
                         <div class="min-w-0 flex-1">
                             <div class="font-bold text-gray-900 text-sm break-words"><?= e($r['customer_name']) ?></div>
@@ -461,7 +480,11 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
                             <div class="text-[11px] text-gray-400 break-words">ঠিকানা: <?= e($r['address'] ?: '—') ?></div>
                         </div>
                         <?php if ($isSent): ?>
-                            <span class="flex-shrink-0 text-xs px-2.5 py-1.5 rounded-lg bg-green-100 text-green-700 font-semibold">✓ পাঠানো</span>
+                            <div class="flex-shrink-0 flex flex-col items-end gap-1">
+                                <span class="text-xs px-2.5 py-1.5 rounded-lg bg-green-100 text-green-700 font-semibold">✓ পাঠানো</span>
+                                <button type="button" class="unlockBtn text-xs font-semibold px-2.5 py-1 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100">🔓 আনলক</button>
+                                <button type="button" class="resendBtn text-xs font-semibold px-2.5 py-1 rounded-lg border border-indigo-300 text-indigo-700 bg-indigo-50 hidden">↻ আবার পাঠান</button>
+                            </div>
                         <?php else: ?>
                             <button type="button" class="goNoBtn flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border"></button>
                         <?php endif; ?>
@@ -527,11 +550,14 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
     el.querySelector('.autoval').textContent=auto;
     if(!manual){ amtEl.value=auto; }
     var dec=el.querySelector('.decision').value, sent=el.getAttribute('data-sent')==='1';
-    return {go: dec==='go' && !sent, no: dec==='no', t:+amtEl.value||0};
+    var resendEl=el.querySelector('.resend'), resend=resendEl && resendEl.value==='1';
+    // পাঠাবে = (নতুন যাবে) অথবা (পাঠানো + আবার-পাঠান armed)
+    var willSend=(dec==='go' && !sent) || (sent && resend);
+    return {send: willSend, resend: sent && resend, no: dec==='no' && !sent, t:+amtEl.value||0};
   }
   function refresh(){
     var s=0,g=0,no=0;
-    document.querySelectorAll('.stu').forEach(function(el){var r=calc(el); if(r.go){s+=r.t;g++;} if(r.no){no++;} paintGoNo(el);});
+    document.querySelectorAll('.stu').forEach(function(el){var r=calc(el); if(r.send){s+=r.t;g++;} if(r.no){no++;} paintGoNo(el);});
     var gc=document.getElementById('goCount'),nc=document.getElementById('noCount'),sa=document.getElementById('sumAmt');
     if(gc)gc.textContent=g; if(nc)nc.textContent=no; if(sa)sa.textContent='৳'+s;
   }
@@ -542,15 +568,31 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
     if(amtEl){ amtEl.addEventListener('input',function(){ manualEl.value='1'; refresh(); }); }
     var ab=el.querySelector('.autobtn');
     if(ab){ ab.addEventListener('click',function(){ manualEl.value=''; refresh(); }); }
+    // পাঠানো কার্ড আনলক (ওয়ার্নিং সহ) → এডিট + "আবার পাঠান" চালু
+    var ub=el.querySelector('.unlockBtn'), rb=el.querySelector('.resendBtn'),
+        unl=el.querySelector('.unlocked'), bld=el.querySelector('.builder'), re=el.querySelector('.resend');
+    if(ub){ ub.addEventListener('click',function(){
+      showConfirmModal('এই পার্সেল ইতিমধ্যে কুরিয়ারে পাঠানো হয়ে গেছে। আনলক করে টাকা/ডেলিভারি ঠিক করা যাবে বা "আবার পাঠান" করা যাবে। খেয়াল রাখুন — এটা আগের পাঠানো চালান বাতিল করে না। আনলক করবেন?',function(){
+        unl.value='1'; if(bld){ bld.classList.remove('opacity-50','pointer-events-none'); }
+        ub.classList.add('hidden'); if(rb){ rb.classList.remove('hidden'); }
+        refresh();
+      },'আনলক করবেন?');
+    }); }
+    if(rb){ rb.addEventListener('click',function(){
+      if(re.value==='1'){ re.value=''; rb.textContent='↻ আবার পাঠান'; rb.classList.remove('bg-indigo-600','text-white'); rb.classList.add('bg-indigo-50','text-indigo-700'); el.classList.remove('ring-2','ring-indigo-400'); refresh(); return; }
+      showConfirmModal('নতুন করে কুরিয়ারে পাঠাবেন? একটা নতুন চালান তৈরি হবে (আগেরটা বাতিল হবে না)। "কুরিয়ারে পাঠান" চাপলে এটা যাবে।',function(){
+        re.value='1'; rb.textContent='✓ আবার পাঠানো হবে (বাতিল করতে ক্লিক)'; rb.classList.remove('bg-indigo-50','text-indigo-700'); rb.classList.add('bg-indigo-600','text-white'); el.classList.add('ring-2','ring-indigo-400'); refresh();
+      },'আবার পাঠাবেন?');
+    }); }
   });
   function doSubmit(mode){
     document.getElementById('roundMode').value=mode;
-    var g=0,no=0,s=0;
-    document.querySelectorAll('.stu').forEach(function(el){var r=calc(el); if(r.go){g++;s+=r.t;} if(r.no)no++;});
-    if(mode==='send' && g===0){ showConfirmModal('কাউকে "যাবে" রাখা হয়নি — পাঠানোর মতো কেউ নেই।',function(){},'পাঠানো খালি'); return; }
+    var g=0,no=0,s=0,re=0;
+    document.querySelectorAll('.stu').forEach(function(el){var r=calc(el); if(r.send){g++;s+=r.t; if(r.resend)re++;} if(r.no)no++;});
+    if(mode==='send' && g===0){ showConfirmModal('কাউকে পাঠানোর জন্য বাছাই করা হয়নি (নতুন "যাবে" বা পাঠানো কার্ডে "আবার পাঠান")।',function(){},'পাঠানো খালি'); return; }
     var msg = (mode==='send')
-      ? ('মাস '+selMonth+' — '+g+' জনের পার্সেল এখনই আসল কুরিয়ারে পাঠাবেন? মোট কালেকশন ৳'+s+'। পাঠানোর পর আর ফেরানো যাবে না।')
-      : ('মাস '+selMonth+' — '+g+' জন "যাবে", '+no+' জন "না"। সেভ করলে শুধু ঠিক করে রাখা হবে (এখনো পাঠাবে না)।');
+      ? ('মাস '+selMonth+' — '+g+' জনের পার্সেল এখনই আসল কুরিয়ারে পাঠাবেন?'+(re?(' (তার মধ্যে '+re+' জন আবার-পাঠানো)'):'')+' মোট কালেকশন ৳'+s+'। পাঠানোর পর আর ফেরানো যাবে না।')
+      : ('মাস '+selMonth+' — সেভ করবেন? এটা সংবেদনশীল পেজ — শুধু ঠিক করে রাখা হবে (এখনো কুরিয়ারে পাঠাবে না)।');
     if(periodHasExisting){ msg='⚠️ এই মাসের কিছু আগে থেকেই আছে — পরিবর্তন হবে।\n\n'+msg; }
     showConfirmModal(msg,function(){ form.submit(); }, mode==='send'?'কুরিয়ারে পাঠাবেন?':'সেভ করবেন?');
   }
