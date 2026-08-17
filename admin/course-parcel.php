@@ -371,7 +371,12 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
     for ($i = 1; $i <= $months; $i++) { if (($byRegPeriod[$rid][cp_month_label($i)]['send_status'] ?? '') === 'sent') { $sentCount++; } }
     ?>
     <tr class="border-b last:border-0 hover:bg-gray-50 <?= $active ? '' : 'opacity-70' ?>">
-        <td class="py-2.5 px-3 font-semibold text-gray-900 whitespace-nowrap"><?= e($r['customer_name']) ?><div class="text-[11px] text-gray-400 font-normal font-mono"><?= e($r['phone']) ?></div><?php if ($needsRemoval): ?><div class="text-[11px] text-red-600 font-semibold mt-0.5">⚠ গ্রুপ থেকে বাদ দিন</div><?php endif; ?></td>
+        <td class="py-2.5 px-3 whitespace-nowrap">
+            <div class="font-semibold text-gray-900"><span class="text-[10px] text-gray-400 font-normal">শিশু:</span> <?= e($r['customer_name']) ?></div>
+            <div class="text-[11px] text-blue-600"><span class="text-gray-400">FB:</span> <?= e($r['facebook_id'] ?: '—') ?></div>
+            <div class="text-[11px] text-gray-400 font-mono"><?= e($r['phone']) ?></div>
+            <?php if ($needsRemoval): ?><div class="text-[11px] text-red-600 font-semibold mt-0.5">⚠ গ্রুপ থেকে বাদ দিন</div><?php endif; ?>
+        </td>
         <td class="py-2.5 px-2 text-center"><?php $grp_toggle($r, 'fb', $fbOn, $itemId, $selMonth); ?></td>
         <td class="py-2.5 px-2 text-center"><?php $grp_toggle($r, 'messenger', $msgOn, $itemId, $selMonth); ?></td>
         <td class="py-2.5 px-2 text-center">
@@ -475,7 +480,8 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
                     <input type="hidden" name="bd[<?= $rid ?>][resend]" class="resend" value="">
                     <div class="flex items-start gap-2.5 mb-3">
                         <div class="min-w-0 flex-1">
-                            <div class="font-bold text-gray-900 text-sm break-words"><?= e($r['customer_name']) ?></div>
+                            <div class="font-bold text-gray-900 text-sm break-words"><span class="text-[10px] text-gray-400 font-normal">শিশু:</span> <?= e($r['customer_name']) ?></div>
+                            <div class="text-[11px] text-blue-600 break-words"><span class="text-gray-400">ফেসবুক:</span> <?= e($r['facebook_id'] ?: '—') ?></div>
                             <div class="text-[11px] text-gray-500">রিসিভার: <?= e($r['receiver_name'] ?: $r['customer_name']) ?> · <?= e($r['receiver_phone'] ?: $r['phone']) ?></div>
                             <div class="text-[11px] text-gray-400 break-words">ঠিকানা: <?= e($r['address'] ?: '—') ?></div>
                         </div>
