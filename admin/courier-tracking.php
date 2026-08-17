@@ -21,11 +21,13 @@ require __DIR__ . '/includes/layout-top.php';
 
 // ── কোর্স-ব্যাচ বাছাই: প্রতি ব্যাচে কত মাস/কত পার্সেল গেছে সেটাও দেখানো হয় ──
 if (!$itemId) {
+    // পার্সেল হাইড করা কোর্স-ব্যাচ (hide_parcel=1) বাদ — এদের তো পার্সেলই যায় না (course-parcel.php-এর সাথে সংগতি রেখে)
     $batches = $db->query(
         "SELECT r.item_id, r.item_title, r.batch, COUNT(DISTINCT r.id) c,
                 COUNT(DISTINCT cb.period_label) months,
                 SUM(CASE WHEN cb.send_status = 'sent' THEN 1 ELSE 0 END) sent_cnt
          FROM registrations r
+         JOIN course_batches cbx ON cbx.id = r.item_id AND cbx.hide_parcel = 0
          LEFT JOIN courier_batches cb ON cb.registration_id = r.id
          WHERE r.type='course' AND r.status='confirmed'
          GROUP BY r.item_id, r.item_title, r.batch
