@@ -144,8 +144,8 @@ $quickTasks = [
         <a href="<?= e($t['url']) ?>" class="bg-white rounded-2xl shadow p-4 flex items-start gap-3 hover:shadow-lg hover:-translate-y-0.5 transition-all">
             <span class="inline-flex w-10 h-10 items-center justify-center rounded-xl flex-shrink-0 <?= $t['cls'] ?>"><i data-lucide="<?= e($t['icon']) ?>" class="w-5 h-5"></i></span>
             <div class="min-w-0">
-                <p class="font-bold text-gray-800 text-sm leading-tight"><?= e($t['label']) ?></p>
-                <p class="text-gray-400 text-xs mt-0.5 leading-tight"><?= e($t['desc']) ?></p>
+                <p class="font-bold text-gray-800 text-base leading-tight"><?= e($t['label']) ?></p>
+                <p class="text-gray-500 text-sm mt-0.5 leading-tight"><?= e($t['desc']) ?></p>
             </div>
         </a>
         <?php endforeach; ?>

@@ -334,14 +334,14 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                 </button>
                 <div class="min-w-0">
                     <?php if ($currentFile !== 'index.php'): ?>
-                    <div class="hidden sm:flex items-center gap-1.5 text-xs text-gray-400 leading-none mb-1">
-                        <a href="index.php" class="inline-flex items-center gap-1 hover:text-indigo-600"><i data-lucide="home" class="w-3 h-3"></i> হোম</a>
+                    <div class="hidden sm:flex items-center gap-1.5 text-sm text-gray-500 leading-none mb-1">
+                        <a href="index.php" class="inline-flex items-center gap-1 hover:text-indigo-600"><i data-lucide="home" class="w-4 h-4"></i> হোম</a>
                         <span>›</span>
-                        <span class="text-gray-500 font-medium truncate"><?= isset($pageTitle) ? e($pageTitle) : '' ?></span>
+                        <span class="text-gray-600 font-semibold truncate"><?= isset($pageTitle) ? e($pageTitle) : '' ?></span>
                     </div>
                     <?php endif; ?>
                     <div class="flex items-center gap-2 min-w-0">
-                        <h2 class="font-bold text-gray-800 text-base sm:text-lg truncate leading-tight"><?= isset($pageTitle) ? e($pageTitle) : '' ?></h2>
+                        <h2 class="font-bold text-gray-800 text-lg sm:text-xl truncate leading-tight"><?= isset($pageTitle) ? e($pageTitle) : '' ?></h2>
                         <?php $pageHelp = admin_page_help($currentFile); if ($pageHelp): ?>
                         <button type="button" onclick="showPageHelp(this)" data-help-title="<?= e($pageHelp[0]) ?>" data-help-text="<?= e($pageHelp[1]) ?>"
                             class="flex-shrink-0 w-6 h-6 inline-flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 font-bold text-sm leading-none" title="এই পেজ সম্পর্কে সাহায্য" aria-label="সাহায্য">?</button>

@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-08-17 (🔎 অ্যাডমিন হেডার/ড্যাশবোর্ড লেখা একটু বড় — বাংলা পড়া সহজ)
+
+- ইউজার (স্ক্রিনশট): অ্যাডমিনে বাংলা "ছোট দেখাচ্ছে বেশি" (Noto ফন্ট একটু ছোট রেন্ডার করে)।
+- **হেডার ব্রেডক্রাম্ব** (`layout-top.php`): `text-xs text-gray-400` → `text-sm text-gray-500` (হোম আইকন w-3→w-4, পেজ-নাম gray-600 font-semibold)। **পেজ টাইটেল** `text-base sm:text-lg` → `text-lg sm:text-xl`।
+- **ড্যাশবোর্ড কাজের-কার্ড** (`index.php`): লেবেল `text-sm`→`text-base`, সাব-টেক্সট `text-xs text-gray-400`→`text-sm text-gray-500`। Tailwind রিবিল্ড; লেআউট অপরিবর্তিত (শুধু সাইজ)। DB বদল লাগে না।
+
 ## 2026-08-17 (🙈 কুরিয়ার ট্র্যাকিং পিকারেও পার্সেল-হাইড কোর্স বাদ)
 
 - ইউজার: "কুরিয়ার ট্র্যাকিং"-এ পার্সেল-হাইড করা কোর্স এখনো দেখাচ্ছিল। `courier-tracking.php` কোর্স-ব্যাচ পিকারে `JOIN course_batches cbx ON cbx.id=r.item_id AND cbx.hide_parcel=0` যোগ (course-parcel.php-এর সাথে সংগতি)। courier.php batch-ভিত্তিক বলে অটো ঠিক। isolated টেস্টে যাচাই; DB বদল লাগে না।
