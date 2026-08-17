@@ -10,10 +10,13 @@
 # কপির পর অপ্রয়োজনীয়/সংবেদনশীল জিনিস public_html থেকে সরানো হয়:
 #    .git (হিস্ট্রি), .gitignore, .cpanel.yml, build/ (ডেভ), database/ (SQL —
 #    মাইগ্রেশন phpMyAdmin-এ চলে, লাইভে দরকার নেই), *.md (ডকুমেন্ট), config.example.php
+# 🔴 setup-admin.php — প্রথম-এডমিন বানানোর এক-বারের পাবলিক ফাইল (gitignored, তাই repo-তে নেই)।
+#    ইনিশিয়াল zip ইনস্টলে লাইভে থেকে গিয়েছিল — নিরাপত্তার জন্য প্রতি ডিপ্লয়ে লাইভ থেকে মুছে ফেলা হয়
+#    (যে কেউ URL জেনে অ্যাডমিন দখল করতে পারত)। ফ্রেশ ইনস্টলে zip থেকে একবার ব্যবহার করে ম্যানুয়ালি মুছুন।
 # ============================================================
 deployment:
   tasks:
     - export DEPLOYPATH=$HOME/public_html
     - /bin/cp -Rf . "$DEPLOYPATH"
     - /bin/rm -rf "$DEPLOYPATH/.git" "$DEPLOYPATH/.gitignore" "$DEPLOYPATH/.cpanel.yml" "$DEPLOYPATH/build" "$DEPLOYPATH/database" "$DEPLOYPATH/config.example.php"
-    - /bin/rm -f "$DEPLOYPATH"/*.md
+    - /bin/rm -f "$DEPLOYPATH"/*.md "$DEPLOYPATH/setup-admin.php"
