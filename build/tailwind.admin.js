@@ -3,8 +3,8 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'Hind Siliguri', 'system-ui', 'sans-serif'],
-        head: ['Plus Jakarta Sans', 'Anek Bangla', 'Hind Siliguri', 'sans-serif'],
+        sans: ['Inter', 'Noto Sans Bengali', 'system-ui', 'sans-serif'],
+        head: ['Plus Jakarta Sans', 'Noto Sans Bengali', 'sans-serif'],
       },
       colors: {
         indigo: {

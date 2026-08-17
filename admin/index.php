@@ -98,7 +98,7 @@ require __DIR__ . '/includes/layout-top.php';
         if (!window.Chart) return;
         var cs = getComputedStyle(document.documentElement);
         var vv = function (n, a) { return 'rgb(' + cs.getPropertyValue(n).trim() + (a != null ? ' / ' + a : '') + ')'; };
-        Chart.defaults.font.family = "'Hind Siliguri', 'Inter', sans-serif";
+        Chart.defaults.font.family = "'Noto Sans Bengali', 'Inter', sans-serif";
         Chart.defaults.color = vv('--c-text-muted');
         Chart.defaults.borderColor = vv('--c-border', .55);
         Chart.defaults.elements.bar.borderRadius = 6;

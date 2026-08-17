@@ -27,7 +27,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('admin_theme') || 'indigo'); } catch (e) {} })();
 </script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hind+Siliguri:wght@400;500;600;700&family=Anek+Bangla:wght@600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
 <!-- সেল্ফ-হোস্টেড কম্পাইলড Tailwind (indigo/gray → CSS ভ্যারিয়েবল ম্যাপিং কম্পাইলের সময়ই বেক করা,
      আগের ইনলাইন tailwind.config আর CDN JIT স্ক্রিপ্ট বাদ — এখন স্ট্যাটিক CSS, দ্রুত ও ঝলকমুক্ত) -->
 <link rel="stylesheet" href="assets/tailwind.css?v=<?= @filemtime(__DIR__ . '/../assets/tailwind.css') ?: '1' ?>">
@@ -46,8 +46,8 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     [data-theme="carbon"]   { --c-bg:22 18 14;  --c-bg-2:28 23 18; --c-surface:34 28 21;  --c-surface-2:44 36 27; --c-border:69 56 40;  --c-text:242 233 220; --c-text-muted:169 150 126; --c-primary:245 158 11;  --c-primary-2:251 191 36;  --glow:rgba(245,158,11,.18); }
 
     :root {
-        --font-body: 'Inter', 'Hind Siliguri', system-ui, sans-serif;
-        --font-head: 'Plus Jakarta Sans', 'Anek Bangla', 'Hind Siliguri', sans-serif;
+        --font-body: 'Inter', 'Noto Sans Bengali', system-ui, sans-serif;
+        --font-head: 'Plus Jakarta Sans', 'Noto Sans Bengali', sans-serif;
     }
     body {
         font-family: var(--font-body);

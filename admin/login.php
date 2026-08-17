@@ -40,11 +40,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin Login - EduCenter</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hind+Siliguri:wght@400;500;600;700&family=Anek+Bangla:wght@600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/tailwind.css?v=<?= @filemtime(__DIR__ . '/../assets/css/tailwind.css') ?: '1' ?>">
 <style>
-    body { font-family: 'Inter', 'Hind Siliguri', system-ui, sans-serif; line-height: 1.75; background: linear-gradient(135deg, #4F46E5, #7C6BF5, #6366F1); }
-    h1 { font-family: 'Plus Jakarta Sans', 'Anek Bangla', 'Hind Siliguri', sans-serif; }
+    body { font-family: 'Inter', 'Noto Sans Bengali', system-ui, sans-serif; line-height: 1.75; background: linear-gradient(135deg, #4F46E5, #7C6BF5, #6366F1); }
+    h1 { font-family: 'Plus Jakarta Sans', 'Noto Sans Bengali', sans-serif; }
 </style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
