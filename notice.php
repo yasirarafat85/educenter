@@ -20,7 +20,7 @@ require __DIR__ . '/includes/site-header.php';
                 <h3 class="text-xl sm:text-2xl font-bold text-gray-900"><?= e($n['title']) ?></h3>
                 <span class="text-sm text-<?= $color ?>-700 bg-<?= $color ?>-200 px-4 py-2 rounded-full font-semibold"><?= format_date_bn($n['notice_date']) ?></span>
             </div>
-            <p class="text-gray-700 text-base sm:text-lg leading-relaxed"><?= nl2br(e($n['content'])) ?></p>
+            <p class="text-gray-700 text-base sm:text-lg leading-relaxed"><?= format_rich_text($n['content']) ?></p>
         </div>
         <?php endforeach; ?>
     </div>

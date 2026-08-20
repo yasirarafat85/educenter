@@ -32,6 +32,24 @@ function e(?string $value): string
     return htmlspecialchars($value ?? '', ENT_QUOTES, 'UTF-8');
 }
 
+/**
+ * অ্যাডমিন-লেখা টেক্সটকে সুন্দর করে দেখানোর জন্য নিরাপদ "হালকা মার্কডাউন" রেন্ডারার।
+ * নোটিশ/ঘোষণার মতো জায়গায় **বোল্ড**, *ইটালিক*, লিংক ও লাইন-ব্রেক রেন্ডার করে।
+ * 🔴 নিরাপত্তা: আগে e() দিয়ে পুরো টেক্সট escape হয় (XSS বন্ধ), তারপর সীমিত ফরম্যাটিং ট্যাগ বসে —
+ *    কাঁচা HTML কখনো পাস হয় না, শুধু আমাদের তৈরি <strong>/<em>/<a>/<br>।
+ */
+function format_rich_text(?string $text): string
+{
+    $out = e($text);                                                   // ১) XSS-নিরাপদ ভিত্তি
+    $out = preg_replace('/\*\*(.+?)\*\*/su', '<strong>$1</strong>', $out); // ২) **বোল্ড**
+    $out = preg_replace('/\*([^*\r\n]+?)\*/su', '<em>$1</em>', $out);      // ৩) *ইটালিক* (বোল্ডের পর, তাই আর ** নেই)
+    $out = preg_replace_callback('~https?://[^\s<]+~u', function ($m) {    // ৪) URL অটো-লিংক
+        return '<a href="' . $m[0] . '" target="_blank" rel="noopener noreferrer" '
+             . 'style="color:#2563eb;text-decoration:underline;word-break:break-all;">' . $m[0] . '</a>';
+    }, $out);
+    return nl2br($out);                                                 // ৫) লাইন-ব্রেক
+}
+
 function redirect(string $url): void
 {
     header('Location: ' . $url);

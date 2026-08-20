@@ -128,7 +128,7 @@ function get_entities(): array
             'upload_dir' => null,
             'fields' => [
                 'title'       => ['label' => 'শিরোনাম', 'type' => 'text', 'required' => true],
-                'content'     => ['label' => 'বিস্তারিত', 'type' => 'textarea'],
+                'content'     => ['label' => 'বিস্তারিত', 'type' => 'textarea', 'help' => 'লেখা মোটা করতে দুই পাশে দুইটা তারা দিন: **এভাবে** — সাইটে বোল্ড হয়ে দেখাবে। *একটা তারা* দিলে বাঁকা (italic)। লিংক (https://...) দিলে অটো ক্লিকযোগ্য হবে। নতুন লাইন সরাসরি নতুন লাইনেই দেখাবে।'],
                 'notice_date' => ['label' => 'তারিখ', 'type' => 'date', 'required' => true],
                 'is_active'   => ['label' => 'সাইটে দেখাবে?', 'type' => 'checkbox', 'default' => 1, 'warn_off' => true, 'toggle_label' => 'নোটিশটি সাইটে দেখানো'],
             ],
