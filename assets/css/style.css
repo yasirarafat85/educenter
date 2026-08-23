@@ -149,6 +149,30 @@ body {
     z-index: 3; white-space: nowrap; pointer-events: none;
 }
 
+/* চলমান কোর্সে সবুজ "ভর্তি চলছে" ব্যাজ (সমতল পিল, উপরে-বাঁয়ে) */
+.card-ribbon-open {
+    position: absolute;
+    top: 12px; left: 12px;
+    background: #16a34a;
+    color: #fff; font-weight: 700; font-size: 12px;
+    padding: 5px 12px 5px 10px; border-radius: 9999px;
+    box-shadow: 0 3px 10px rgba(22, 163, 74, .38);
+    z-index: 3; white-space: nowrap; pointer-events: none;
+    display: inline-flex; align-items: center; gap: 6px;
+}
+.card-ribbon-open .cro-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #fff; flex-shrink: 0;
+    animation: cro-pulse 1.6s ease-in-out infinite;
+}
+@keyframes cro-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .45; transform: scale(.8); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .card-ribbon-open .cro-dot { animation: none; }
+}
+
 /* ── "উপরে যান" বাটন (২০২৬-০৭-২০) ─────────────────────────────────
    নিচে স্ক্রল করলে (JS `.show` ক্লাস বসায়) ডান-নিচে ভেসে ওঠে। রঙ সাইট
    থিম থেকে (rgb(var(--c-primary))), তাই থিম বদলালে এটাও বদলাবে।

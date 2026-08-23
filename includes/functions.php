@@ -434,6 +434,9 @@ function render_item_card(array $item, string $type): string
     $actionUrl = $type === 'course' ? 'course-register?course_id=' . $id : 'register?type=' . e($type) . '&id=' . $id;
     $image = $item['image'] ?: 'https://placehold.co/400x300?text=No+Image';
     $closedBadge = $registrationClosed ? '<div class="card-ribbon">🔜 আসছে</div>' : '';
+    // চলমান কোর্সে সবুজ "ভর্তি চলছে" ব্যাজ — কোনটায় এখন ভর্তি নেওয়া হচ্ছে এক নজরে বোঝাতে
+    $openBadge = ($type === 'course' && !empty($item['registration_open']))
+        ? '<div class="card-ribbon-open"><span class="cro-dot"></span> ভর্তি চলছে</div>' : '';
 
     $ctaBtn = $registrationClosed
         ? '<a href="course-interest?course_id=' . $id . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">জানিয়ে রাখুন</a>'
@@ -444,7 +447,7 @@ function render_item_card(array $item, string $type): string
     <div class="pricing-card bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col h-full" style="border:2px solid ' . $border . ';">
         <div class="relative">
             <img src="' . e($image) . '" alt="' . e($item['title']) . '" class="w-full object-cover bg-white" style="aspect-ratio:4/3;" loading="lazy">
-            ' . $closedBadge . '
+            ' . $closedBadge . $openBadge . '
         </div>
         <div class="p-5 sm:p-6 flex flex-col flex-1">
             <h3 class="text-lg font-black text-gray-900 mb-1.5 leading-snug">' . e($item['title']) . '</h3>

@@ -24,6 +24,11 @@ require __DIR__ . '/includes/site-header.php';
     <?php else: ?>
 
         <?php if ($openCourses): ?>
+        <div class="flex flex-wrap items-center gap-2.5 mb-6 sm:mb-8">
+            <span class="cro-dot" style="width:12px;height:12px;border-radius:50%;background:#16a34a;display:inline-block;"></span>
+            <h2 class="text-2xl sm:text-3xl font-black text-green-700 leading-tight">চলমান কোর্স</h2>
+            <span style="background:#dcfce7;color:#15803d;font-weight:700;padding:5px 14px;border-radius:9999px;font-size:14px;">এখন <?= strtr((string) count($openCourses), ['0'=>'০','1'=>'১','2'=>'২','3'=>'৩','4'=>'৪','5'=>'৫','6'=>'৬','7'=>'৭','8'=>'৮','9'=>'৯']) ?> টিতে ভর্তি খোলা</span>
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             <?= implode('', array_map(fn($c) => render_item_card($c, 'course'), $openCourses)) ?>
         </div>

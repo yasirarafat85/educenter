@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>সার্টিফিকেট / কার্ড মেকার — শিশুর মেধা বিকাশ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800;900&family=Hind+Siliguri:wght@400;500;600;700&family=Atma:wght@400;500;600;700&family=Baloo+Da+2:wght@400;500;600;700;800&family=Galada&family=Dancing+Script:wght@600;700&family=Great+Vibes&family=Pinyon+Script&family=Sacramento&family=Allura&family=Parisienne&family=Poppins:wght@400;500;600;700;800;900&family=Playfair+Display:wght@600;700;800;900&family=Montserrat:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#eef1f6; --panel:#ffffff; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb;
+    --brand:#2563eb; --brand-d:#1d4ed8;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:'Hind Siliguri','Noto Sans Bengali',system-ui,sans-serif;
+    background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased;
+  }
+  .app{display:flex; gap:18px; padding:18px; align-items:flex-start; min-height:100vh}
+  /* ---------- CONTROL PANEL ---------- */
+  .panel{
+    width:360px; flex:0 0 360px; background:var(--panel); border:1px solid var(--line);
+    border-radius:16px; padding:18px; position:sticky; top:18px; max-height:calc(100vh - 36px);
+    overflow:auto; box-shadow:0 10px 30px rgba(0,0,0,.06);
+  }
+  .panel h1{font-size:18px; margin:0 0 4px; font-weight:800}
+  .panel .sub{font-size:12px; color:var(--muted); margin:0 0 14px; line-height:1.6}
+  .sec-title{font-size:12px;font-weight:800;color:#111827;margin:0 0 10px;text-transform:uppercase;letter-spacing:.4px}
+  .group{margin-bottom:16px}
+  .group>label{display:block; font-size:12px; font-weight:700; color:#374151; margin-bottom:6px}
+  .hint{font-size:11px; color:var(--muted); margin-top:4px; line-height:1.5}
+  input[type=text], textarea, select{
+    width:100%; padding:9px 11px; border:1px solid #d1d5db; border-radius:9px;
+    font-family:inherit; font-size:13px; background:#fff; color:var(--ink); outline:none;
+  }
+  input[type=text]:focus, textarea:focus, select:focus{border-color:var(--brand); box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+  textarea{resize:vertical; min-height:64px; line-height:1.6}
+  input[type=range]{width:100%}
+  .templates{display:grid; grid-template-columns:repeat(2,1fr); gap:8px}
+  .tpl{
+    cursor:pointer; border:2px solid var(--line); border-radius:10px; overflow:hidden;
+    height:50px; position:relative; font-size:10px; font-weight:700; color:#fff;
+    display:flex; align-items:flex-end; padding:5px 7px; text-shadow:0 1px 3px rgba(0,0,0,.45);
+  }
+  .tpl.active{border-color:var(--brand); box-shadow:0 0 0 3px rgba(37,99,235,.18)}
+  .tpl.t-ocean{background:linear-gradient(135deg,#bfe0ff,#1d4ed8)}
+  .tpl.t-royal{background:linear-gradient(135deg,#fdf6e3,#b8860b)}
+  .tpl.t-emerald{background:linear-gradient(135deg,#c8f0dc,#059669)}
+  .tpl.t-kids{background:linear-gradient(135deg,#ffd36e,#ff5e8a 55%,#7c5cff)}
+  .tpl.t-greenwave{background:linear-gradient(120deg,#efe9dd 55%,#1b6b3a)}
+  .tpl.t-greenfresh{background:linear-gradient(120deg,#7bbf3a,#166534 60%,#caa53a)}
+  .tpl.t-bluemodern{background:linear-gradient(135deg,#eaf2ff,#2f7de0)}
+  .tpl.t-tealwave{background:linear-gradient(120deg,#eafcff,#0f766e 70%,#1e3a8a)}
+  .tpl.t-corporate{background:linear-gradient(135deg,#e7ebef,#14324a 60%,#e8871e)}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+  .logo-row{display:flex; gap:8px; align-items:center}
+  .logo-prev{width:44px;height:44px;border-radius:50%;object-fit:cover;border:1px solid var(--line);background:#f3f4f6;flex:0 0 44px}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;
+    border:none;border-radius:9px;padding:9px 12px;font-family:inherit;font-size:12.5px;font-weight:700;
+  }
+  .btn[disabled]{opacity:.55;cursor:not-allowed}
+  .btn-sm{padding:7px 10px;font-size:12px}
+  .btn-file{background:#eef2ff;color:#1d4ed8;flex:1}
+  .btn-ghost{background:#f3f4f6;color:#374151}
+  .exports{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+  .btn-jpg{background:#059669;color:#fff}
+  .btn-png{background:#2563eb;color:#fff}
+  .btn-pdf{background:#7c3aed;color:#fff;grid-column:span 2}
+  .btn-bulk{background:#0f766e;color:#fff;width:100%;margin-top:8px}
+  .btn:active{transform:translateY(1px)}
+  .divider{height:1px;background:var(--line);margin:16px 0}
+  .swatches{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .sw{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px var(--line)}
+  .sw.active{box-shadow:0 0 0 2px var(--brand)}
+  .rangewrap{display:flex;align-items:center;gap:10px}
+  .rangewrap output{font-size:12px;font-weight:700;color:#374151;min-width:42px;text-align:right}
+  .toggle-row{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:700;color:#374151;cursor:pointer}
+  .toggle-row input{width:16px;height:16px}
+  .bulk-status{font-size:12px;font-weight:700;color:#0f766e;margin-top:8px;min-height:16px}
+  /* ---------- STAGE ---------- */
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;gap:12px;padding-bottom:40px}
+  .stage-hint{font-size:12px;color:var(--muted);text-align:center;max-width:640px;line-height:1.7}
+  .card-wrap{width:100%;max-width:920px;display:flex;justify-content:center}
+  #card{
+    width:1000px;height:707px;position:relative;overflow:hidden;background:#fff;
+    box-shadow:0 20px 60px rgba(0,0,0,.18);flex:0 0 auto;transform-origin:top center;
+  }
+  /* ============ CARD BASE CONTENT ============ */
+  .c-inner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center;padding:66px 96px 54px;z-index:5}
+  .c-heading{font-weight:900;letter-spacing:2px;line-height:1.1;margin:0}
+  .c-presented{margin:22px 0 0;font-weight:600}
+  .c-namewrap{margin:16px 0 0}
+  .c-name{line-height:1.15;font-weight:700}
+  .c-nameline{display:flex;align-items:center;justify-content:center;gap:14px;width:100%;min-width:360px;margin:12px auto 0}
+  .c-nameline .ln{flex:1;height:2px}
+  .c-nameline .dot{width:9px;height:9px;transform:rotate(45deg)}
+  .c-body{margin:24px auto 0;max-width:76%;line-height:1.65;font-weight:500}
+  .c-sign{margin-top:auto;display:flex;flex-direction:column;align-items:center}
+  .c-sign-script{line-height:1;margin-bottom:2px;font-family:'Great Vibes',cursive;font-size:42px}
+  .c-sign-name{font-weight:800;letter-spacing:.5px;margin:0}
+  .c-sign-title{margin:2px 0 0;font-weight:500}
+  .c-logo{position:absolute;bottom:44px;right:70px;z-index:6;background:transparent;border-radius:50%;object-fit:cover}
+  .c-logo.placeholder{display:flex;align-items:center;justify-content:center;background:#fde047;border:3px solid #eab308}
+  .c-date{position:absolute;bottom:58px;left:72px;font-size:14px;font-weight:600;z-index:6}
+  .deco-svg{position:absolute;inset:0;z-index:1;pointer-events:none;width:100%;height:100%}
+  /* drag mode */
+  .drag-on [data-drag]{cursor:move;outline:1.5px dashed rgba(110,110,110,.55);outline-offset:4px;touch-action:none}
+  .drag-on [data-drag]:hover{outline-color:var(--brand)}
+  .cbr{position:absolute;z-index:2;pointer-events:none}
+  .cbr .l{position:absolute}
+
+  /* ============ OCEAN ============ */
+  #card.t-ocean{background:#dcefff;font-family:'Poppins','Noto Sans Bengali',sans-serif}
+  #card.t-ocean .c-heading{color:#12358f;font-size:52px}
+  #card.t-ocean .c-presented{color:#1e3a8a;font-size:24px}
+  #card.t-ocean .c-name{color:#0f2f7a;font-size:52px;font-family:'Noto Sans Bengali','Poppins',sans-serif}
+  #card.t-ocean .c-nameline .ln,#card.t-ocean .c-nameline .dot{background:#1e3a8a}
+  #card.t-ocean .c-body{color:#243b6b;font-size:19px}
+  #card.t-ocean .c-sign-script,#card.t-ocean .c-sign-name{color:#12358f}
+  #card.t-ocean .c-sign-name{font-size:20px}
+  #card.t-ocean .c-sign-title{color:#334155;font-size:14px}
+  #card.t-ocean .c-date{color:#1e3a8a}
+  #card.t-ocean .ocean-frame{position:absolute;inset:26px;border:2px solid #1e3a8a;z-index:2}
+
+  /* ============ ROYAL ============ */
+  #card.t-royal{background:#fffdf7;font-family:'Playfair Display','Noto Sans Bengali',serif}
+  #card.t-royal .c-heading{color:#8a6d1a;font-size:44px;letter-spacing:3px}
+  #card.t-royal .c-presented{color:#7c6316;font-size:20px;letter-spacing:1px;font-family:'Hind Siliguri',serif}
+  #card.t-royal .c-name{color:#3b2f0b;font-size:50px;font-family:'Noto Sans Bengali','Playfair Display',serif}
+  #card.t-royal .c-nameline .ln{background:linear-gradient(90deg,transparent,#b8860b,transparent)}
+  #card.t-royal .c-nameline .dot{background:#b8860b}
+  #card.t-royal .c-body{color:#4b3f1c;font-size:18px;font-family:'Hind Siliguri',serif}
+  #card.t-royal .c-sign-script,#card.t-royal .c-sign-name{color:#3b2f0b}
+  #card.t-royal .c-sign-name{font-size:19px;font-family:'Playfair Display',serif}
+  #card.t-royal .c-sign-title{color:#6b5a24;font-size:13px;font-family:'Hind Siliguri',serif}
+  #card.t-royal .c-date{color:#7c6316;font-family:'Hind Siliguri',serif}
+  #card.t-royal .royal-frame{position:absolute;inset:22px;border:3px double #c9a227;z-index:2}
+  #card.t-royal .royal-frame2{position:absolute;inset:32px;border:1px solid #e3cf8a;z-index:2}
+  .royal-corner{position:absolute;width:54px;height:54px;border:3px solid #b8860b;z-index:2}
+  .royal-corner.tl{top:22px;left:22px;border-right:0;border-bottom:0}
+  .royal-corner.tr{top:22px;right:22px;border-left:0;border-bottom:0}
+  .royal-corner.bl{bottom:22px;left:22px;border-right:0;border-top:0}
+  .royal-corner.br{bottom:22px;right:22px;border-left:0;border-top:0}
+
+  /* ============ EMERALD ============ */
+  #card.t-emerald{background:#f2fbf6;font-family:'Poppins','Noto Sans Bengali',sans-serif}
+  #card.t-emerald .c-heading{color:#065f46;font-size:48px}
+  #card.t-emerald .c-presented{color:#047857;font-size:22px}
+  #card.t-emerald .c-name{color:#064e3b;font-size:52px;font-family:'Noto Sans Bengali','Poppins',sans-serif}
+  #card.t-emerald .c-nameline .ln,#card.t-emerald .c-nameline .dot{background:#059669}
+  #card.t-emerald .c-body{color:#215e4c;font-size:19px}
+  #card.t-emerald .c-sign-script,#card.t-emerald .c-sign-name{color:#065f46}
+  #card.t-emerald .c-sign-name{font-size:20px}
+  #card.t-emerald .c-sign-title{color:#334155;font-size:14px}
+  #card.t-emerald .c-date{color:#047857}
+  #card.t-emerald .em-frame{position:absolute;inset:28px;border:2px solid #059669;border-radius:10px;z-index:2}
+
+  /* ============ KIDS ============ */
+  #card.t-kids{background:#fffdf5;font-family:'Poppins','Noto Sans Bengali',sans-serif}
+  #card.t-kids .c-heading{color:#d6336c;font-size:50px;letter-spacing:1px}
+  #card.t-kids .c-presented{color:#7048e8;font-size:23px}
+  #card.t-kids .c-name{color:#e8590c;font-size:54px;font-family:'Noto Sans Bengali','Poppins',sans-serif}
+  #card.t-kids .c-nameline .ln,#card.t-kids .c-nameline .dot{background:#f783ac}
+  #card.t-kids .c-body{color:#495057;font-size:19px}
+  #card.t-kids .c-sign-script,#card.t-kids .c-sign-name{color:#7048e8}
+  #card.t-kids .c-sign-name{font-size:20px}
+  #card.t-kids .c-sign-title{color:#495057;font-size:14px}
+  #card.t-kids .c-date{color:#e8590c}
+  #card.t-kids .kids-frame{position:absolute;inset:24px;border:4px dashed #ffd43b;border-radius:26px;z-index:2}
+  .kids-blob{position:absolute;border-radius:50%;z-index:1;pointer-events:none;opacity:.9}
+
+  /* ============ GREEN ELEGANT (ref1) ============ */
+  #card.t-greenwave{background:radial-gradient(120% 120% at 30% 40%,#f6f1e8,#ece4d5);font-family:'Montserrat','Noto Sans Bengali',sans-serif}
+  #card.t-greenwave .c-heading{color:#184a2a;font-size:50px}
+  #card.t-greenwave .c-presented{color:#20603a;font-size:23px;font-weight:500}
+  #card.t-greenwave .c-name{color:#184a2a;font-size:56px;font-family:'Pinyon Script','Noto Sans Bengali',cursive;font-weight:400}
+  #card.t-greenwave .c-nameline .ln{background:linear-gradient(90deg,transparent,#b3902f,transparent);height:2px}
+  #card.t-greenwave .c-nameline .dot{display:none}
+  #card.t-greenwave .c-body{color:#1f5133;font-size:19px;font-weight:600}
+  #card.t-greenwave .c-sign-script{color:#184a2a}
+  #card.t-greenwave .c-sign-name{color:#184a2a;font-size:20px}
+  #card.t-greenwave .c-sign-title{color:#3a5a45;font-size:14px}
+  #card.t-greenwave .c-date{color:#20603a}
+
+  /* ============ GREEN FRESH (ref2) ============ */
+  #card.t-greenfresh{background:#ffffff;font-family:'Montserrat','Noto Sans Bengali',sans-serif}
+  #card.t-greenfresh .c-heading{color:#166534;font-size:44px;border:3px solid #166534;border-radius:16px;padding:12px 40px;display:inline-block}
+  #card.t-greenfresh .c-presented{color:#166534;font-size:22px;display:flex;align-items:center;justify-content:center;gap:16px}
+  #card.t-greenfresh .c-presented::before,#card.t-greenfresh .c-presented::after{content:"";width:56px;height:2px;background:#166534}
+  #card.t-greenfresh .c-name{color:#166534;font-size:56px;font-family:'Pinyon Script','Noto Sans Bengali',cursive;font-weight:400}
+  #card.t-greenfresh .c-nameline .ln{background:#caa53a;height:2px}
+  #card.t-greenfresh .c-nameline .dot{display:none}
+  #card.t-greenfresh .c-body{color:#334155;font-size:19px;font-weight:500}
+  #card.t-greenfresh .c-sign-script{color:#166534}
+  #card.t-greenfresh .c-sign-name{color:#166534;font-size:20px}
+  #card.t-greenfresh .c-sign-title{color:#334155;font-size:14px}
+  #card.t-greenfresh .c-date{color:#166534}
+
+  /* ============ BLUE MODERN (ref3) ============ */
+  #card.t-bluemodern{background:#ffffff;font-family:'Montserrat','Noto Sans Bengali',sans-serif}
+  #card.t-bluemodern .c-heading{color:#1e2a63;font-size:56px;letter-spacing:1px}
+  #card.t-bluemodern .c-presented{color:#3f556e;font-size:22px;font-weight:500;margin-top:18px}
+  #card.t-bluemodern .c-name{color:#2f7de0;font-size:58px;font-family:'Pinyon Script','Noto Sans Bengali',cursive;font-weight:400}
+  #card.t-bluemodern .c-nameline{width:80%}
+  #card.t-bluemodern .c-nameline .ln,#card.t-bluemodern .c-nameline .dot{background:#1e2a63}
+  #card.t-bluemodern .c-body{color:#3f556e;font-size:19px;font-weight:500}
+  #card.t-bluemodern .c-sign-script{color:#2f7de0}
+  #card.t-bluemodern .c-sign-name{color:#1e2a63;font-size:20px}
+  #card.t-bluemodern .c-sign-title{color:#3f556e;font-size:14px}
+  #card.t-bluemodern .c-date{color:#1e2a63}
+
+  /* ============ TEAL WAVE (ref4) ============ */
+  #card.t-tealwave{background:#ffffff;font-family:'Montserrat','Noto Sans Bengali',sans-serif}
+  #card.t-tealwave .c-heading{color:#0f4b7a;font-size:46px;font-variant:small-caps;letter-spacing:1px}
+  #card.t-tealwave .c-heading::after{content:"";display:block;width:120px;border-top:4px dashed #14868f;margin:14px auto 0}
+  #card.t-tealwave .c-presented{color:#0f4b7a;font-size:22px;font-weight:500}
+  #card.t-tealwave .c-name{color:#0f4b7a;font-size:58px;font-family:'Pinyon Script','Noto Sans Bengali',cursive;font-weight:400}
+  #card.t-tealwave .c-nameline .ln,#card.t-tealwave .c-nameline .dot{background:#14868f}
+  #card.t-tealwave .c-body{color:#33556e;font-size:19px;font-weight:500}
+  #card.t-tealwave .c-sign-script{color:#14868f}
+  #card.t-tealwave .c-sign-name{color:#0f4b7a;font-size:20px}
+  #card.t-tealwave .c-sign-title{color:#33556e;font-size:14px}
+  #card.t-tealwave .c-date{color:#0f4b7a}
+  #card.t-tealwave .teal-frame{position:absolute;inset:30px;border:1.5px solid #0f4b7a;z-index:2}
+
+  /* ============ CORPORATE (ref5) ============ */
+  #card.t-corporate{background:linear-gradient(135deg,#f4f6f8,#e9edf1);font-family:'Montserrat','Noto Sans Bengali',sans-serif}
+  #card.t-corporate .c-heading{color:#14324a;font-size:52px;letter-spacing:2px}
+  #card.t-corporate .c-presented{color:#14324a;font-size:20px;font-weight:700;letter-spacing:1px}
+  #card.t-corporate .c-name{color:#e0912a;font-size:52px;font-family:'Pinyon Script','Noto Sans Bengali',cursive;font-weight:400}
+  #card.t-corporate .c-nameline .ln,#card.t-corporate .c-nameline .dot{background:#14324a}
+  #card.t-corporate .c-body{color:#2b4a63;font-size:19px;font-weight:500}
+  #card.t-corporate .c-sign-script{color:#e0912a}
+  #card.t-corporate .c-sign-name{color:#14324a;font-size:20px}
+  #card.t-corporate .c-sign-title{color:#2b4a63;font-size:14px}
+  #card.t-corporate .c-date{color:#14324a}
+  #card.t-corporate .corp-frame{position:absolute;inset:30px;border:1.5px solid #14324a;z-index:2}
+
+  @media (max-width:1360px){ .card-wrap{overflow:auto} }
+  /* ---------- PRINT: full-bleed A4 landscape ---------- */
+  @media print{
+    @page{ size: A4 landscape; margin:0; }
+    html,body{background:#fff;width:297mm;height:210mm}
+    .app{display:block;padding:0;min-height:0}
+    body *{visibility:hidden}
+    .card-wrap,.card-wrap *{visibility:visible}
+    .card-wrap{position:fixed;top:0;left:0;margin:0;max-width:none;width:1122.5px;height:793.7px;overflow:hidden;display:block}
+    #card{box-shadow:none;transform:scale(1.1225);transform-origin:top left;margin:0}
+    .drag-on [data-drag]{outline:none!important}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ================= CONTROL PANEL ================= -->
+  <aside class="panel">
+    <h1>🎓 কার্ড / সার্টিফিকেট মেকার</h1>
+    <p class="sub">নিচের ঘরগুলো বদলালে ডান পাশে সাথে সাথে বদলাবে। শেষে JPG / PNG ডাউনলোড করুন বা PDF হিসেবে সেভ করুন (সব A4 সাইজ)। তথ্য এই ব্রাউজারেই সেভ থাকে।</p>
+
+    <div class="group">
+      <label>ডিজাইন টেমপ্লেট (৯টা)</label>
+      <div class="templates" id="tplPicker">
+        <div class="tpl t-ocean active" data-tpl="t-ocean">Ocean Blue</div>
+        <div class="tpl t-emerald" data-tpl="t-emerald">Emerald</div>
+        <div class="tpl t-greenwave" data-tpl="t-greenwave">Green Elegant</div>
+        <div class="tpl t-greenfresh" data-tpl="t-greenfresh">Green Fresh</div>
+        <div class="tpl t-royal" data-tpl="t-royal">Royal Gold</div>
+        <div class="tpl t-corporate" data-tpl="t-corporate">Corporate</div>
+        <div class="tpl t-bluemodern" data-tpl="t-bluemodern">Blue Modern</div>
+        <div class="tpl t-tealwave" data-tpl="t-tealwave">Teal Wave</div>
+        <div class="tpl t-kids" data-tpl="t-kids">Kids Fun</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="group">
+      <label>উপরের শিরোনাম</label>
+      <input type="text" id="f-heading" value="APPRECIATION CARD">
+    </div>
+    <div class="group">
+      <label>ছোট লাইন (নামের উপরে)</label>
+      <input type="text" id="f-presented" value="This is presented to:">
+    </div>
+    <div class="group">
+      <label>নাম (প্রাপকের)</label>
+      <input type="text" id="f-name" value="Yana Binte Yusuf">
+    </div>
+    <div class="group">
+      <label>মূল লেখা (বডি)</label>
+      <textarea id="f-body">Has successfully completed the 6-month Play Group program (3rd Batch)
+Platform: Online
+Organized by: **শিশুর মেধা বিকাশ**</textarea>
+      <div class="hint">যে শব্দ **দুই তারা** দিয়ে ঘিরবেন সেটা <b>মোটা</b> দেখাবে। নতুন লাইনের জন্য Enter চাপুন।</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ===== FONT ===== -->
+    <p class="sec-title">✒️ ফন্ট</p>
+    <div class="group">
+      <label>নামের ফন্ট</label>
+      <select id="f-namefont">
+        <option value="">টেমপ্লেট ডিফল্ট</option>
+        <option value="Atma">Atma (বাংলা+ইংরেজি, কিউট)</option>
+        <option value="Baloo Da 2">Baloo Da 2 (বাংলা, গোলাকার)</option>
+        <option value="Galada">Galada (বাংলা, স্টাইলিশ)</option>
+        <option value="Hind Siliguri">Hind Siliguri (বাংলা, ক্লিন)</option>
+        <option value="Noto Sans Bengali">Noto Sans Bengali (বাংলা)</option>
+        <option value="Pinyon Script">Pinyon Script (ইংরেজি, এলিগ্যান্ট)</option>
+        <option value="Great Vibes">Great Vibes (ইংরেজি, হাতে-লেখা)</option>
+        <option value="Dancing Script">Dancing Script (ইংরেজি)</option>
+        <option value="Sacramento">Sacramento (ইংরেজি)</option>
+        <option value="Allura">Allura (ইংরেজি)</option>
+        <option value="Parisienne">Parisienne (ইংরেজি)</option>
+      </select>
+      <div class="hint">বাংলা নামের জন্য Atma / Baloo Da 2 / Galada সবচেয়ে সুন্দর। ইংরেজি নামে হাতে-লেখা স্টাইলের জন্য Pinyon / Great Vibes।</div>
+    </div>
+    <div class="group">
+      <label>বাকি লেখার ফন্ট (শিরোনাম/বডি)</label>
+      <select id="f-textfont">
+        <option value="">টেমপ্লেট ডিফল্ট</option>
+        <option value="Atma">Atma</option>
+        <option value="Baloo Da 2">Baloo Da 2</option>
+        <option value="Hind Siliguri">Hind Siliguri</option>
+        <option value="Noto Sans Bengali">Noto Sans Bengali</option>
+        <option value="Poppins">Poppins</option>
+        <option value="Montserrat">Montserrat</option>
+        <option value="Playfair Display">Playfair Display</option>
+      </select>
+    </div>
+    <div class="group">
+      <label>লেখার সাইজ (ছোট / বড়)</label>
+      <div class="rangewrap">
+        <input type="range" id="f-textscale" min="70" max="140" step="2" value="100">
+        <output id="textscaleOut">100%</output>
+      </div>
+      <div class="hint">সব লেখা একসাথে ছোট/বড় হবে। লম্বা নাম নিজে থেকেই ফিট হবে।</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ===== SIGNATURE / LOGO ===== -->
+    <div class="group">
+      <label>স্বাক্ষর (হাতে লেখা স্টাইল)</label>
+      <input type="text" id="f-signscript" value="Afroza">
+    </div>
+    <div class="group">
+      <label>স্বাক্ষরকারীর নাম</label>
+      <input type="text" id="f-signname" value="AFROZA PERVIN">
+    </div>
+    <div class="group">
+      <label>পদবি / প্রতিষ্ঠান</label>
+      <input type="text" id="f-signtitle" value="Founder & CEO শিশুর মেধা বিকাশ">
+    </div>
+    <div class="group">
+      <label>তারিখ / সাল (নিচে বাঁয়ে, খালি রাখলে দেখাবে না)</label>
+      <input type="text" id="f-date" value="">
+    </div>
+
+    <div class="group">
+      <label>লোগো (গোল ছবি, নিচে ডানে)</label>
+      <div class="logo-row">
+        <img id="logoPrev" class="logo-prev" alt="logo">
+        <label class="btn btn-file btn-sm" style="cursor:pointer">
+          📁 লোগো নির্বাচন
+          <input type="file" id="f-logo" accept="image/*" hidden>
+        </label>
+        <button class="btn btn-ghost btn-sm" id="logoClear" title="লোগো মুছুন">✕</button>
+      </div>
+    </div>
+    <div class="group">
+      <label>লোগোর সাইজ</label>
+      <div class="rangewrap">
+        <input type="range" id="f-logosize" min="90" max="240" step="2" value="150">
+        <output id="logosizeOut">150px</output>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ===== DRAG POSITION ===== -->
+    <p class="sec-title">✋ পজিশন (টেনে সরানো)</p>
+    <div class="group">
+      <label class="toggle-row"><input type="checkbox" id="dragToggle"> টেনে সরানো চালু করুন</label>
+      <div class="hint">চালু থাকলে ডান পাশে যেকোনো লেখা/লোগো মাউস দিয়ে টেনে (drag) পছন্দমতো জায়গায় বসাতে পারবেন।</div>
+      <button class="btn btn-ghost btn-sm" id="posReset" style="margin-top:8px">↺ পজিশন রিসেট</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="group">
+      <label>মূল রঙ (ঐচ্ছিক — টেমপ্লেটের রঙ বদলাতে)</label>
+      <div class="swatches" id="swatches">
+        <div class="sw active" data-c="" style="background:conic-gradient(#f00,#0f0,#00f,#f00)" title="টেমপ্লেটের ডিফল্ট"></div>
+        <div class="sw" data-c="#1d4ed8" style="background:#1d4ed8"></div>
+        <div class="sw" data-c="#166534" style="background:#166534"></div>
+        <div class="sw" data-c="#059669" style="background:#059669"></div>
+        <div class="sw" data-c="#0f4b7a" style="background:#0f4b7a"></div>
+        <div class="sw" data-c="#b8860b" style="background:#b8860b"></div>
+        <div class="sw" data-c="#d6336c" style="background:#d6336c"></div>
+        <div class="sw" data-c="#7c3aed" style="background:#7c3aed"></div>
+        <div class="sw" data-c="#c2410c" style="background:#c2410c"></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ===== EXPORT ===== -->
+    <p class="sec-title">⬇️ একটি কার্ড</p>
+    <div class="exports">
+      <button class="btn btn-jpg" id="dlJpg">⬇ JPG (A4)</button>
+      <button class="btn btn-png" id="dlPng">⬇ PNG (A4)</button>
+      <button class="btn btn-pdf" id="dlPdf">🖨 PDF হিসেবে সেভ (A4)</button>
+    </div>
+    <div class="hint" style="margin-top:8px">PDF: প্রিন্ট উইন্ডোতে Layout <b>Landscape</b>, Paper <b>A4</b>, Margins <b>None</b> দিন।</div>
+
+    <div class="divider"></div>
+
+    <!-- ===== BULK ===== -->
+    <p class="sec-title">📦 একসাথে অনেক নাম (বাল্ক)</p>
+    <div class="group">
+      <label>প্রতি লাইনে একটি করে নাম পেস্ট করুন</label>
+      <textarea id="bulkNames" rows="6" placeholder="Yana Binte Yusuf&#10;Debolina Chowdhury Tultul&#10;শেখ আব্দুল্লাহ আল সাফির&#10;..."></textarea>
+      <div class="hint">প্রতিটি নামের জন্য <b>একই টেমপ্লেট/বডি/স্বাক্ষর/লোগো</b> দিয়ে আলাদা কার্ড হবে। শুধু নামটা বদলাবে। সব একটা ZIP ফাইলে ডাউনলোড হবে।</div>
+      <button class="btn btn-bulk" id="dlBulk">📦 সব একসাথে তৈরি করে ZIP ডাউনলোড</button>
+      <div class="bulk-status" id="bulkStatus"></div>
+    </div>
+  </aside>
+
+  <!-- ================= STAGE ================= -->
+  <main class="stage">
+    <div class="card-wrap">
+      <div id="card" class="t-ocean">
+        <div id="deco"></div>
+        <img id="cardLogo" class="c-logo" data-drag="logo" alt="logo" style="display:none">
+        <div id="cardLogoPh" class="c-logo placeholder" data-drag="logo">🧠</div>
+        <div id="cardDate" class="c-date" data-drag="date"></div>
+        <div class="c-inner">
+          <h2 class="c-heading" id="oHeading" data-drag="heading">APPRECIATION CARD</h2>
+          <p class="c-presented" id="oPresented" data-drag="presented">This is presented to:</p>
+          <div class="c-namewrap" id="nameGroup" data-drag="name">
+            <div class="c-name" id="oName">Yana Binte Yusuf</div>
+            <div class="c-nameline"><span class="dot"></span><span class="ln"></span><span class="dot"></span></div>
+          </div>
+          <div class="c-body" id="oBody" data-drag="body"></div>
+          <div class="c-sign" data-drag="sign">
+            <div class="c-sign-script" id="oSignScript">Afroza</div>
+            <p class="c-sign-name" id="oSignName">AFROZA PERVIN</p>
+            <p class="c-sign-title" id="oSignTitle">Founder &amp; CEO শিশুর মেধা বিকাশ</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="stage-hint">প্রিভিউ A4 ল্যান্ডস্কেপ অনুপাতে (১০০০×৭০৭)। JPG/PNG হাই-রেজোলিউশনে সেভ হয় — প্রিন্টে পুরো A4 পেজ ভরবে।</p>
+  </main>
+</div>
+
+<script src="html2canvas.min.js"></script>
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var card = $('card');
+  var STORE = 'cert_maker_v3';
+
+  /* ---- seal / rosette badges ---- */
+  function seal(dark, light, cx, cy){
+    return '\
+      <g transform="translate('+cx+','+cy+')">\
+        <path d="M-20 20 L-20 74 L0 58 L20 74 L20 20 Z" fill="'+dark+'"/>\
+        <circle r="46" fill="'+dark+'"/>\
+        <circle r="46" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-dasharray="3 6" opacity="0.85"/>\
+        <circle r="36" fill="'+light+'"/>\
+        <path d="M-15 2 L-4 14 L17 -12" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>\
+      </g>';
+  }
+
+  // ---------- template decorations ----------
+  var decos = {
+    't-ocean': '\
+      <svg class="deco-svg" viewBox="0 0 1000 707" preserveAspectRatio="none">\
+        <polygon points="1000,0 640,0 1000,300" fill="#2f6bd6"/>\
+        <polygon points="1000,0 760,0 1000,190" fill="#1d4ed8"/>\
+        <polygon points="1000,0 860,0 1000,120" fill="#93c2ff"/>\
+        <polygon points="0,707 360,707 0,407" fill="#2f6bd6"/>\
+        <polygon points="0,707 240,707 0,520" fill="#1d4ed8"/>\
+        <polygon points="0,707 140,707 0,590" fill="#93c2ff"/>\
+      </svg><div class="ocean-frame"></div>',
+
+    't-emerald': '\
+      <svg class="deco-svg" viewBox="0 0 1000 707" preserveAspectRatio="none">\
+        <path d="M0,0 H300 C160,90 90,200 60,360 C40,470 30,560 0,620 Z" fill="#059669" opacity="0.14"/>\
+        <path d="M1000,707 H700 C840,617 910,507 940,347 C960,237 970,147 1000,87 Z" fill="#059669" opacity="0.14"/>\
+      </svg><div class="em-frame"></div>',
+
+    't-royal': '\
+      <div class="royal-frame"></div><div class="royal-frame2"></div>\
+      <div class="royal-corner tl"></div><div class="royal-corner tr"></div>\
+      <div class="royal-corner bl"></div><div class="royal-corner br"></div>',
+
+    't-kids': '\
+      <div class="kids-frame"></div>\
+      <div class="kids-blob" style="width:150px;height:150px;background:#ffd43b;top:-40px;left:-40px"></div>\
+      <div class="kids-blob" style="width:110px;height:110px;background:#ff8787;top:60px;right:40px"></div>\
+      <div class="kids-blob" style="width:90px;height:90px;background:#74c0fc;bottom:30px;left:50px"></div>\
+      <div class="kids-blob" style="width:60px;height:60px;background:#b197fc;top:200px;left:30px"></div>',
+
+    't-greenwave': '\
+      <svg class="deco-svg" viewBox="0 0 1000 707" preserveAspectRatio="none">\
+        <path d="M1000,0 C815,110 900,300 815,455 C760,555 850,650 1000,707 L1000,0 Z" fill="#164a2a"/>\
+        <path d="M1000,0 C860,95 930,285 855,440 C805,545 880,635 1000,690 L1000,0 Z" fill="#2f9e57" opacity="0.55"/>\
+        <path d="M1000,0 C905,80 960,270 900,430 C860,535 930,620 1000,660 L1000,0 Z" fill="#8fd6a6" opacity="0.5"/>\
+        '+seal('#1a5a33','#2f9e57',150,175)+'\
+      </svg>\
+      <div class="cbr" style="top:74px;left:74px;width:150px;height:150px">\
+        <span class="l" style="top:0;left:0;width:150px;height:3px;background:#1a5a33"></span>\
+        <span class="l" style="top:0;left:0;width:3px;height:150px;background:#1a5a33"></span>\
+        <span class="l" style="top:10px;left:10px;width:120px;height:2px;background:#b3902f"></span>\
+        <span class="l" style="top:10px;left:10px;width:2px;height:120px;background:#b3902f"></span>\
+      </div>',
+
+    't-greenfresh': '\
+      <svg class="deco-svg" viewBox="0 0 1000 707" preserveAspectRatio="none">\
+        <path d="M0,0 C120,80 90,240 150,360 C200,470 120,600 0,707 L0,0 Z" fill="#166534"/>\
+        <path d="M0,0 C90,70 70,230 130,350 C180,470 90,590 0,690 L0,0 Z" fill="#4f9d3a" opacity="0.75"/>\
+        <path d="M0,0 C60,60 45,220 100,340 C150,460 60,560 0,650 L0,0 Z" fill="#cbe36a" opacity="0.7"/>\
+        <path d="M1000,0 C880,60 940,180 1000,240 L1000,0 Z" fill="#166534" opacity="0.85"/>\
+        <path d="M1000,0 C915,55 965,150 1000,190 L1000,0 Z" fill="#caa53a" opacity="0.8"/>\
+        <path d="M1000,707 C900,660 950,560 1000,520 L1000,707 Z" fill="#4f9d3a" opacity="0.8"/>\
+        '+seal('#166534','#4f9d3a',160,540)+'\
+      </svg>',
+
+    't-bluemodern': (function(){
+      var strip=function(x,y,rot,scale,fill){
+        return '<g transform="translate('+x+','+y+') rotate('+rot+') scale('+scale+')"><rect x="-140" y="-26" width="280" height="52" rx="26" fill="'+fill+'"/></g>';
+      };
+      return '<svg class="deco-svg" viewBox="0 0 1000 707" preserveAspectRatio="none"><g opacity="0.95">'+
+        strip(70,70,35,1,'#2f7de0')+strip(150,150,35,0.72,'#8fbdf2')+strip(150,20,-52,0.6,'#2f7de0')+
+        '<line x1="10" y1="150" x2="180" y2="-10" stroke="#2f7de0" stroke-width="2" stroke-dasharray="3 7"/>'+
+        strip(930,70,-35,1,'#2f7de0')+strip(850,150,-35,0.72,'#8fbdf2')+
+        '<line x1="990" y1="150" x2="820" y2="-10" stroke="#2f7de0" stroke-width="2" stroke-dasharray="3 7"/>'+
+        strip(70,637,-35,1,'#2f7de0')+strip(150,557,-35,0.72,'#8fbdf2')+
+        '<line x1="10" y1="557" x2="180" y2="717" stroke="#2f7de0" stroke-width="2" stroke-dasharray="3 7"/>'+
+        strip(930,637,35,1,'#2f7de0')+strip(850,557,35,0.72,'#8fbdf2')+
+        '<line x1="990" y1="557" x2="820" y2="717" stroke="#2f7de0" stroke-width="2" stroke-dasharray="3 7"/>'+
+      '</g></svg>';
+    })(),
+
+    't-tealwave': '\
+      <svg class="deco-svg" viewBox="0 0 1000 707" preserveAspectRatio="none">\
+        <path d="M1000,0 L640,0 C760,70 700,180 800,250 C880,305 960,250 1000,300 Z" fill="#14868f"/>\
+        <path d="M1000,0 L740,0 C840,60 800,150 880,215 C935,258 975,215 1000,250 Z" fill="#1e3a8a" opacity="0.8"/>\
+        <path d="M0,707 L360,707 C240,637 300,527 200,457 C120,402 40,457 0,407 Z" fill="#14868f"/>\
+        <path d="M0,707 L260,707 C160,647 200,557 120,492 C65,449 25,492 0,457 Z" fill="#1e3a8a" opacity="0.8"/>\
+      </svg><div class="teal-frame"></div>',
+
+    't-corporate': '\
+      <svg class="deco-svg" viewBox="0 0 1000 707" preserveAspectRatio="none">\
+        <polygon points="0,0 210,0 0,150" fill="#e8871e"/>\
+        <polygon points="0,0 120,0 0,90" fill="#14324a"/>\
+        <polygon points="150,0 300,0 150,120" fill="#0f6b6b" opacity="0.85"/>\
+        <polygon points="1000,0 1000,170 830,0" fill="#14324a"/>\
+        <polygon points="1000,0 1000,90 900,0" fill="#e8871e"/>\
+        <polygon points="0,707 0,540 170,707" fill="#14324a"/>\
+        <polygon points="0,707 0,610 110,707" fill="#e8871e"/>\
+        <polygon points="0,707 150,707 40,600" fill="#0f6b6b" opacity="0.85"/>\
+        <polygon points="1000,707 790,707 1000,555" fill="#e8871e"/>\
+        <polygon points="1000,707 880,707 1000,620" fill="#14324a"/>\
+      </svg><div class="corp-frame"></div>'
+  };
+
+  var currentTpl='t-ocean', accent='', logoSize=150, dragMode=false, textScale=1;
+  var offsets={};   // {dragKey:{x,y}}
+  var SCALE_IDS=['oHeading','oPresented','oBody','oSignName','oSignTitle','oSignScript'];
+
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function rich(s){ return esc(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>'); }
+
+  function applyTemplate(t){
+    currentTpl=t;
+    card.className = t + (dragMode?' drag-on':'');
+    $('deco').innerHTML = decos[t] || '';
+    applyAccent(); applyFonts(); applyAllOffsets(); render();
+  }
+
+  function applyAccent(){
+    card.querySelectorAll('.c-heading,.c-name,.c-sign-script,.c-sign-name,.c-date,.c-presented')
+      .forEach(function(e){ e.style.color=''; });
+    var lines=card.querySelectorAll('.c-nameline .ln,.c-nameline .dot');
+    lines.forEach(function(e){ e.style.background=''; });
+    if(!accent) return;
+    $('oHeading').style.color=accent; $('oName').style.color=accent;
+    $('oSignScript').style.color=accent; $('oSignName').style.color=accent; $('cardDate').style.color=accent;
+    lines.forEach(function(e){ e.style.background=accent; });
+  }
+
+  function applyFonts(){
+    var nf=$('f-namefont').value;
+    $('oName').style.fontFamily = nf ? ("'"+nf+"','Noto Sans Bengali',cursive") : '';
+    var tf=$('f-textfont').value;
+    var fam = tf ? ("'"+tf+"','Noto Sans Bengali',sans-serif") : '';
+    ['oHeading','oPresented','oBody','oSignName','oSignTitle'].forEach(function(id){ $(id).style.fontFamily=fam; });
+  }
+
+  function applyLogoSize(){
+    var img=$('cardLogo'), ph=$('cardLogoPh');
+    [img,ph].forEach(function(e){ e.style.width=logoSize+'px'; e.style.height=logoSize+'px'; });
+    ph.style.fontSize=Math.round(logoSize*0.42)+'px';
+    $('logosizeOut').textContent=logoSize+'px'; $('f-logosize').value=logoSize;
+  }
+
+  // apply overall text-size scale to all text blocks
+  function applyTextScale(){
+    SCALE_IDS.forEach(function(id){
+      var el=$(id); el.style.fontSize='';                          // template default
+      var base=parseFloat(getComputedStyle(el).fontSize);
+      el.style.fontSize=(base*textScale)+'px';
+    });
+  }
+
+  // scale + auto-shrink long names so they don't overflow
+  function fitName(){
+    var el=$('oName'); el.style.fontSize='';
+    var base=parseFloat(getComputedStyle(el).fontSize)*textScale;
+    el.style.whiteSpace='nowrap'; el.style.fontSize=base+'px';
+    var size=base, guard=0, maxW=770;
+    while(el.scrollWidth>maxW && size>18 && guard<140){ size-=1; el.style.fontSize=size+'px'; guard++; }
+    el.style.whiteSpace='';
+  }
+
+  function render(){
+    applyFonts();
+    $('oHeading').textContent   = $('f-heading').value;
+    $('oPresented').textContent = $('f-presented').value;
+    $('oName').textContent      = $('f-name').value;
+    $('oBody').innerHTML        = rich($('f-body').value);
+    $('oSignScript').textContent= $('f-signscript').value;
+    $('oSignName').textContent  = $('f-signname').value;
+    $('oSignTitle').textContent = $('f-signtitle').value;
+    var d=$('f-date').value.trim();
+    $('cardDate').textContent=d; $('cardDate').style.display=d?'block':'none';
+    applyTextScale();
+    fitName();
+    save();
+  }
+
+  // ---------- drag / offsets ----------
+  function applyOffset(key){
+    var o=offsets[key]||{x:0,y:0};
+    document.querySelectorAll('[data-drag="'+key+'"]').forEach(function(el){
+      el.style.transform = (o.x||o.y) ? ('translate('+o.x+'px,'+o.y+'px)') : '';
+    });
+  }
+  function applyAllOffsets(){ ['heading','presented','name','body','sign','logo','date'].forEach(applyOffset); }
+
+  var dragKey=null, sx=0, sy=0, bx=0, by=0, scaleF=1;
+  card.addEventListener('pointerdown', function(e){
+    if(!dragMode) return;
+    var el=e.target.closest('[data-drag]'); if(!el) return;
+    dragKey=el.dataset.drag;
+    var o=offsets[dragKey]||{x:0,y:0}; bx=o.x||0; by=o.y||0;
+    sx=e.clientX; sy=e.clientY;
+    var r=card.getBoundingClientRect(); scaleF=(r.width/card.offsetWidth)||1;
+    try{ el.setPointerCapture(e.pointerId); }catch(_){}
+    e.preventDefault();
+  });
+  document.addEventListener('pointermove', function(e){
+    if(dragKey===null) return;
+    var dx=(e.clientX-sx)/scaleF, dy=(e.clientY-sy)/scaleF;
+    offsets[dragKey]={x:Math.round(bx+dx), y:Math.round(by+dy)};
+    applyOffset(dragKey);
+  });
+  document.addEventListener('pointerup', function(){ if(dragKey!==null){ dragKey=null; save(); } });
+
+  $('dragToggle').addEventListener('change', function(){
+    dragMode=this.checked; card.classList.toggle('drag-on',dragMode);
+  });
+  $('posReset').addEventListener('click', function(){ offsets={}; applyAllOffsets(); save(); });
+
+  // ---------- logo ----------
+  var logoData='';
+  function applyLogo(){
+    var img=$('cardLogo'), ph=$('cardLogoPh'), prev=$('logoPrev');
+    if(logoData){ img.src=logoData; img.style.display='block'; img.classList.remove('placeholder'); ph.style.display='none'; prev.src=logoData; }
+    else { img.style.display='none'; ph.style.display='flex'; prev.removeAttribute('src'); prev.style.background='#f3f4f6'; }
+    applyOffset('logo');
+  }
+  $('f-logo').addEventListener('change', function(e){
+    var file=e.target.files[0]; if(!file) return;
+    var r=new FileReader(); r.onload=function(ev){ logoData=ev.target.result; applyLogo(); save(); }; r.readAsDataURL(file);
+  });
+  $('logoClear').addEventListener('click', function(){ logoData=''; applyLogo(); save(); $('f-logo').value=''; });
+  $('f-logosize').addEventListener('input', function(){ logoSize=parseInt(this.value,10)||150; applyLogoSize(); save(); });
+
+  // ---------- template picker ----------
+  $('tplPicker').addEventListener('click', function(e){
+    var t=e.target.closest('.tpl'); if(!t) return;
+    document.querySelectorAll('.tpl').forEach(function(x){x.classList.remove('active')});
+    t.classList.add('active'); applyTemplate(t.dataset.tpl); applyLogoSize(); save();
+  });
+
+  // ---------- swatches ----------
+  $('swatches').addEventListener('click', function(e){
+    var s=e.target.closest('.sw'); if(!s) return;
+    document.querySelectorAll('.sw').forEach(function(x){x.classList.remove('active')});
+    s.classList.add('active'); accent=s.dataset.c||''; applyAccent(); save();
+  });
+
+  ['f-heading','f-presented','f-name','f-body','f-signscript','f-signname','f-signtitle','f-date']
+    .forEach(function(id){ $(id).addEventListener('input', render); });
+  ['f-namefont','f-textfont'].forEach(function(id){ $(id).addEventListener('change', function(){ render(); save(); }); });
+  $('f-textscale').addEventListener('input', function(){
+    textScale=(parseInt(this.value,10)||100)/100; $('textscaleOut').textContent=this.value+'%'; render(); save();
+  });
+
+  // ---------- persistence ----------
+  function save(){
+    try{
+      var data={tpl:currentTpl, accent:accent, logo:logoData, logoSize:logoSize, offsets:offsets, textScale:textScale,
+                namefont:$('f-namefont').value, textfont:$('f-textfont').value};
+      ['f-heading','f-presented','f-name','f-body','f-signscript','f-signname','f-signtitle','f-date']
+        .forEach(function(id){ data[id]=$(id).value; });
+      localStorage.setItem(STORE, JSON.stringify(data));
+    }catch(e){}
+  }
+  function load(){
+    try{
+      var raw=localStorage.getItem(STORE); if(!raw) return;
+      var d=JSON.parse(raw);
+      ['f-heading','f-presented','f-name','f-body','f-signscript','f-signname','f-signtitle','f-date']
+        .forEach(function(id){ if(d[id]!==undefined) $(id).value=d[id]; });
+      logoData=d.logo||''; accent=d.accent||''; logoSize=d.logoSize||150; offsets=d.offsets||{};
+      textScale=d.textScale||1; $('f-textscale').value=Math.round(textScale*100); $('textscaleOut').textContent=Math.round(textScale*100)+'%';
+      if(d.namefont!==undefined) $('f-namefont').value=d.namefont;
+      if(d.textfont!==undefined) $('f-textfont').value=d.textfont;
+      document.querySelectorAll('.sw').forEach(function(x){ x.classList.toggle('active',(x.dataset.c||'')===accent); });
+      if(d.tpl){ document.querySelectorAll('.tpl').forEach(function(x){ x.classList.toggle('active', x.dataset.tpl===d.tpl); }); currentTpl=d.tpl; }
+    }catch(e){}
+  }
+
+  // ---------- export helpers ----------
+  function safeFile(s,fallback){ var n=String(s||'').replace(/[^\p{L}\p{N}_-]+/gu,'_').slice(0,40); return n||fallback; }
+
+  function capture(scale){
+    var hadDrag=card.classList.contains('drag-on');
+    if(hadDrag) card.classList.remove('drag-on');
+    return html2canvas(card,{scale:scale,useCORS:true,backgroundColor:'#ffffff',logging:false,width:1000,height:707})
+      .then(function(canvas){ if(hadDrag) card.classList.add('drag-on'); return canvas; })
+      .catch(function(err){ if(hadDrag) card.classList.add('drag-on'); throw err; });
+  }
+
+  function exportImage(type){
+    if(typeof html2canvas==='undefined'){ alert('html2canvas.min.js পাওয়া যায়নি। এই HTML ফাইলের পাশে রাখুন, অথবা PDF বাটন ব্যবহার করুন।'); return; }
+    capture(2.5).then(function(canvas){
+      var mime=type==='jpg'?'image/jpeg':'image/png';
+      var a=document.createElement('a'); a.href=canvas.toDataURL(mime,0.95);
+      a.download=safeFile($('f-name').value,'certificate')+'.'+type;
+      document.body.appendChild(a); a.click(); a.remove();
+    }).catch(function(err){ alert('রপ্তানি ব্যর্থ: '+err); });
+  }
+  $('dlJpg').addEventListener('click', function(){ exportImage('jpg'); });
+  $('dlPng').addEventListener('click', function(){ exportImage('png'); });
+  $('dlPdf').addEventListener('click', function(){ window.print(); });
+
+  // ---------- minimal ZIP (store, no compression) ----------
+  var crcTable=null;
+  function crc32(bytes){
+    if(!crcTable){ crcTable=[]; for(var n=0;n<256;n++){ var c=n; for(var k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); crcTable[n]=c>>>0; } }
+    var crc=0xFFFFFFFF;
+    for(var i=0;i<bytes.length;i++) crc=(crc>>>8)^crcTable[(crc^bytes[i])&0xFF];
+    return (crc^0xFFFFFFFF)>>>0;
+  }
+  function u16(v){ return new Uint8Array([v&255,(v>>8)&255]); }
+  function u32(v){ return new Uint8Array([v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255]); }
+  function makeZip(files){
+    var enc=new TextEncoder(); var parts=[]; var central=[]; var offset=0;
+    files.forEach(function(f){
+      var nameB=enc.encode(f.name); var crc=crc32(f.data); var size=f.data.length;
+      var localParts=[u32(0x04034b50),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(size),u32(size),u16(nameB.length),u16(0),nameB,f.data];
+      var localLen=0; localParts.forEach(function(p){ parts.push(p); localLen+=p.length; });
+      central.push(u32(0x02014b50)); central.push(u16(20)); central.push(u16(20)); central.push(u16(0));
+      central.push(u16(0)); central.push(u16(0)); central.push(u16(0)); central.push(u32(crc));
+      central.push(u32(size)); central.push(u32(size)); central.push(u16(nameB.length)); central.push(u16(0));
+      central.push(u16(0)); central.push(u16(0)); central.push(u16(0)); central.push(u32(0)); central.push(u32(offset)); central.push(nameB);
+      offset+=localLen;
+    });
+    var centralLen=0; central.forEach(function(p){ centralLen+=p.length; });
+    var end=[u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),u32(centralLen),u32(offset),u16(0)];
+    return new Blob(parts.concat(central).concat(end),{type:'application/zip'});
+  }
+
+  // ---------- BULK ----------
+  $('dlBulk').addEventListener('click', function(){
+    var names=$('bulkNames').value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    if(!names.length){ alert('প্রতি লাইনে একটি করে নাম লিখুন / পেস্ট করুন।'); return; }
+    if(typeof html2canvas==='undefined'){ alert('html2canvas.min.js পাওয়া যায়নি।'); return; }
+    var btn=$('dlBulk'), status=$('bulkStatus'); btn.disabled=true;
+    var orig=$('f-name').value, files=[], used={};
+    status.textContent='ফন্ট লোড হচ্ছে...';
+    (document.fonts?document.fonts.ready:Promise.resolve()).then(function(){
+      var i=0;
+      (function next(){
+        if(i>=names.length){
+          $('f-name').value=orig; render();
+          status.textContent='ZIP তৈরি হচ্ছে...';
+          var zip=makeZip(files); var url=URL.createObjectURL(zip);
+          var a=document.createElement('a'); a.href=url; a.download='certificates_'+names.length+'.zip';
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(function(){ URL.revokeObjectURL(url); },5000);
+          status.textContent='✅ '+names.length+'টি সার্টিফিকেট ZIP-এ ডাউনলোড হয়েছে।';
+          btn.disabled=false; return;
+        }
+        $('f-name').value=names[i]; render();
+        status.textContent='তৈরি হচ্ছে... '+(i+1)+' / '+names.length;
+        setTimeout(function(){
+          capture(2).then(function(canvas){
+            canvas.toBlob(function(blob){
+              blob.arrayBuffer().then(function(buf){
+                var base=safeFile(names[i],'cert_'+(i+1)); var name=base, k=2;
+                while(used[name]){ name=base+'_'+k; k++; } used[name]=1;
+                files.push({name:name+'.jpg', data:new Uint8Array(buf)});
+                i++; next();
+              });
+            }, 'image/jpeg', 0.92);
+          }).catch(function(err){ status.textContent='ব্যর্থ: '+err; btn.disabled=false; $('f-name').value=orig; render(); });
+        }, 130);
+      })();
+    });
+  });
+
+  // ---------- init ----------
+  load();
+  applyTemplate(currentTpl);
+  applyLogo(); applyLogoSize(); render();
+})();
+</script>
+</body>
+</html>

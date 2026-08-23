@@ -6,9 +6,12 @@ $activePage = 'home';
 $pageDescription = get_setting('site_meta_description') ?: (get_setting('site_name', 'EduCenter') . ' — উন্নতমানের কোর্স, ওয়ার্কশিট ও শিক্ষা উপকরণ। বিশেষজ্ঞ শিক্ষকদের তত্ত্বাবধানে আধুনিক শিক্ষা পদ্ধতি।');
 
 $db = get_db();
+// চলমান (registration_open) কোর্স আগে দেখানো হয় — ভিজিটর হোমপেজেই যেন খোলা ভর্তি সামনে পায়
 $featuredCourses = $db->query(
-    'SELECT cb.*, c.title FROM course_batches cb JOIN courses c ON c.id = cb.course_id WHERE cb.is_active = 1 ORDER BY cb.sort_order ASC, cb.id ASC LIMIT 3'
+    'SELECT cb.*, c.title FROM course_batches cb JOIN courses c ON c.id = cb.course_id WHERE cb.is_active = 1 ORDER BY cb.registration_open DESC, cb.sort_order ASC, cb.id ASC LIMIT 3'
 )->fetchAll();
+// এখন কয়টা কোর্সে ভর্তি চলছে — হোমপেজে হাইলাইট করার জন্য
+$openCourseCount = (int) $db->query('SELECT COUNT(*) FROM course_batches WHERE is_active = 1 AND registration_open = 1')->fetchColumn();
 $siteName = get_setting('site_name', 'EduCenter');
 
 // হোমপেজ "সংখ্যায় সাফল্য" স্ট্যাট — অ্যাডমিন সেটিংস থেকে (খালি হলে ডিফল্ট)। [value, label, icon, color]
@@ -62,6 +65,12 @@ require __DIR__ . '/includes/site-header.php';
             </span>
             <h2 class="text-3xl sm:text-5xl font-black mb-4 text-gray-800">সেরা মানের কোর্স সমূহ</h2>
             <p class="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto">বিশেষজ্ঞ শিক্ষকদের তত্বাবধানে প্রস্তুতকৃত পাঠক্রম</p>
+            <?php if ($openCourseCount > 0): ?>
+                <div class="inline-flex items-center gap-2 mt-5 bg-green-50 text-green-700 border border-green-200 px-4 py-2 rounded-full font-bold text-sm sm:text-base">
+                    <span class="cro-dot" style="width:9px;height:9px;border-radius:50%;background:#16a34a;display:inline-block;"></span>
+                    এখন <?= strtr((string) $openCourseCount, ['0'=>'০','1'=>'১','2'=>'২','3'=>'৩','4'=>'৪','5'=>'৫','6'=>'৬','7'=>'৭','8'=>'৮','9'=>'৯']) ?> টি কোর্সে ভর্তি চলছে
+                </div>
+            <?php endif; ?>
         </div>
         <?php if ($featuredCourses): ?>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
