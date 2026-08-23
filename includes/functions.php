@@ -420,11 +420,13 @@ function render_fee_box(?string $price, ?string $secLabel, ?string $secAmount, s
     return '<div class="rounded-xl border border-gray-100 bg-gray-50 p-3 mb-4">'
         . '<div class="text-2xl font-black leading-tight" style="color:' . $accent . '">' . e($price) . '</div>'
         . '<div class="border-t border-gray-200 my-2"></div>'
-        . '<div class="flex items-center justify-between gap-2">'
-        . '<span class="text-sm font-semibold text-gray-600">' . e($main) . '</span>'
-        . '<span class="text-lg font-black text-gray-800 whitespace-nowrap">' . e($secAmount) . '</span>'
+        . '<div class="flex items-center justify-between gap-3">'
+        . '<div class="min-w-0">'
+        . '<div class="text-sm font-bold text-gray-800">' . e($main) . '</div>'
+        . ($desc !== '' ? '<div class="text-xs font-bold text-gray-600 mt-1">' . e($desc) . '</div>' : '')
         . '</div>'
-        . ($desc !== '' ? '<div class="text-xs text-gray-400 mt-0.5">' . e($desc) . '</div>' : '')
+        . '<span class="text-lg font-black text-gray-900 whitespace-nowrap flex-shrink-0">' . e($secAmount) . '</span>'
+        . '</div>'
         . '</div>';
 }
 
