@@ -48,7 +48,10 @@ if (!$selectedCourse):
             <?php endif; ?>
             <div class="p-4 sm:p-5">
                 <h3 class="font-bold text-gray-900 text-base sm:text-lg mb-1"><?= e($c['title']) ?></h3>
-                <p class="text-indigo-600 font-bold mb-3 text-sm sm:text-base"><?= e($c['price']) ?></p>
+                <p class="text-indigo-600 font-bold <?= trim((string)($c['secondary_fee'] ?? '')) !== '' ? 'mb-1' : 'mb-3' ?> text-sm sm:text-base"><?= e($c['price']) ?></p>
+                <?php if (trim((string)($c['secondary_fee'] ?? '')) !== ''): ?>
+                    <p class="text-gray-600 mb-3 text-xs sm:text-sm"><span class="text-gray-500"><?= e(trim((string)$c['secondary_fee_label']) !== '' ? $c['secondary_fee_label'] : 'অতিরিক্ত ফি') ?>:</span> <span class="font-bold text-gray-800"><?= e($c['secondary_fee']) ?></span></p>
+                <?php endif; ?>
                 <span class="block text-center py-2.5 rounded-xl font-semibold text-sm <?= $courseClosed ? 'bg-gray-200 text-gray-600' : 'btn-primary text-white' ?>"><?= $courseClosed ? 'রেজিস্ট্রেশন বন্ধ' : 'নির্বাচন করুন →' ?></span>
             </div>
         </a>
@@ -66,7 +69,10 @@ if (!$selectedCourse):
         <div class="absolute inset-0 bg-black/10 pointer-events-none"></div>
         <div class="relative z-10">
         <div class="text-center mb-6 sm:mb-8">
-            <h1 class="text-xl sm:text-3xl font-black text-white mb-2 leading-snug"><?= e($selectedCourse['title']) ?></h1>
+            <h1 class="text-xl sm:text-3xl font-black text-white mb-1 leading-snug"><?= e($selectedCourse['title']) ?></h1>
+            <p class="text-white font-bold text-base sm:text-lg mb-1">
+                <?= e($selectedCourse['price'] ?? '') ?><?php if (trim((string)($selectedCourse['secondary_fee'] ?? '')) !== ''): ?><span class="opacity-70 mx-1">·</span><?= e(trim((string)$selectedCourse['secondary_fee_label']) !== '' ? $selectedCourse['secondary_fee_label'] : 'অতিরিক্ত ফি') ?>: <?= e($selectedCourse['secondary_fee']) ?><?php endif; ?>
+            </p>
             <p class="text-fuchsia-100 text-sm sm:text-base">আপনার সন্তানের উজ্জ্বল ভবিষ্যতের জন্য রেজিস্ট্রেশন করুন</p>
             <a href="course-register" class="inline-block mt-2 text-fuchsia-100 text-xs sm:text-sm underline">অন্য কোর্স বেছে নিন</a>
         </div>

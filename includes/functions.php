@@ -153,6 +153,14 @@ function is_valid_bd_phone(string $phone): bool
     return (bool) preg_match('/^01[3-9][0-9]{8}$/', $phone);
 }
 
+// ফোন নম্বর মেলানোর "চাবি" — শুধু ডিজিট রেখে শেষ ১০ অঙ্ক (স্পেস/ড্যাশ/+৮৮০/লিডিং-জিরো বাদ পড়া সব সামলায়)।
+// পুরনো Excel/Google-Form ডেটার নম্বর হুবহু না মিললেও এই চাবিতে মেলে।
+function phone_last10(?string $phone): string
+{
+    $d = preg_replace('/[^0-9]/', '', (string) $phone);
+    return strlen($d) >= 10 ? substr($d, -10) : $d;
+}
+
 // "৳২,৫০০" এর মতো বাংলা/টেক্সট প্রাইস স্ট্রিং থেকে সংখ্যা বের করা (আয়-ব্যয় হিসাবের জন্য)
 function parse_price_to_number(?string $price): float
 {
@@ -437,6 +445,12 @@ function render_item_card(array $item, string $type): string
     // চলমান কোর্সে সবুজ "ভর্তি চলছে" ব্যাজ — কোনটায় এখন ভর্তি নেওয়া হচ্ছে এক নজরে বোঝাতে
     $openBadge = ($type === 'course' && !empty($item['registration_open']))
         ? '<div class="card-ribbon-open"><span class="cro-dot"></span> ভর্তি চলছে</div>' : '';
+    // দ্বিতীয় ফি (উপকরণ/রেজিস্ট্রেশন ফি) — মূল দামের নিচে আলাদা লাইনে (থাকলে)
+    $sfAmt = trim((string) ($item['secondary_fee'] ?? ''));
+    $sfLabel = trim((string) ($item['secondary_fee_label'] ?? ''));
+    $secFee = $sfAmt !== ''
+        ? '<div class="text-sm mb-4"><span class="text-gray-500">' . e($sfLabel !== '' ? $sfLabel : 'অতিরিক্ত ফি') . ':</span> <span class="font-bold text-gray-800">' . e($sfAmt) . '</span></div>'
+        : '';
 
     $ctaBtn = $registrationClosed
         ? '<a href="course-interest?course_id=' . $id . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">জানিয়ে রাখুন</a>'
@@ -455,9 +469,10 @@ function render_item_card(array $item, string $type): string
             ' . ($meta ? '<div class="flex flex-wrap gap-1.5 mb-4">' . $meta . '</div>' : '') . '
             ' . $featuresHtml . '
             <div class="mt-auto pt-2">
-                <div class="flex items-baseline gap-1 mb-4">
+                <div class="flex items-baseline gap-1 ' . ($secFee ? 'mb-1' : 'mb-4') . '">
                     <span class="text-3xl font-black" style="color:' . $solid . '">' . e($item['price'] ?? '') . '</span>
                 </div>
+                ' . $secFee . '
                 ' . $ctaBtn . '
                 <a href="detail?type=' . e($type) . '&id=' . $id . '" class="block text-center mt-2.5 text-sm font-semibold text-gray-500 hover:text-gray-700">বিস্তারিত দেখুন →</a>
             </div>

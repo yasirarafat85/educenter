@@ -30,7 +30,9 @@ $pageTitle = 'ব্যাচ পরিচালনা — ' . $course['title'];
 $batchFields = [
     'batch_name' => ['label' => 'ব্যাচের নাম (যেমন: ৫ম ব্যাচ, July_26 — আগে ব্যবহৃত নাম থেকে বেছে নিতে পারবেন বা নতুন লিখতে পারবেন)', 'type' => 'text', 'required' => true],
     'image' => ['label' => 'ছবি', 'type' => 'image'],
-    'price' => ['label' => 'মূল্য (যেমন ৳২,৫০০)', 'type' => 'text'],
+    'price' => ['label' => 'মূল/মাসিক ফি (যেমন ৳২৯০ মাসিক)', 'type' => 'text'],
+    'secondary_fee_label' => ['label' => 'দ্বিতীয় ফি\'র নাম', 'type' => 'text', 'suggest' => true, 'help' => 'যেমন: উপকরণ ফি / রেজিস্ট্রেশন ফি। খালি রাখলে দ্বিতীয় ফি দেখাবে না।'],
+    'secondary_fee' => ['label' => 'দ্বিতীয় ফি\'র পরিমাণ', 'type' => 'text', 'help' => 'যেমন: ৳৩৫০। উপরের নামসহ কার্ড ও রেজিস্ট্রেশন পেজে আলাদা লাইনে দেখাবে (আয়ে যোগ হয় না)।'],
     'duration' => ['label' => 'মেয়াদ (যেমন ৩ মাস)', 'type' => 'text'],
     'instructor' => ['label' => 'প্রশিক্ষক', 'type' => 'text'],
     'description' => ['label' => 'বিবরণ', 'type' => 'textarea'],

@@ -110,6 +110,8 @@ CREATE TABLE course_batches (
     slug VARCHAR(255) NOT NULL UNIQUE,
     image VARCHAR(500),
     price VARCHAR(50),
+    secondary_fee_label VARCHAR(100) NOT NULL DEFAULT '', -- দ্বিতীয় ফি'র নাম (যেমন উপকরণ/রেজিস্ট্রেশন ফি) — ডিসপ্লে-only
+    secondary_fee VARCHAR(50) NOT NULL DEFAULT '',
     duration VARCHAR(100),
     instructor VARCHAR(100),
     description TEXT,

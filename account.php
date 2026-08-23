@@ -33,8 +33,8 @@ $totalSpent = (float) $stmt->fetch()['s'];
 // পুরনো (legacy) রেকর্ড — এই ফোন মিলিয়ে (আয়/কুরিয়ার নয়, শুধু ঐতিহাসিক তথ্য)। টেবিল না থাকলে চুপচাপ বাদ।
 $legacy = [];
 try {
-    $ls = $db->prepare("SELECT customer_name, course_title, batch, facebook_id FROM legacy_students WHERE phone = :p ORDER BY id DESC");
-    $ls->execute(['p' => $phone]);
+    $ls = $db->prepare("SELECT customer_name, course_title, batch, facebook_id FROM legacy_students WHERE RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) = :k ORDER BY id DESC");
+    $ls->execute(['k' => phone_last10($phone)]);
     $legacy = $ls->fetchAll();
 } catch (Throwable $e) { $legacy = []; }
 

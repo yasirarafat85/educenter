@@ -58,8 +58,8 @@ if ($mode === 'general') {
     if (!$row) {
         // পুরাতন তালিকা মিলিয়ে দেখি
         try {
-            $lg = $db->prepare("SELECT customer_name, address FROM legacy_students WHERE phone = :phone ORDER BY id DESC LIMIT 1");
-            $lg->execute(['phone' => $phone]);
+            $lg = $db->prepare("SELECT customer_name, address FROM legacy_students WHERE RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) = :k ORDER BY id DESC LIMIT 1");
+            $lg->execute(['k' => phone_last10($phone)]);
             $row = $lg->fetch();
         } catch (Throwable $e) { $row = false; }
         if (!$row) { echo json_encode(['found' => false]); exit; }
@@ -88,8 +88,10 @@ $rows = $stmt->fetchAll();
 // বর্তমান রেজিস্ট্রেশন না থাকলে পুরাতন (legacy) তালিকা মিলিয়ে দেখি — পুরনো শিক্ষার্থীর তথ্য অটো-ফিল
 if (!$rows) {
     try {
-        $lg = $db->prepare("SELECT customer_name, facebook_id, father_mobile FROM legacy_students WHERE phone = :phone ORDER BY id DESC");
-        $lg->execute(['phone' => $phone]);
+        // নমনীয় ম্যাচ — নম্বরের শেষ ১০ ডিজিট মিলিয়ে (ফরম্যাট ভিন্ন হলেও চলে)
+        $lg = $db->prepare("SELECT customer_name, date_of_birth, facebook_id, father_mobile, receiver_name, receiver_phone, address
+                            FROM legacy_students WHERE RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) = :k ORDER BY id DESC");
+        $lg->execute(['k' => phone_last10($phone)]);
         $lrows = $lg->fetchAll();
     } catch (Throwable $e) { $lrows = []; }
     if ($lrows) {
@@ -97,12 +99,16 @@ if (!$rows) {
         foreach ($lrows as $lr) {
             $key = mb_strtolower(trim($lr['customer_name']));
             if (trim($lr['customer_name']) !== '' && !isset($lchildren[$key])) {
-                $lchildren[$key] = ['child_name' => $lr['customer_name'], 'date_of_birth' => ''];
+                $lchildren[$key] = ['child_name' => $lr['customer_name'], 'date_of_birth' => $lr['date_of_birth'] ?? ''];
             }
         }
         echo json_encode([
             'found' => true,
-            'family' => ['facebook_id' => $lrows[0]['facebook_id'], 'father_mobile' => $lrows[0]['father_mobile'], 'receiver_name' => '', 'receiver_phone' => '', 'address' => ''],
+            'family' => [
+                'facebook_id' => $lrows[0]['facebook_id'], 'father_mobile' => $lrows[0]['father_mobile'],
+                'receiver_name' => $lrows[0]['receiver_name'] ?? '', 'receiver_phone' => $lrows[0]['receiver_phone'] ?? '',
+                'address' => $lrows[0]['address'] ?? '',
+            ],
             'children' => array_values($lchildren),
         ]);
         exit;
