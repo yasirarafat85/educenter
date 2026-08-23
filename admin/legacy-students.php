@@ -12,31 +12,37 @@ $pageTitle = 'পুরাতন শিক্ষার্থী';
 
 // সিস্টেমের ফিল্ড (এগুলোতেই CSV কলাম ম্যাপ হবে) — বর্তমান রেজিস্ট্রেশনের মতোই
 $sysFields = [
-    'customer_name' => 'শিশুর নাম',
-    'phone'         => 'মোবাইল (মা) 🔑',
-    'father_mobile' => 'মোবাইল (বাবা)',
-    'course_title'  => 'কোর্সের নাম',
-    'batch'         => 'ব্যাচ / সাল',
-    'date_of_birth' => 'জন্ম তারিখ',
-    'facebook_id'   => 'ফেসবুক নাম',
-    'address'       => 'ঠিকানা',
-    'notes'         => 'মন্তব্য',
+    'customer_name'  => 'শিশুর নাম',
+    'phone'          => 'মোবাইল (মা) 🔑',
+    'father_mobile'  => 'মোবাইল (বাবা)',
+    'course_title'   => 'কোর্সের নাম',
+    'batch'          => 'ব্যাচ / সাল',
+    'date_of_birth'  => 'জন্ম তারিখ / বয়স',
+    'facebook_id'    => 'ফেসবুক নাম',
+    'receiver_name'  => 'পার্সেল রিসিভার নাম',
+    'receiver_phone' => 'পার্সেল রিসিভার নম্বর',
+    'address'        => 'ঠিকানা',
+    'notes'          => 'মন্তব্য (Remarks)',
 ];
+// ইমপোর্টে ব্যবহৃত কলাম-তালিকা (sysFields-এর কী; DB কলামও এগুলোই)
+$LS_COLS = array_keys($sysFields);
 
 // হেডার টেক্সট থেকে সিস্টেম-ফিল্ড আন্দাজ (অটো প্রি-সিলেক্ট, সম্পাদনযোগ্য)
 function ls_guess_field(string $header): string
 {
     $h = mb_strtolower(trim($header));
     $map = [
-        'customer_name' => ['শিশু', 'নাম', 'student', 'name', 'child'],
-        'phone'         => ['মোবাইল (মা)', 'মা', 'mother', 'mobile', 'phone', 'ফোন', 'নাম্বার', 'নম্বর', 'contact'],
-        'father_mobile' => ['বাবা', 'father', 'baba'],
-        'course_title'  => ['কোর্স', 'course', 'class', 'ক্লাস', 'subject', 'বিষয়'],
-        'batch'         => ['ব্যাচ', 'batch', 'সাল', 'year', 'session', 'ব্যাচ/সাল'],
-        'date_of_birth' => ['জন্ম', 'birth', 'dob', 'বয়স', 'age'],
-        'facebook_id'   => ['ফেসবুক', 'facebook', 'fb'],
-        'address'       => ['ঠিকানা', 'address', 'এলাকা'],
-        'notes'         => ['মন্তব্য', 'note', 'remark', 'comment', 'বিবরণ'],
+        'customer_name'  => ['শিশুর নাম', 'ছাত্র', 'student', 'child'],
+        'phone'          => ['মোবাইল নাম্বার (মা)', 'নাম্বার (মা)', '(মা)', 'মা', 'mother'],
+        'father_mobile'  => ['(বাবা)', 'বাবা', 'father', 'baba'],
+        'course_title'   => ['কোর্স', 'course', 'class', 'ক্লাস', 'subject', 'বিষয়'],
+        'batch'          => ['ব্যাচ', 'batch', 'সাল', 'year', 'session'],
+        'date_of_birth'  => ['জন্ম', 'birth', 'dob', 'বয়স', 'age'],
+        'facebook_id'    => ['ফেসবুক', 'facebook', 'fb'],
+        'receiver_phone' => ['রিসিভার নাম্বার', 'রিসিভার নম্বর', 'রিসিভারের নাম্বার'],
+        'receiver_name'  => ['রিসিভার নাম', 'receiver', 'রিসিভারের নাম'],
+        'address'        => ['ঠিকানা', 'address', 'এলাকা'],
+        'notes'          => ['মন্তব্য', 'remark', 'note', 'comment', 'বিবরণ'],
     ];
     foreach ($map as $field => $keys) {
         foreach ($keys as $k) {
@@ -92,14 +98,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ((($map['customer_name'] ?? '') === '') && (($map['phone'] ?? '') === '')) {
             set_flash('error', 'অন্তত "শিশুর নাম" বা "মোবাইল (মা)" কলাম ম্যাপ করুন।'); redirect('legacy-students.php?step=map');
         }
-        $ins = $db->prepare(
-            'INSERT INTO legacy_students (customer_name, phone, father_mobile, course_title, batch, date_of_birth, facebook_id, address, notes)
-             VALUES (:customer_name, :phone, :father_mobile, :course_title, :batch, :date_of_birth, :facebook_id, :address, :notes)'
-        );
+        $cols = implode(', ', $LS_COLS);
+        $phs  = ':' . implode(', :', $LS_COLS);
+        $ins = $db->prepare("INSERT INTO legacy_students ($cols) VALUES ($phs)");
         $count = 0;
         foreach ($imp['rows'] as $row) {
             $rec = [];
-            foreach (['customer_name','phone','father_mobile','course_title','batch','date_of_birth','facebook_id','address','notes'] as $f) {
+            foreach ($LS_COLS as $f) {
                 $idx = $map[$f] ?? '';
                 $rec[$f] = ($idx !== '' && isset($row[(int) $idx])) ? trim((string) $row[(int) $idx]) : '';
             }
