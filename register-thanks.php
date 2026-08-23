@@ -12,6 +12,16 @@ $isCourse = $success['type'] === 'course';
 $pageTitle = 'ধন্যবাদ';
 $activePage = '';
 
+// পেমেন্ট সময়সূচি (কোর্স-ব্যাচে অ্যাডমিন-লেখা) — কনফার্মেশন কার্ডে দেখাবে (ডিসপ্লে-only)
+$paymentSchedule = '';
+if ($isCourse) {
+    try {
+        $ps = get_db()->prepare('SELECT cb.payment_schedule FROM registrations r JOIN course_batches cb ON cb.id = r.item_id WHERE r.id = :id');
+        $ps->execute(['id' => (int) $success['ref']]);
+        $paymentSchedule = trim((string) ($ps->fetchColumn() ?: ''));
+    } catch (Throwable $e) { $paymentSchedule = ''; }
+}
+
 require __DIR__ . '/includes/site-header.php';
 ?>
 
@@ -29,6 +39,24 @@ require __DIR__ . '/includes/site-header.php';
             <p class="text-xs text-gray-500 uppercase tracking-wide">রেফারেন্স নম্বর</p>
             <p class="text-2xl font-black text-gray-800">#<?= (int) $success['ref'] ?></p>
         </div>
+        <?php if ($paymentSchedule !== ''): ?>
+        <div class="rounded-xl p-4 mb-6 text-left" style="background:rgb(var(--c-tint));border:1px solid rgb(var(--c-border));">
+            <p class="text-sm font-black mb-2 flex items-center gap-1.5" style="color:rgb(var(--c-deep));">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                পেমেন্ট সময়সূচি — কখন কত দিতে হবে
+            </p>
+            <?php foreach (preg_split('/\r\n|\r|\n/', $paymentSchedule) as $line): $line = trim($line); if ($line === '') continue;
+                $pos = mb_strrpos($line, ':');
+                $lbl = $pos !== false ? trim(mb_substr($line, 0, $pos)) : $line;
+                $amt = $pos !== false ? trim(mb_substr($line, $pos + 1)) : '';
+            ?>
+                <div class="flex items-center justify-between gap-3 py-1.5" style="border-bottom:0.5px solid rgba(0,0,0,0.06);">
+                    <span class="text-sm text-gray-700"><?= e($lbl) ?></span>
+                    <?php if ($amt !== ''): ?><span class="text-sm font-black text-gray-900 whitespace-nowrap"><?= e($amt) ?></span><?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
         <p class="text-gray-600 text-sm">📞 আমাদের টিম শীঘ্রই আপনার দেওয়া মোবাইল নম্বরে যোগাযোগ করবে।</p>
     </div>
 

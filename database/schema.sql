@@ -112,6 +112,7 @@ CREATE TABLE course_batches (
     price VARCHAR(50),
     secondary_fee_label VARCHAR(100) NOT NULL DEFAULT '', -- দ্বিতীয় ফি'র নাম (যেমন উপকরণ/রেজিস্ট্রেশন ফি) — ডিসপ্লে-only
     secondary_fee VARCHAR(50) NOT NULL DEFAULT '',
+    payment_schedule TEXT, -- পেমেন্ট সময়সূচি (কখন কত দিতে হবে) — রেজিস্ট্রেশন সফল কার্ডে দেখায়, ডিসপ্লে-only
     duration VARCHAR(100),
     instructor VARCHAR(100),
     description TEXT,
