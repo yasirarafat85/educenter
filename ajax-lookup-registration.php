@@ -105,8 +105,10 @@ if (!$rows) {
         echo json_encode([
             'found' => true,
             'family' => [
-                'facebook_id' => $lrows[0]['facebook_id'], 'father_mobile' => $lrows[0]['father_mobile'],
-                'receiver_name' => $lrows[0]['receiver_name'] ?? '', 'receiver_phone' => $lrows[0]['receiver_phone'] ?? '',
+                'facebook_id' => $lrows[0]['facebook_id'],
+                'father_mobile' => $lrows[0]['father_mobile'] !== '' ? bd_phone_canonical($lrows[0]['father_mobile']) : '',
+                'receiver_name' => $lrows[0]['receiver_name'] ?? '',
+                'receiver_phone' => ($lrows[0]['receiver_phone'] ?? '') !== '' ? bd_phone_canonical($lrows[0]['receiver_phone']) : '',
                 'address' => $lrows[0]['address'] ?? '',
             ],
             'children' => array_values($lchildren),

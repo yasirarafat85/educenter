@@ -161,6 +161,15 @@ function phone_last10(?string $phone): string
     return strlen($d) >= 10 ? substr($d, -10) : $d;
 }
 
+// BD মোবাইল নম্বরকে প্রমিত "01XXXXXXXXX" ফরম্যাটে আনা — পুরনো ডেটায় শুরুর ০ বাদ পড়া / +880 / 880
+// প্রিফিক্স / স্পেস সব সামলায় (Excel সংখ্যা ধরে ০ ফেলে দেয় বলে এটা দরকার)। না পারলে ডিজিটই ফেরায়।
+function bd_phone_canonical(?string $phone): string
+{
+    $last10 = phone_last10($phone); // শেষ ১০ ডিজিট
+    if (strlen($last10) === 10 && $last10[0] === '1') { return '0' . $last10; } // 1XXXXXXXXX → 01XXXXXXXXX
+    return preg_replace('/[^0-9]/', '', (string) $phone);
+}
+
 // "৳২,৫০০" এর মতো বাংলা/টেক্সট প্রাইস স্ট্রিং থেকে সংখ্যা বের করা (আয়-ব্যয় হিসাবের জন্য)
 function parse_price_to_number(?string $price): float
 {

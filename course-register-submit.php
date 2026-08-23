@@ -59,6 +59,11 @@ $receiverName = $hideParcel ? '' : trim($_POST['receiver_name'] ?? '');
 $receiverPhone = $hideParcel ? '' : trim($_POST['receiver_phone'] ?? '');
 $address = $hideParcel ? '' : trim($_POST['address'] ?? '');
 
+// নম্বরের শুরুর ০ বাদ পড়া / +880 ঠিক করে প্রমিত 01... ফরম্যাটে (পুরনো ডেটা অটো-ফিল বা টাইপোর জন্য)
+if ($motherMobile !== '') { $motherMobile = bd_phone_canonical($motherMobile); }
+if ($fatherMobile !== '') { $fatherMobile = bd_phone_canonical($fatherMobile); }
+if ($receiverPhone !== '') { $receiverPhone = bd_phone_canonical($receiverPhone); }
+
 if (!is_valid_bd_phone($motherMobile)) {
     course_register_fail('মায়ের সঠিক মোবাইল নম্বর দিন (যেমন: 017xxxxxxxx)।', $backUrl);
 }
