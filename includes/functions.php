@@ -400,6 +400,34 @@ function item_accent(string $type = ''): array
     ];
 }
 
+// ফি বক্স — মূল/মাসিক ফি + (থাকলে) দ্বিতীয় ফি (উপকরণ/রেজিস্ট্রেশন) গোছানো বক্সে।
+// দ্বিতীয় ফি না থাকলে আগের মতোই বড় দাম দেখায় (বক্স ছাড়া)। লেবেলের "(...)" অংশ ছোট/আলাদা লাইনে যায়।
+// কার্ড ও রেজিস্ট্রেশন ব্রাউজ-লিস্ট দুই জায়গায় রিইউজ (DRY)।
+function render_fee_box(?string $price, ?string $secLabel, ?string $secAmount, string $accent): string
+{
+    $price = trim((string) $price);
+    $secAmount = trim((string) $secAmount);
+    if ($secAmount === '') {
+        return '<div class="flex items-baseline gap-1 mb-4"><span class="text-3xl font-black" style="color:' . $accent . '">' . e($price) . '</span></div>';
+    }
+    $label = trim((string) $secLabel);
+    $main = $label; $desc = '';
+    if ($label !== '' && ($p = mb_strpos($label, '(')) !== false) {
+        $main = trim(mb_substr($label, 0, $p));
+        $desc = trim(mb_substr($label, $p)); // "(...)" অংশ
+    }
+    if ($main === '') { $main = 'অতিরিক্ত ফি'; }
+    return '<div class="rounded-xl border border-gray-100 bg-gray-50 p-3 mb-4">'
+        . '<div class="text-2xl font-black leading-tight" style="color:' . $accent . '">' . e($price) . '</div>'
+        . '<div class="border-t border-gray-200 my-2"></div>'
+        . '<div class="flex items-center justify-between gap-2">'
+        . '<span class="text-sm font-semibold text-gray-600">' . e($main) . '</span>'
+        . '<span class="text-lg font-black text-gray-800 whitespace-nowrap">' . e($secAmount) . '</span>'
+        . '</div>'
+        . ($desc !== '' ? '<div class="text-xs text-gray-400 mt-0.5">' . e($desc) . '</div>' : '')
+        . '</div>';
+}
+
 // কোর্স/ওয়ার্কশিট/প্রোডাক্ট কার্ড রেন্ডার — courses.php, worksheets.php, products.php, index.php এ ব্যবহার হয়
 // AI Master Bangladesh সাইটের মতো প্রাইসিং-কার্ড স্টাইল: প্রমিনেন্ট দাম, ✓ ফিচার লিস্ট, ফুল-উইডথ CTA
 function render_item_card(array $item, string $type): string
@@ -445,12 +473,8 @@ function render_item_card(array $item, string $type): string
     // চলমান কোর্সে সবুজ "ভর্তি চলছে" ব্যাজ — কোনটায় এখন ভর্তি নেওয়া হচ্ছে এক নজরে বোঝাতে
     $openBadge = ($type === 'course' && !empty($item['registration_open']))
         ? '<div class="card-ribbon-open"><span class="cro-dot"></span> ভর্তি চলছে</div>' : '';
-    // দ্বিতীয় ফি (উপকরণ/রেজিস্ট্রেশন ফি) — মূল দামের নিচে আলাদা লাইনে (থাকলে)
-    $sfAmt = trim((string) ($item['secondary_fee'] ?? ''));
-    $sfLabel = trim((string) ($item['secondary_fee_label'] ?? ''));
-    $secFee = $sfAmt !== ''
-        ? '<div class="text-sm mb-4"><span class="text-gray-500">' . e($sfLabel !== '' ? $sfLabel : 'অতিরিক্ত ফি') . ':</span> <span class="font-bold text-gray-800">' . e($sfAmt) . '</span></div>'
-        : '';
+    // মূল ফি + (থাকলে) দ্বিতীয় ফি — গোছানো ফি বক্স
+    $feeBox = render_fee_box($item['price'] ?? '', $item['secondary_fee_label'] ?? '', $item['secondary_fee'] ?? '', $solid);
 
     $ctaBtn = $registrationClosed
         ? '<a href="course-interest?course_id=' . $id . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">জানিয়ে রাখুন</a>'
@@ -469,10 +493,7 @@ function render_item_card(array $item, string $type): string
             ' . ($meta ? '<div class="flex flex-wrap gap-1.5 mb-4">' . $meta . '</div>' : '') . '
             ' . $featuresHtml . '
             <div class="mt-auto pt-2">
-                <div class="flex items-baseline gap-1 ' . ($secFee ? 'mb-1' : 'mb-4') . '">
-                    <span class="text-3xl font-black" style="color:' . $solid . '">' . e($item['price'] ?? '') . '</span>
-                </div>
-                ' . $secFee . '
+                ' . $feeBox . '
                 ' . $ctaBtn . '
                 <a href="detail?type=' . e($type) . '&id=' . $id . '" class="block text-center mt-2.5 text-sm font-semibold text-gray-500 hover:text-gray-700">বিস্তারিত দেখুন →</a>
             </div>
