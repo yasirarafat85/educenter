@@ -56,7 +56,14 @@ if ($mode === 'general') {
     $row = $stmt->fetch();
 
     if (!$row) {
-        echo json_encode(['found' => false]);
+        // পুরাতন তালিকা মিলিয়ে দেখি
+        try {
+            $lg = $db->prepare("SELECT customer_name, address FROM legacy_students WHERE phone = :phone ORDER BY id DESC LIMIT 1");
+            $lg->execute(['phone' => $phone]);
+            $row = $lg->fetch();
+        } catch (Throwable $e) { $row = false; }
+        if (!$row) { echo json_encode(['found' => false]); exit; }
+        echo json_encode(['found' => true, 'customer_name' => $row['customer_name'], 'email' => '', 'address' => $row['address'] ?? '']);
         exit;
     }
 
@@ -78,7 +85,28 @@ $stmt = $db->prepare(
 $stmt->execute(['phone' => $phone]);
 $rows = $stmt->fetchAll();
 
+// বর্তমান রেজিস্ট্রেশন না থাকলে পুরাতন (legacy) তালিকা মিলিয়ে দেখি — পুরনো শিক্ষার্থীর তথ্য অটো-ফিল
 if (!$rows) {
+    try {
+        $lg = $db->prepare("SELECT customer_name, facebook_id, father_mobile FROM legacy_students WHERE phone = :phone ORDER BY id DESC");
+        $lg->execute(['phone' => $phone]);
+        $lrows = $lg->fetchAll();
+    } catch (Throwable $e) { $lrows = []; }
+    if ($lrows) {
+        $lchildren = [];
+        foreach ($lrows as $lr) {
+            $key = mb_strtolower(trim($lr['customer_name']));
+            if (trim($lr['customer_name']) !== '' && !isset($lchildren[$key])) {
+                $lchildren[$key] = ['child_name' => $lr['customer_name'], 'date_of_birth' => ''];
+            }
+        }
+        echo json_encode([
+            'found' => true,
+            'family' => ['facebook_id' => $lrows[0]['facebook_id'], 'father_mobile' => $lrows[0]['father_mobile'], 'receiver_name' => '', 'receiver_phone' => '', 'address' => ''],
+            'children' => array_values($lchildren),
+        ]);
+        exit;
+    }
     echo json_encode(['found' => false]);
     exit;
 }

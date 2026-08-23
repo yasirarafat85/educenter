@@ -616,4 +616,22 @@ CREATE TABLE user_login_attempts (
     INDEX idx_phone_time (phone, attempted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- পুরাতন শিক্ষার্থী — পুরনো Excel/CSV ডেটার রেফারেন্স তালিকা (আয়/কুরিয়ার থেকে সম্পূর্ণ আলাদা;
+-- শুধু গণনা, খোঁজা, ও ফোন মিলিয়ে অভিভাবকের পুরনো তথ্য দেখানোর জন্য)। দ্রষ্টব্য migrate-legacy-students.sql
+CREATE TABLE legacy_students (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    customer_name VARCHAR(191) NOT NULL DEFAULT '',
+    phone         VARCHAR(30)  NOT NULL DEFAULT '',
+    father_mobile VARCHAR(30)  NOT NULL DEFAULT '',
+    course_title  VARCHAR(191) NOT NULL DEFAULT '',
+    batch         VARCHAR(100) NOT NULL DEFAULT '',
+    date_of_birth VARCHAR(50)  NOT NULL DEFAULT '',
+    facebook_id   VARCHAR(191) NOT NULL DEFAULT '',
+    address       TEXT,
+    notes         TEXT,
+    imported_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_ls_phone (phone),
+    INDEX idx_ls_course (course_title)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

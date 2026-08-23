@@ -30,6 +30,14 @@ $stmt = $db->prepare("SELECT COALESCE(SUM(income_amount),0) s FROM registrations
 $stmt->execute(['p' => $phone]);
 $totalSpent = (float) $stmt->fetch()['s'];
 
+// পুরনো (legacy) রেকর্ড — এই ফোন মিলিয়ে (আয়/কুরিয়ার নয়, শুধু ঐতিহাসিক তথ্য)। টেবিল না থাকলে চুপচাপ বাদ।
+$legacy = [];
+try {
+    $ls = $db->prepare("SELECT customer_name, course_title, batch, facebook_id FROM legacy_students WHERE phone = :p ORDER BY id DESC");
+    $ls->execute(['p' => $phone]);
+    $legacy = $ls->fetchAll();
+} catch (Throwable $e) { $legacy = []; }
+
 // প্রাইভেট গ্রুপ লিংক — কেনা কোর্স থেকে distinct
 $groups = [];
 foreach ($courses as $c) {
@@ -116,5 +124,24 @@ require __DIR__ . '/includes/site-header.php';
         </div>
         <?php endif; ?>
     </div>
+
+    <?php // পুরনো তথ্য (legacy) — এই ফোনে আগের কোনো রেকর্ড থাকলে ?>
+    <?php if ($legacy): ?>
+    <div class="bg-white rounded-2xl shadow p-5">
+        <h2 class="font-bold text-gray-900 mb-1 flex items-center gap-2"><i data-lucide="history" class="w-5 h-5 text-amber-500"></i> আপনার পুরনো তথ্য</h2>
+        <p class="text-gray-400 text-xs mb-4">আমাদের আগের রেকর্ড অনুযায়ী (এই মোবাইল নম্বরে)</p>
+        <div class="flex flex-col gap-3">
+            <?php foreach ($legacy as $lg): ?>
+            <div class="border border-amber-200 bg-amber-50 rounded-xl p-4">
+                <p class="font-bold text-gray-900 break-words"><?= e($lg['customer_name'] ?: '—') ?></p>
+                <p class="text-gray-600 text-xs mt-0.5">
+                    <?= $lg['course_title'] ? 'কোর্স: ' . e($lg['course_title']) : '' ?><?= $lg['batch'] ? ' · ব্যাচ/সাল: ' . e($lg['batch']) : '' ?>
+                </p>
+                <?php if ($lg['facebook_id']): ?><p class="text-gray-400 text-xs mt-0.5">ফেসবুক: <?= e($lg['facebook_id']) ?></p><?php endif; ?>
+            </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 <?php require __DIR__ . '/includes/site-footer.php'; ?>
