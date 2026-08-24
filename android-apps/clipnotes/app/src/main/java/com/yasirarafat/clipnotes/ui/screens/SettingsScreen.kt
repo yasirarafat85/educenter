@@ -355,7 +355,7 @@ fun SettingsScreen(vm: NotesViewModel) {
 
         // ---- About ----
         SectionTitle("About")
-        Text("Clip Notes  •  version 1.2", style = MaterialTheme.typography.bodyMedium)
+        Text("Clip Notes  •  version 1.9", style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.size(6.dp))
         Text(
             "Save the text you use often and copy it with a single tap. " +

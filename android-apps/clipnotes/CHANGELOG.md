@@ -7,7 +7,14 @@
 - **প্যাকেজ**: `com.yasirarafat.clipnotes`
 - **টেক**: Kotlin + Jetpack Compose (Material 3), Room (SQLite), single-Activity — সম্পূর্ণ অফলাইন, কোনো সার্ভার নেই
 - **বিল্ড**: শুধু GitHub Actions-এ (`.github/workflows/android-clipnotes.yml`) — লোকালে `dl.google.com` ব্লক
-- **ভার্সন**: versionCode 12, versionName 1.5
+- **ভার্সন**: versionCode 13, versionName 1.9
+
+---
+
+## 🆕 v1.9 — প্রথম Production রিলিজ (২৪ আগস্ট ২০২৬)
+
+- **Google Play production access approved** — closed testing শেষে অ্যাপ প্রোডাকশনে ছাড়ার অনুমোদন পাওয়া গেছে।
+- **About সেকশনের ভার্সন লেখা 1.2 → 1.9** (পাবলিক লঞ্চ ভার্সন হিসেবে)। versionCode 13, versionName 1.9। **অন্য কোনো কোড/ফিচার পরিবর্তন নেই** — শুধু ভার্সন লেবেল।
 
 ---
 
