@@ -472,9 +472,9 @@ function render_item_card(array $item, string $type): string
     }
     $featureList = '';
     foreach ($features as $f) {
-        $featureList .= '<li class="flex items-start gap-2.5 text-[15px] text-gray-700 leading-relaxed"><svg viewBox="0 0 24 24" fill="none" stroke="' . $solid . '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 mt-1 flex-shrink-0"><polyline points="20 6 9 17 4 12"/></svg><span>' . e($f) . '</span></li>';
+        $featureList .= '<li class="flex items-start gap-2 text-sm text-gray-600"><svg viewBox="0 0 24 24" fill="none" stroke="' . $solid . '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 mt-0.5 flex-shrink-0"><polyline points="20 6 9 17 4 12"/></svg><span>' . e($f) . '</span></li>';
     }
-    $featuresHtml = $featureList ? '<ul class="space-y-2.5 mb-5">' . $featureList . '</ul>' : '';
+    $featuresHtml = $featureList ? '<ul class="space-y-2 mb-5">' . $featureList . '</ul>' : '';
 
     $registrationClosed = $type === 'course' && empty($item['registration_open']);
     $actionLabel = $registrationClosed ? 'রেজিস্ট্রেশন বন্ধ' : ($type === 'course' ? 'রেজিস্ট্রেশন করুন' : 'অর্ডার করুন');
