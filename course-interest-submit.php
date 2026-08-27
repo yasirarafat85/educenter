@@ -12,6 +12,7 @@ $backUrl = 'course-interest.php?course_id=' . $courseId;
 
 function course_interest_fail(string $msg, string $backUrl): void
 {
+    log_registration_error('interest', $msg);
     set_flash('error', $msg);
     $_SESSION['course_interest_form_old'] = $_POST;
     redirect($backUrl);

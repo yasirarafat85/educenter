@@ -639,4 +639,17 @@ CREATE TABLE legacy_students (
     INDEX idx_ls_course (course_title)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- রেজিস্ট্রেশন এরর লগ — পাবলিক ফর্মে কেউ আটকালে কারণসহ লগ (ডায়াগনস্টিক)। দ্রষ্টব্য migrate-registration-errors.sql
+CREATE TABLE registration_errors (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    form_type     VARCHAR(20)  NOT NULL DEFAULT '',
+    error_message VARCHAR(255) NOT NULL DEFAULT '',
+    entered_name  VARCHAR(191) NOT NULL DEFAULT '',
+    entered_phone VARCHAR(30)  NOT NULL DEFAULT '',
+    item_title    VARCHAR(191) NOT NULL DEFAULT '',
+    ip_address    VARCHAR(45)  NOT NULL DEFAULT '',
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_re_time (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

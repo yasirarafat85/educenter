@@ -16,6 +16,7 @@ if ($type === 'course') {
 
 function fail(string $msg, string $backUrl): void
 {
+    log_registration_error('order', $msg);
     set_flash('error', $msg);
     $_SESSION['register_form_old'] = $_POST;
     redirect($backUrl);
@@ -41,6 +42,7 @@ if (!$orderItem) {
 
 $customerName = trim($_POST['customer_name'] ?? '');
 $phone = trim($_POST['phone'] ?? '');
+if ($phone !== '') { $phone = bd_phone_canonical($phone); } // বাংলা সংখ্যা/+৮৮০/স্পেস/০-বাদ → প্রমিত 01...
 $email = trim($_POST['email'] ?? '');
 $address = trim($_POST['address'] ?? '');
 $quantity = max(1, (int) ($_POST['quantity'] ?? 1));

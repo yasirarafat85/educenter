@@ -157,7 +157,9 @@ function is_valid_bd_phone(string $phone): bool
 // পুরনো Excel/Google-Form ডেটার নম্বর হুবহু না মিললেও এই চাবিতে মেলে।
 function phone_last10(?string $phone): string
 {
-    $d = preg_replace('/[^0-9]/', '', (string) $phone);
+    // বাংলা সংখ্যা → ইংরেজি (অনেকে বাংলা কিবোর্ডে ০১৭... লেখে; নাহলে খালি হয়ে "সঠিক নয়" এরর দিত)
+    $s = strtr((string) $phone, ['০'=>'0','১'=>'1','২'=>'2','৩'=>'3','৪'=>'4','৫'=>'5','৬'=>'6','৭'=>'7','৮'=>'8','৯'=>'9']);
+    $d = preg_replace('/[^0-9]/', '', $s);
     return strlen($d) >= 10 ? substr($d, -10) : $d;
 }
 
@@ -168,6 +170,26 @@ function bd_phone_canonical(?string $phone): string
     $last10 = phone_last10($phone); // শেষ ১০ ডিজিট
     if (strlen($last10) === 10 && $last10[0] === '1') { return '0' . $last10; } // 1XXXXXXXXX → 01XXXXXXXXX
     return preg_replace('/[^0-9]/', '', (string) $phone);
+}
+
+// পাবলিক ফর্মে (কোর্স/অর্ডার/আগ্রহ) কেউ আটকালে কারণসহ লগ — অ্যাডমিন দেখে বুঝবে কে কোথায় আটকাচ্ছে।
+// নীরব (try/catch) — লগিং কখনো ফর্ম/পেজ ভাঙবে না। মাঝেমধ্যে ৬০ দিনের পুরনো রেকর্ড অটো-মুছে।
+function log_registration_error(string $formType, string $message): void
+{
+    try {
+        $name  = trim((string) ($_POST['child_name'] ?? $_POST['customer_name'] ?? $_POST['name'] ?? ''));
+        $phone = trim((string) ($_POST['mother_mobile'] ?? $_POST['phone'] ?? $_POST['contact_phone'] ?? ''));
+        $item  = trim((string) ($_POST['item_title'] ?? ''));
+        $db = get_db();
+        $db->prepare('INSERT INTO registration_errors (form_type, error_message, entered_name, entered_phone, item_title, ip_address)
+                      VALUES (:f, :m, :n, :p, :i, :ip)')
+           ->execute([
+               'f' => mb_substr($formType, 0, 20), 'm' => mb_substr($message, 0, 255),
+               'n' => mb_substr($name, 0, 191), 'p' => mb_substr($phone, 0, 30),
+               'i' => mb_substr($item, 0, 191), 'ip' => function_exists('client_ip') ? client_ip() : ($_SERVER['REMOTE_ADDR'] ?? ''),
+           ]);
+        if (random_int(1, 20) === 1) { $db->exec("DELETE FROM registration_errors WHERE created_at < (NOW() - INTERVAL 60 DAY)"); }
+    } catch (Throwable $e) { /* নীরব */ }
 }
 
 // "৳২,৫০০" এর মতো বাংলা/টেক্সট প্রাইস স্ট্রিং থেকে সংখ্যা বের করা (আয়-ব্যয় হিসাবের জন্য)

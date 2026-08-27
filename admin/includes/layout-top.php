@@ -276,6 +276,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
             <a href="courier.php" class="nav-link <?= nav_active('courier.php', $currentFile) ?>"><i data-lucide="truck" class="w-4 h-4"></i> কুরিয়ার</a>
             <a href="courier-tracking.php" class="nav-link <?= nav_active('courier-tracking.php', $currentFile) ?>"><i data-lucide="calendar-check" class="w-4 h-4"></i> কুরিয়ার ট্র্যাকিং</a>
             <p class="nav-section">লগ</p>
+            <a href="registration-errors.php" class="nav-link <?= nav_active('registration-errors.php', $currentFile) ?>"><i data-lucide="alert-triangle" class="w-4 h-4"></i> রেজিস্ট্রেশন এরর</a>
             <a href="download-logs.php" class="nav-link <?= nav_active('download-logs.php', $currentFile) ?>"><i data-lucide="download" class="w-4 h-4"></i> ডাউনলোড লগ</a>
             <a href="visitor-logs.php" class="nav-link <?= nav_active('visitor-logs.php', $currentFile) ?>"><i data-lucide="footprints" class="w-4 h-4"></i> ভিজিটর লগ</a>
             <a href="courier-shipment-logs.php" class="nav-link <?= nav_active('courier-shipment-logs.php', $currentFile) ?>"><i data-lucide="history" class="w-4 h-4"></i> কুরিয়ার শিপমেন্ট লগ</a>

@@ -10,6 +10,7 @@ $backUrl = 'course-register.php?course_id=' . $courseId;
 
 function course_register_fail(string $msg, string $backUrl): void
 {
+    log_registration_error('course', $msg);
     set_flash('error', $msg);
     $_SESSION['course_register_form_old'] = $_POST;
     redirect($backUrl);
