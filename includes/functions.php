@@ -465,7 +465,7 @@ function render_fee_box(?string $price, ?string $secLabel, ?string $secAmount, s
 // AI Master Bangladesh সাইটের মতো প্রাইসিং-কার্ড স্টাইল: প্রমিনেন্ট দাম, ✓ ফিচার লিস্ট, ফুল-উইডথ CTA
 function render_item_card(array $item, string $type): string
 {
-    [$grad, $solid, $tint, , $border] = item_accent($type);
+    [$grad, $solid, $tint, $deep, $border] = item_accent($type);
     $id = (int) $item['id'];
 
     // মেটা চিপ (কোর্স: মেয়াদ/প্রশিক্ষক · ওয়ার্কশিট: পৃষ্ঠা/লেভেল)
@@ -473,8 +473,12 @@ function render_item_card(array $item, string $type): string
     $metaChip = function (string $icon, string $text) {
         return '<span class="inline-flex items-center gap-1 text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full"><i data-lucide="' . e($icon) . '" class="w-3.5 h-3.5"></i>' . e($text) . '</span>';
     };
+    // মেয়াদ (যেমন "২ মাস") হাইলাইট করা চিপ — চোখে পড়ার জন্য থিম-রঙে (ধূসর না)
+    $durationChip = function (string $text) use ($tint, $deep, $border) {
+        return '<span class="inline-flex items-center gap-1.5 text-sm font-black px-3 py-1 rounded-full" style="background:' . $tint . ';color:' . $deep . ';border:1px solid ' . $border . ';"><i data-lucide="clock" class="w-4 h-4"></i>' . e($text) . '</span>';
+    };
     if ($type === 'course') {
-        if (!empty($item['duration']))   $meta .= $metaChip('clock', $item['duration']);
+        if (!empty($item['duration']))   $meta .= $durationChip($item['duration']);
         if (!empty($item['instructor'])) $meta .= $metaChip('user', $item['instructor']);
     } elseif ($type === 'worksheet') {
         if (!empty($item['pages'])) $meta .= $metaChip('file-text', $item['pages']);
@@ -503,9 +507,9 @@ function render_item_card(array $item, string $type): string
     $actionUrl = $type === 'course' ? 'course-register?course_id=' . $id : 'register?type=' . e($type) . '&id=' . $id;
     $image = $item['image'] ?: 'https://placehold.co/400x300?text=No+Image';
     $closedBadge = $registrationClosed ? '<div class="card-ribbon">🔜 আসছে</div>' : '';
-    // চলমান কোর্সে সবুজ "ভর্তি চলছে" ব্যাজ — কোনটায় এখন ভর্তি নেওয়া হচ্ছে এক নজরে বোঝাতে
+    // চলমান কোর্সে সবুজ "ভর্তি চলছে" ব্যাজ — এখন কোর্সের নামের পাশে (ছবিতে না, ইউজারের চাওয়া)
     $openBadge = ($type === 'course' && !empty($item['registration_open']))
-        ? '<div class="card-ribbon-open"><span class="cro-dot"></span> ভর্তি চলছে</div>' : '';
+        ? '<span class="inline-flex items-center gap-1 text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full whitespace-nowrap"><span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block;"></span> ভর্তি চলছে</span>' : '';
     // মূল ফি + (থাকলে) দ্বিতীয় ফি — গোছানো ফি বক্স
     $feeBox = render_fee_box($item['price'] ?? '', $item['secondary_fee_label'] ?? '', $item['secondary_fee'] ?? '', $solid);
 
@@ -518,10 +522,13 @@ function render_item_card(array $item, string $type): string
     <div class="pricing-card bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col h-full" style="border:2px solid ' . $border . ';">
         <div class="relative">
             <img src="' . e($image) . '" alt="' . e($item['title']) . '" class="w-full object-cover bg-white" style="aspect-ratio:4/3;" loading="lazy">
-            ' . $closedBadge . $openBadge . '
+            ' . $closedBadge . '
         </div>
         <div class="p-5 sm:p-6 flex flex-col flex-1">
-            <h3 class="text-lg font-black text-gray-900 mb-1.5 leading-snug">' . e($item['title']) . '</h3>
+            <div class="flex items-center gap-2 flex-wrap mb-1.5">
+                <h3 class="text-lg font-black text-gray-900 leading-snug">' . e($item['title']) . '</h3>
+                ' . $openBadge . '
+            </div>
             <p class="text-gray-500 text-sm mb-3 leading-relaxed">' . e(mb_strimwidth($item['description'] ?? '', 0, 90, '...')) . '</p>
             ' . ($meta ? '<div class="flex flex-wrap gap-1.5 mb-4">' . $meta . '</div>' : '') . '
             ' . $featuresHtml . '
