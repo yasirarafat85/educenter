@@ -521,7 +521,7 @@ function render_item_card(array $item, string $type): string
     return '
     <div class="pricing-card bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col h-full" style="border:2px solid ' . $border . ';">
         <div class="relative">
-            <img src="' . e($image) . '" alt="' . e($item['title']) . '" class="w-full object-cover bg-white" style="aspect-ratio:4/3;" loading="lazy">
+            <img src="' . e($image) . '" alt="' . e($item['title']) . '" class="w-full object-cover bg-white zoomable" style="aspect-ratio:4/3;" loading="lazy">
             ' . $closedBadge . '
         </div>
         <div class="p-5 sm:p-6 flex flex-col flex-1">

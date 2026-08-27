@@ -37,7 +37,7 @@ require __DIR__ . '/includes/site-header.php';
     <div class="colorful-card rounded-2xl shadow-lg p-6 sm:p-8">
         <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-6"><?= e($item['title']) ?></h1>
 
-        <img src="<?= e($item['image'] ?: 'https://placehold.co/800x600?text=No+Image') ?>" alt="<?= e($item['title']) ?>" class="w-full object-cover rounded-xl mb-6 shadow-lg bg-white" style="aspect-ratio:4/3;">
+        <img src="<?= e($item['image'] ?: 'https://placehold.co/800x600?text=No+Image') ?>" alt="<?= e($item['title']) ?>" class="w-full object-cover rounded-xl mb-6 shadow-lg bg-white zoomable" style="aspect-ratio:4/3;">
 
         <div class="space-y-6">
             <p class="text-gray-700 text-base sm:text-lg leading-relaxed break-words" style="overflow-wrap:anywhere;"><?= nl2br(e($item['description'] ?? '')) ?></p>

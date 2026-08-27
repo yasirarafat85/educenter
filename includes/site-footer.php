@@ -141,5 +141,23 @@
             });
         }
     </script>
+
+    <!-- ছবি জুম (লাইটবক্স) — .zoomable ছবিতে ক্লিক করলে বড় হয়ে খোলে, ট্যাপ/Esc-এ বন্ধ -->
+    <div id="img-lightbox" aria-hidden="true"><img src="" alt=""><button type="button" class="ilb-close" aria-label="বন্ধ করুন">✕</button></div>
+    <script>
+    (function(){
+        var lb = document.getElementById('img-lightbox');
+        if (!lb) { return; }
+        var img = lb.querySelector('img');
+        function openLb(src, alt){ img.src = src; img.alt = alt || ''; lb.classList.add('open'); lb.setAttribute('aria-hidden','false'); document.body.style.overflow = 'hidden'; }
+        function closeLb(){ lb.classList.remove('open'); lb.setAttribute('aria-hidden','true'); img.removeAttribute('src'); document.body.style.overflow = ''; }
+        document.addEventListener('click', function(e){
+            var t = e.target.closest('img.zoomable');
+            if (t) { e.preventDefault(); openLb(t.currentSrc || t.src, t.alt); }
+        });
+        lb.addEventListener('click', closeLb);
+        document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && lb.classList.contains('open')) { closeLb(); } });
+    })();
+    </script>
 </body>
 </html>
