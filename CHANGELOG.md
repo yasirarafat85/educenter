@@ -4,6 +4,11 @@
 
 ---
 
+## 2026-08-30 (✨ মোবাইল মেনু পালিশ — ৬টি উন্নতি একসাথে)
+
+- ইউজারের চাওয়া ৬টি: (১) খোলার **stagger fade+slide অ্যানিমেশন** (`@keyframes mmIn`, প্রতি আইটেম `--mm-i` দিয়ে ক্রমিক delay; `prefers-reduced-motion` গার্ড); (২) **Login বাটন full-width** (`.mobile-menu-login { grid-column: 1/-1 }` — Tailwind col-span নয়, তাই রিবিল্ড লাগে না); (৩) **ট্যাপ ফিডব্যাক** (`.mobile-menu-item:active { scale(.95) }`); (৪) **আইকন টিন্ট-বৃত্তে** (`.mm-ic`, hover/active-এ সাদা); (৫) **সক্রিয় পেজে "● এখন" পিল** (`.mm-now`, absolute কোণায়); (৬) **বাইরে ট্যাপ + সোয়াইপ-আপে মেনু বন্ধ** (site-footer.php JS — DRY `setMenu()` + document-click + touch handlers)।
+- ৩ ফাইল: `site-header.php` (মার্কআপ), `assets/css/style.css` (কাস্টম CSS), `includes/site-footer.php` (JS)। DB বদল লাগে না, **Tailwind রিবিল্ড লাগে না** (সব কাস্টম CSS ক্লাস)। filemtime অটো ক্যাশ-বাস্ট।
+
 ## 2026-08-30 (📱 মোবাইল মেনু v2 — আরও স্বচ্ছ + সক্রিয় আইটেম ফিক্স)
 
 - (ক) **বাগ ফিক্স**: আগের ফ্রস্টেড-গ্লাস নিয়ম সক্রিয় পেজের `.mm-on` গ্রেডিয়েন্ট ঢেকে দিচ্ছিল → সাদা লেখা অদৃশ্য (মেনুতে বর্তমান পেজের নাম দেখা যাচ্ছিল না)। এখন নিয়মে `:not(.mm-on)` — সক্রিয় আইটেমের গ্রেডিয়েন্ট/লেখা অক্ষত।

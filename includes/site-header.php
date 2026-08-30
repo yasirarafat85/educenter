@@ -139,10 +139,11 @@ $metaFullTitle = (!empty($pageTitle) ? $pageTitle . ' - ' : '') . $siteName;
 
             <nav id="mobile-nav" class="lg:hidden py-4 border-t border-white/20 hidden">
                 <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    <?php foreach ($navigation as $navItem): ?>
-                        <a href="<?= e($navItem['url']) ?>" class="mobile-menu-item flex flex-col sm:flex-row items-center space-y-1 sm:space-y-0 sm:space-x-2 px-3 py-3 rounded-xl transition-all font-medium text-sm <?= $activePage === $navItem['id'] ? 'mm-on text-white' : '' ?>">
-                            <i data-lucide="<?= e($navItem['icon']) ?>" class="w-4 h-4"></i>
+                    <?php foreach ($navigation as $navIndex => $navItem): $mmActive = $activePage === $navItem['id']; ?>
+                        <a href="<?= e($navItem['url']) ?>" style="--mm-i: <?= (int) $navIndex ?>" class="mobile-menu-item relative flex flex-col sm:flex-row items-center space-y-1 sm:space-y-0 sm:space-x-2 px-3 py-3 rounded-xl transition-all font-medium text-sm <?= $navItem['id'] === 'account' ? 'mobile-menu-login' : '' ?> <?= $mmActive ? 'mm-on text-white' : '' ?>">
+                            <span class="mm-ic"><i data-lucide="<?= e($navItem['icon']) ?>" class="w-4 h-4"></i></span>
                             <span class="text-xs sm:text-sm"><?= e($navItem['label']) ?></span>
+                            <?php if ($mmActive): ?><span class="mm-now">● এখন</span><?php endif; ?>
                         </a>
                     <?php endforeach; ?>
                 </div>

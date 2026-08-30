@@ -62,6 +62,15 @@ body.mobile-menu-open .mobile-menu-item:not(.mm-on) { background: rgba(255, 255,
 }
 .mobile-menu-item:hover { background: linear-gradient(135deg, rgb(var(--c-primary-2)) 0%, rgb(var(--c-primary)) 100%); color: white; }
 .mobile-menu-item.mm-on { background: linear-gradient(135deg, rgb(var(--c-primary-2)) 0%, rgb(var(--c-primary)) 100%); color: white; }
+/* মোবাইল মেনু পালিশ: আইকন-বৃত্ত + ট্যাপ ফিডব্যাক + Login full-width + সক্রিয় পিল + খোলার অ্যানিমেশন */
+.mobile-menu-item .mm-ic { display: inline-flex; align-items: center; justify-content: center; width: 2.1rem; height: 2.1rem; border-radius: 9999px; background: rgb(var(--c-primary) / 0.12); color: rgb(var(--c-primary)); transition: background .2s, color .2s; flex: none; }
+.mobile-menu-item:hover .mm-ic, .mobile-menu-item.mm-on .mm-ic { background: rgba(255, 255, 255, 0.28); color: #fff; }
+.mobile-menu-item:active { transform: scale(.95); }
+.mobile-menu-login { grid-column: 1 / -1; justify-content: center; }
+.mm-now { position: absolute; top: .4rem; right: .5rem; font-size: .6rem; font-weight: 700; background: rgba(255, 255, 255, 0.28); color: #fff; padding: .05rem .4rem; border-radius: 9999px; line-height: 1.5; }
+@keyframes mmIn { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
+body.mobile-menu-open #mobile-nav .mobile-menu-item { animation: mmIn .32s cubic-bezier(.22,.8,.3,1) backwards; animation-delay: calc(var(--mm-i, 0) * .035s); }
+@media (prefers-reduced-motion: reduce) { body.mobile-menu-open #mobile-nav .mobile-menu-item { animation: none; } }
 
 .badge-price {
     background: linear-gradient(135deg, rgb(var(--c-primary)) 0%, rgb(var(--c-deep)) 100%);

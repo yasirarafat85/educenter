@@ -131,15 +131,32 @@
         const mobileBtn = document.getElementById('mobile-menu-btn');
         const mobileNav = document.getElementById('mobile-nav');
         if (mobileBtn && mobileNav) {
-            mobileBtn.addEventListener('click', () => {
-                const isHidden = mobileNav.classList.contains('hidden');
-                mobileNav.classList.toggle('hidden');
-                document.body.classList.toggle('mobile-menu-open', isHidden); // খোলা হলে হেডার ফ্রস্টেড-গ্লাস
-                mobileBtn.innerHTML = isHidden
+            const mobileHeader = mobileBtn.closest('header');
+            function setMenu(open) {
+                mobileNav.classList.toggle('hidden', !open);
+                document.body.classList.toggle('mobile-menu-open', open); // খোলা হলে হেডার ফ্রস্টেড-গ্লাস
+                mobileBtn.innerHTML = open
                     ? '<i data-lucide="x" class="w-6 h-6 text-gray-700"></i>'
                     : '<i data-lucide="menu" class="w-6 h-6 text-gray-700"></i>';
                 lucide.createIcons();
+            }
+            mobileBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                setMenu(mobileNav.classList.contains('hidden'));
             });
+            // মেনুর বাইরে কোথাও ট্যাপ করলে বন্ধ
+            document.addEventListener('click', (e) => {
+                if (!mobileNav.classList.contains('hidden') && mobileHeader && !mobileHeader.contains(e.target)) {
+                    setMenu(false);
+                }
+            });
+            // মেনুতে উপরে সোয়াইপ করলে বন্ধ
+            let mmTouchY = null;
+            mobileNav.addEventListener('touchstart', (e) => { mmTouchY = e.touches[0].clientY; }, { passive: true });
+            mobileNav.addEventListener('touchmove', (e) => {
+                if (mmTouchY !== null && mmTouchY - e.touches[0].clientY > 55) { setMenu(false); mmTouchY = null; }
+            }, { passive: true });
+            mobileNav.addEventListener('touchend', () => { mmTouchY = null; });
         }
     </script>
 
