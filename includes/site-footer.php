@@ -134,6 +134,7 @@
             mobileBtn.addEventListener('click', () => {
                 const isHidden = mobileNav.classList.contains('hidden');
                 mobileNav.classList.toggle('hidden');
+                document.body.classList.toggle('mobile-menu-open', isHidden); // খোলা হলে হেডার ফ্রস্টেড-গ্লাস
                 mobileBtn.innerHTML = isHidden
                     ? '<i data-lucide="x" class="w-6 h-6 text-gray-700"></i>'
                     : '<i data-lucide="menu" class="w-6 h-6 text-gray-700"></i>';

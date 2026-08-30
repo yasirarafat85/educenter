@@ -48,6 +48,9 @@ body {
 .stats-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
 .glass-effect { background: rgba(255, 255, 255, 0.25); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.18); }
 .header-glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255, 255, 255, 0.3); }
+/* মোবাইল মেনু খোলা থাকলে হেডার ফ্রস্টেড-গ্লাস — পেছনের পেজ হালকা দেখা যায় */
+body.mobile-menu-open .header-glass { background: rgba(255, 255, 255, 0.55); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+body.mobile-menu-open .mobile-menu-item { background: rgba(255, 255, 255, 0.5); }
 .colorful-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.5); }
 
 .mobile-menu-item {
