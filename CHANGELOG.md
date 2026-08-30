@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-08-30 (🔐 অ্যাডমিন ফিঙ্গারপ্রিন্ট/পাসকি লগইন — WebAuthn)
+
+- ইউজার: পাসওয়ার্ডের পাশাপাশি ফোনে ফিঙ্গারপ্রিন্ট দিয়ে সহজ অ্যাডমিন লগইন (পাসওয়ার্ড অক্ষত; হোস্টিং cPanel Directory Privacy পপআপ আলাদা স্তর, ছোঁয়া হয়নি)।
+- **ইঞ্জিন `includes/webauthn.php`** (খাঁটি PHP, শুধু openssl, ES256/P-256) — ন্যূনতম CBOR + COSE→PEM + assertion signature যাচাই। ক্রিপ্টো পথ synthetic কী দিয়ে self-test (challenge/origin/signature reject সহ সব পাস)।
+- **টেবিল `admin_webauthn_credentials`** (migrate-webauthn.sql + schema.sql; 🔴 লাইভ+লোকাল phpMyAdmin-এ চালাতে হবে)।
+- **৪ এন্ডপয়েন্ট**: webauthn-register-options/-register (লগইন অবস্থায় ডিভাইস যোগ), webauthn-login-options/-login (পাবলিক; assertion যাচাই → পাসওয়ার্ড লগইনের মতোই সেশন + rate-limit + signCount ক্লোন-চেক)।
+- **UI**: `admin/login.php`-এ "ফিঙ্গারপ্রিন্ট দিয়ে লগইন" বাটন (WebAuthn সাপোর্ট থাকলে); ডিভাইস ম্যানেজমেন্ট `admin/security.php` (সাইডবার সেটিংস→"নিরাপত্তা / ফিঙ্গারপ্রিন্ট" — যোগ/তালিকা/সরান, শেষ-ব্যবহার সহ)।
+- **🔴 টেস্ট**: WebAuthn curl-এ টেস্ট করা যায় না — ক্রিপ্টো self-test হয়েছে, বাকিটা ইউজার ফোনে HTTPS-এ যাচাই করবেন। পাসওয়ার্ড ব্যাকআপ থাকায় লক-আউটের ঝুঁকি নেই।
+
 ## 2026-08-30 (✨ মোবাইল মেনু পালিশ — ৬টি উন্নতি একসাথে)
 
 - ইউজারের চাওয়া ৬টি: (১) খোলার **stagger fade+slide অ্যানিমেশন** (`@keyframes mmIn`, প্রতি আইটেম `--mm-i` দিয়ে ক্রমিক delay; `prefers-reduced-motion` গার্ড); (২) **Login বাটন full-width** (`.mobile-menu-login { grid-column: 1/-1 }` — Tailwind col-span নয়, তাই রিবিল্ড লাগে না); (৩) **ট্যাপ ফিডব্যাক** (`.mobile-menu-item:active { scale(.95) }`); (৪) **আইকন টিন্ট-বৃত্তে** (`.mm-ic`, hover/active-এ সাদা); (৫) **সক্রিয় পেজে "● এখন" পিল** (`.mm-now`, absolute কোণায়); (৬) **বাইরে ট্যাপ + সোয়াইপ-আপে মেনু বন্ধ** (site-footer.php JS — DRY `setMenu()` + document-click + touch handlers)।

@@ -288,6 +288,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
             <a href="settings.php" class="nav-link <?= nav_active('settings.php', $currentFile) ?>"><i data-lucide="settings" class="w-4 h-4"></i> সাইট সেটিংস</a>
             <a href="payment-methods.php" class="nav-link <?= nav_active('payment-methods.php', $currentFile) ?>"><i data-lucide="wallet" class="w-4 h-4"></i> পেমেন্ট মেথড</a>
             <a href="change-password.php" class="nav-link <?= nav_active('change-password.php', $currentFile) ?>"><i data-lucide="key" class="w-4 h-4"></i> পাসওয়ার্ড পরিবর্তন</a>
+            <a href="security.php" class="nav-link <?= nav_active('security.php', $currentFile) ?>"><i data-lucide="fingerprint" class="w-4 h-4"></i> নিরাপত্তা / ফিঙ্গারপ্রিন্ট</a>
             <a href="backup.php" class="nav-link <?= nav_active('backup.php', $currentFile) ?>"><i data-lucide="hard-drive-download" class="w-4 h-4"></i> ব্যাকআপ ও ডাউনলোড</a>
             <a href="archive.php" class="nav-link <?= nav_active('archive.php', $currentFile) ?>"><i data-lucide="archive" class="w-4 h-4"></i> আর্কাইভ (রিস্টোর)</a>
         </nav>
