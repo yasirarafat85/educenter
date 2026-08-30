@@ -51,7 +51,7 @@ if ($sitePath !== '' && $sitePath !== '/' && strpos($reqPath, $sitePath) === 0) 
 }
 $canonicalUrl = $baseUrl . '/' . ltrim($reqPath, '/');
 $ogImageAbs = preg_match('#^https?://#i', $metaOgImage) ? $metaOgImage : ($baseUrl . '/' . ltrim($metaOgImage, '/'));
-$metaFullTitle = (isset($pageTitle) ? $pageTitle . ' - ' : '') . $siteName;
+$metaFullTitle = (!empty($pageTitle) ? $pageTitle . ' - ' : '') . $siteName;
 ?>
 <!DOCTYPE html>
 <html lang="bn">

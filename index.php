@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
 
-$pageTitle = 'হোম';
+$pageTitle = ''; // হোম পেজে ব্রাউজার-ট্যাবে শুধু সাইটের নাম দেখাবে (আগে "হোম - " prefix ছিল)
 $activePage = 'home';
 $pageDescription = get_setting('site_meta_description') ?: (get_setting('site_name', 'EduCenter') . ' — উন্নতমানের কোর্স, ওয়ার্কশিট ও শিক্ষা উপকরণ। বিশেষজ্ঞ শিক্ষকদের তত্ত্বাবধানে আধুনিক শিক্ষা পদ্ধতি।');
 
