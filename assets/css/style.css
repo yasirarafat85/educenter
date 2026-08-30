@@ -48,9 +48,10 @@ body {
 .stats-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
 .glass-effect { background: rgba(255, 255, 255, 0.25); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.18); }
 .header-glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255, 255, 255, 0.3); }
-/* মোবাইল মেনু খোলা থাকলে হেডার ফ্রস্টেড-গ্লাস — পেছনের পেজ হালকা দেখা যায় */
-body.mobile-menu-open .header-glass { background: rgba(255, 255, 255, 0.55); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
-body.mobile-menu-open .mobile-menu-item { background: rgba(255, 255, 255, 0.5); }
+/* মোবাইল মেনু খোলা থাকলে হেডার প্রায় পুরো স্বচ্ছ গ্লাস — পেছনের সব দেখা যায় (blur দিয়ে লেখা পড়া যায়) */
+body.mobile-menu-open .header-glass { background: rgba(255, 255, 255, 0.18); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+/* সক্রিয় আইটেম (.mm-on) বাদ — তার গ্রেডিয়েন্ট/সাদা লেখা অক্ষত থাকে; বাকিগুলো স্বচ্ছ */
+body.mobile-menu-open .mobile-menu-item:not(.mm-on) { background: rgba(255, 255, 255, 0.28); }
 .colorful-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.5); }
 
 .mobile-menu-item {
