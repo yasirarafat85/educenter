@@ -434,12 +434,39 @@ function item_accent(string $type = ''): array
 // ফি বক্স — মূল/মাসিক ফি + (থাকলে) দ্বিতীয় ফি (উপকরণ/রেজিস্ট্রেশন) গোছানো বক্সে।
 // দ্বিতীয় ফি না থাকলে আগের মতোই বড় দাম দেখায় (বক্স ছাড়া)। লেবেলের "(...)" অংশ ছোট/আলাদা লাইনে যায়।
 // কার্ড ও রেজিস্ট্রেশন ব্রাউজ-লিস্ট দুই জায়গায় রিইউজ (DRY)।
-function render_fee_box(?string $price, ?string $secLabel, ?string $secAmount, string $accent): string
+// ডিসকাউন্ট প্রদর্শন: old_price (আগের/বেশি দাম) থাকলে ও বর্তমান দামের চেয়ে বেশি হলে
+// কাটা-দাগ দেওয়া আগের দাম + "কত% ছাড়" ব্যাজ ফেরত দেয় (নাহলে খালি স্ট্রিং)।
+// price/old_price দুটোই VARCHAR (ফ্রি-টেক্সট), তাই parse_price_to_number() দিয়ে সংখ্যা তুলনা।
+function render_discount_html(?string $oldPrice, ?string $price): string
+{
+    $oldPrice = trim((string) $oldPrice);
+    $price = trim((string) $price);
+    if ($oldPrice === '' || $price === '') {
+        return '';
+    }
+    $oldNum = parse_price_to_number($oldPrice);
+    $newNum = parse_price_to_number($price);
+    if ($oldNum <= 0 || $newNum <= 0 || $oldNum <= $newNum) {
+        return ''; // আগের দাম বর্তমানের সমান/কম হলে ডিসকাউন্ট দেখানোর মানে নেই
+    }
+    $pct = (int) round((($oldNum - $newNum) / $oldNum) * 100);
+    $html = '<span class="text-lg font-semibold" style="color:#9ca3af;text-decoration:line-through">' . e($oldPrice) . '</span>';
+    if ($pct > 0) {
+        $html .= '<span class="text-xs font-black px-2 py-0.5 rounded-full" style="background:#ef4444;color:#fff;">' . $pct . '% ছাড়</span>';
+    }
+    return $html;
+}
+
+function render_fee_box(?string $price, ?string $secLabel, ?string $secAmount, string $accent, ?string $oldPrice = ''): string
 {
     $price = trim((string) $price);
     $secAmount = trim((string) $secAmount);
+
+    // ডিসকাউন্ট চিপ: old_price থাকলে ও price-এর চেয়ে বেশি হলে কাটা দাম + কত% ছাড় (inline স্টাইল)
+    $discountHtml = render_discount_html($oldPrice, $price);
+
     if ($secAmount === '') {
-        return '<div class="flex items-baseline gap-1 mb-4"><span class="text-3xl font-black" style="color:' . $accent . '">' . e($price) . '</span></div>';
+        return '<div class="flex items-baseline flex-wrap gap-2 mb-4"><span class="text-3xl font-black" style="color:' . $accent . '">' . e($price) . '</span>' . $discountHtml . '</div>';
     }
     $label = trim((string) $secLabel);
     $main = $label; $desc = '';
@@ -449,7 +476,7 @@ function render_fee_box(?string $price, ?string $secLabel, ?string $secAmount, s
     }
     if ($main === '') { $main = 'অতিরিক্ত ফি'; }
     return '<div class="rounded-xl border border-gray-100 bg-gray-50 p-3 mb-4">'
-        . '<div class="text-2xl font-black leading-tight" style="color:' . $accent . '">' . e($price) . '</div>'
+        . '<div class="flex items-baseline flex-wrap gap-2"><span class="text-2xl font-black leading-tight" style="color:' . $accent . '">' . e($price) . '</span>' . $discountHtml . '</div>'
         . '<div class="border-t border-gray-200 my-2"></div>'
         . '<div class="flex items-center justify-between gap-3">'
         . '<div class="min-w-0">'
@@ -511,7 +538,7 @@ function render_item_card(array $item, string $type): string
     $openBadge = ($type === 'course' && !empty($item['registration_open']))
         ? '<span class="inline-flex items-center gap-1 text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full whitespace-nowrap"><span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block;"></span> ভর্তি চলছে</span>' : '';
     // মূল ফি + (থাকলে) দ্বিতীয় ফি — গোছানো ফি বক্স
-    $feeBox = render_fee_box($item['price'] ?? '', $item['secondary_fee_label'] ?? '', $item['secondary_fee'] ?? '', $solid);
+    $feeBox = render_fee_box($item['price'] ?? '', $item['secondary_fee_label'] ?? '', $item['secondary_fee'] ?? '', $solid, $item['old_price'] ?? '');
 
     $ctaBtn = $registrationClosed
         ? '<a href="course-interest?course_id=' . $id . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">জানিয়ে রাখুন</a>'

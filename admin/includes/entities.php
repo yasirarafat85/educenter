@@ -31,7 +31,8 @@ function get_entities(): array
             'fields' => [
                 'title'       => ['label' => 'টাইটেল', 'type' => 'text', 'required' => true],
                 'image'       => ['label' => 'ছবি', 'type' => 'image'],
-                'price'       => ['label' => 'মূল্য', 'type' => 'text'],
+                'price'       => ['label' => 'মূল্য (বর্তমান/বিক্রয় দাম)', 'type' => 'text'],
+                'old_price'   => ['label' => 'আগের দাম (ঐচ্ছিক — ডিসকাউন্ট দেখাতে)', 'type' => 'text', 'help' => 'ডিসকাউন্ট দেখাতে চাইলে এখানে আগের (বেশি) দাম দিন — সাইটে এটা কাটা দাগ দিয়ে দেখাবে ও কত% ছাড় হিসাব করে দেখাবে। খালি রাখলে ডিসকাউন্ট দেখাবে না।'],
                 'pages'       => ['label' => 'পৃষ্ঠা সংখ্যা', 'type' => 'text'],
                 'level'       => ['label' => 'লেভেল/ক্লাস', 'type' => 'text'],
                 'description' => ['label' => 'বিবরণ', 'type' => 'textarea'],
@@ -50,7 +51,8 @@ function get_entities(): array
             'fields' => [
                 'title'       => ['label' => 'টাইটেল', 'type' => 'text', 'required' => true],
                 'image'       => ['label' => 'ছবি', 'type' => 'image'],
-                'price'       => ['label' => 'মূল্য', 'type' => 'text'],
+                'price'       => ['label' => 'মূল্য (বর্তমান/বিক্রয় দাম)', 'type' => 'text'],
+                'old_price'   => ['label' => 'আগের দাম (ঐচ্ছিক — ডিসকাউন্ট দেখাতে)', 'type' => 'text', 'help' => 'ডিসকাউন্ট দেখাতে চাইলে এখানে আগের (বেশি) দাম দিন — সাইটে এটা কাটা দাগ দিয়ে দেখাবে ও কত% ছাড় হিসাব করে দেখাবে। খালি রাখলে ডিসকাউন্ট দেখাবে না।'],
                 'description' => ['label' => 'বিবরণ', 'type' => 'textarea'],
                 'features'    => ['label' => 'বৈশিষ্ট্য (প্রতি লাইনে একটি)', 'type' => 'lines', 'child_table' => 'product_features', 'child_fk' => 'product_id', 'child_col' => 'feature_text'],
                 'is_active'   => ['label' => 'সাইটে দেখাবে?', 'type' => 'checkbox', 'default' => 1, 'warn_off' => true, 'toggle_label' => 'প্রোডাক্টটি সাইটে দেখানো'],

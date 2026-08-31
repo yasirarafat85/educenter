@@ -45,7 +45,7 @@ require __DIR__ . '/includes/site-header.php';
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="flex items-center gap-3 bg-gradient-to-r from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
                     <span class="icon-circle bg-blue-200 text-blue-700 w-10 h-10 flex-shrink-0"><i data-lucide="wallet" class="w-5 h-5"></i></span>
-                    <span class="text-blue-800 font-bold text-lg">মূল্য: <?= e($item['price'] ?? '') ?></span>
+                    <span class="text-blue-800 font-bold text-lg flex items-baseline flex-wrap gap-2">মূল্য: <?= e($item['price'] ?? '') ?><?= render_discount_html($item['old_price'] ?? '', $item['price'] ?? '') ?></span>
                 </div>
                 <?php if (!empty($item['duration'])): ?>
                 <div class="flex items-center gap-3 bg-gradient-to-r from-green-50 to-green-100 p-4 rounded-xl border border-green-200">
