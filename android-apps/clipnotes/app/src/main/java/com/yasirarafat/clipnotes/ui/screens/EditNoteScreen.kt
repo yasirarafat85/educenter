@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -23,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -40,7 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import com.yasirarafat.clipnotes.data.Category
 import com.yasirarafat.clipnotes.ui.NotesViewModel
 import com.yasirarafat.clipnotes.ui.theme.NoteStripColors
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -66,15 +69,20 @@ fun EditNoteScreen(
     initialCategoryId: Long? = null,
     onDone: () -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var content by remember { mutableStateOf(if (noteId == 0L) (initialContent ?: "") else "") }
+    // rememberSaveable so edits survive rotation / the Activity being recreated.
+    var title by rememberSaveable { mutableStateOf("") }
+    var content by rememberSaveable { mutableStateOf(if (noteId == 0L) (initialContent ?: "") else "") }
     // A new note started inside a category is pre-assigned to it.
-    var categoryId by remember { mutableStateOf(if (noteId == 0L) initialCategoryId else null) }
-    var colorIndex by remember { mutableStateOf(0) }
-    var isChecklist by remember { mutableStateOf(false) }
-    var reminderAt by remember { mutableStateOf<Long?>(null) }
-    var lockTimeoutSecs by remember { mutableStateOf(0) }
-    var lockOn by remember { mutableStateOf(false) }
+    var categoryId by rememberSaveable { mutableStateOf(if (noteId == 0L) initialCategoryId else null) }
+    var colorIndex by rememberSaveable { mutableStateOf(0) }
+    var isChecklist by rememberSaveable { mutableStateOf(false) }
+    var reminderAt by rememberSaveable { mutableStateOf<Long?>(null) }
+    var lockTimeoutSecs by rememberSaveable { mutableStateOf(0) }
+    var lockOn by rememberSaveable { mutableStateOf(false) }
+    // Loaded-once guard, unsaved-changes flag, and the exit warning dialog.
+    var loaded by rememberSaveable { mutableStateOf(false) }
+    var dirty by rememberSaveable { mutableStateOf(false) }
+    var showExitDialog by rememberSaveable { mutableStateOf(false) }
 
     val context = LocalContext.current
     val notifPermissionLauncher = rememberLauncherForActivityResult(
@@ -93,7 +101,7 @@ fun EditNoteScreen(
                         val c = Calendar.getInstance()
                         c.set(year, month, day, hour, minute, 0)
                         c.set(Calendar.MILLISECOND, 0)
-                        reminderAt = c.timeInMillis
+                        reminderAt = c.timeInMillis; dirty = true
                     },
                     cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), false
                 ).show()
@@ -102,7 +110,9 @@ fun EditNoteScreen(
         ).show()
     }
 
+    // Load once: DB values (existing note) first, then any unsaved draft on top.
     LaunchedEffect(noteId) {
+        if (loaded) return@LaunchedEffect
         if (noteId != 0L) {
             val note = vm.loadNote(noteId)
             if (note != null) {
@@ -116,23 +126,62 @@ fun EditNoteScreen(
                 lockOn = note.isLocked
             }
         }
+        // Restore an auto-saved draft (from a previous minimise/close) if present.
+        vm.loadDraft(noteId)?.let { d ->
+            title = d.title
+            content = d.content
+            categoryId = d.categoryId
+            colorIndex = d.color
+            isChecklist = d.isChecklist
+            reminderAt = d.reminderAt
+            lockTimeoutSecs = d.lockTimeoutSecs
+            lockOn = d.isLocked
+            dirty = true   // a restored draft is unsaved work
+        }
+        loaded = true
     }
+
+    // Auto-save a draft whenever the note has been edited (debounced).
+    LaunchedEffect(title, content, categoryId, colorIndex, isChecklist, reminderAt, lockTimeoutSecs, lockOn, dirty) {
+        if (dirty && (title.isNotBlank() || content.isNotBlank())) {
+            delay(400)
+            vm.saveDraft(noteId, title, content, categoryId, colorIndex, isChecklist, reminderAt, lockTimeoutSecs, lockOn)
+        }
+    }
+
+    fun doSave() {
+        vm.saveNote(noteId, title.trim(), content.trim(), categoryId, colorIndex, isChecklist, reminderAt, lockTimeoutSecs, lockOn)
+        vm.clearDraft()
+        onDone()
+    }
+
+    // Ask before leaving with unsaved changes; otherwise just close.
+    fun attemptClose() {
+        if (dirty && (title.isNotBlank() || content.isNotBlank())) {
+            showExitDialog = true
+        } else {
+            // Only clear the draft if THIS note was edited this session (dirty) —
+            // an untouched note must not wipe another note's saved draft.
+            if (dirty) vm.clearDraft()
+            onDone()
+        }
+    }
+
+    // Mobile back button → same unsaved-changes guard as the on-screen back arrow.
+    BackHandler { attemptClose() }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (noteId == 0L) "New Note" else "Edit Note") },
                 navigationIcon = {
-                    IconButton(onClick = onDone) {
+                    IconButton(onClick = { attemptClose() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
                     TextButton(
-                        onClick = {
-                            vm.saveNote(noteId, title.trim(), content.trim(), categoryId, colorIndex, isChecklist, reminderAt, lockTimeoutSecs, lockOn)
-                            onDone()
-                        },
+                        onClick = { doSave() },
                         enabled = title.isNotBlank() || content.isNotBlank()
                     ) {
                         Text("SAVE", color = Color.White, fontWeight = FontWeight.Bold)
@@ -155,7 +204,7 @@ fun EditNoteScreen(
         ) {
             OutlinedTextField(
                 value = title,
-                onValueChange = { title = it },
+                onValueChange = { title = it; dirty = true },
                 label = { Text("Title (optional)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
@@ -163,7 +212,7 @@ fun EditNoteScreen(
             Spacer(Modifier.size(12.dp))
             OutlinedTextField(
                 value = content,
-                onValueChange = { content = it },
+                onValueChange = { content = it; dirty = true },
                 label = { Text(if (isChecklist) "One item per line" else "Text to save & copy") },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -179,7 +228,7 @@ fun EditNoteScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Switch(checked = isChecklist, onCheckedChange = { isChecklist = it })
+                Switch(checked = isChecklist, onCheckedChange = { isChecklist = it; dirty = true })
             }
             Spacer(Modifier.size(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -194,7 +243,7 @@ fun EditNoteScreen(
                     )
                 }
                 if (reminderAt != null) {
-                    TextButton(onClick = { reminderAt = null }) { Text("Clear") }
+                    TextButton(onClick = { reminderAt = null; dirty = true }) { Text("Clear") }
                 }
                 OutlinedButton(onClick = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -233,7 +282,7 @@ fun EditNoteScreen(
                     items(lockModes) { (label, on, secs) ->
                         FilterChip(
                             selected = lockOn == on && lockTimeoutSecs == secs,
-                            onClick = { lockOn = on; lockTimeoutSecs = secs },
+                            onClick = { lockOn = on; lockTimeoutSecs = secs; dirty = true },
                             label = { Text(label) }
                         )
                     }
@@ -248,14 +297,14 @@ fun EditNoteScreen(
                     item {
                         FilterChip(
                             selected = categoryId == null,
-                            onClick = { categoryId = null },
+                            onClick = { categoryId = null; dirty = true },
                             label = { Text("None") }
                         )
                     }
                     items(categories, key = { it.id }) { cat ->
                         FilterChip(
                             selected = categoryId == cat.id,
-                            onClick = { categoryId = cat.id },
+                            onClick = { categoryId = cat.id; dirty = true },
                             label = { Text(cat.name) }
                         )
                     }
@@ -280,11 +329,32 @@ fun EditNoteScreen(
                                     else MaterialTheme.colorScheme.outline,
                                     shape = CircleShape
                                 )
-                                .clickable { colorIndex = index }
+                                .clickable { colorIndex = index; dirty = true }
                         )
                     }
                 }
             }
         }
+    }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("Save changes?") },
+            text = { Text("This note has unsaved changes. Save before closing?") },
+            confirmButton = {
+                TextButton(onClick = { showExitDialog = false; doSave() }) { Text("Save") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        showExitDialog = false
+                        vm.clearDraft()
+                        onDone()
+                    }) { Text("Discard") }
+                    TextButton(onClick = { showExitDialog = false }) { Text("Cancel") }
+                }
+            }
+        )
     }
 }

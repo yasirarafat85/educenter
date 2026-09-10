@@ -231,6 +231,59 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun loadNote(id: Long): Note? = dao.getNote(id)
 
+    // ---------------- Draft auto-save ----------------
+    // Keeps the in-progress editor text in SharedPreferences, updated as the
+    // user types, so it survives minimising / closing / the OS killing the app.
+    // Only one draft is kept at a time (the note currently being edited).
+
+    fun saveDraft(
+        id: Long, title: String, content: String, categoryId: Long?,
+        color: Int, isChecklist: Boolean, reminderAt: Long?,
+        lockTimeoutSecs: Int, isLocked: Boolean
+    ) {
+        prefs.edit()
+            .putBoolean("draft_active", true)
+            .putLong("draft_id", id)
+            .putString("draft_title", title)
+            .putString("draft_content", content)
+            .putLong("draft_category", categoryId ?: -1L)
+            .putInt("draft_color", color)
+            .putBoolean("draft_checklist", isChecklist)
+            .putLong("draft_reminder", reminderAt ?: -1L)
+            .putInt("draft_lock_timeout", lockTimeoutSecs)
+            .putBoolean("draft_locked", isLocked)
+            .apply()
+    }
+
+    /** The saved draft, only if it belongs to the note being opened. */
+    fun loadDraft(forNoteId: Long): NoteDraft? {
+        if (!prefs.getBoolean("draft_active", false)) return null
+        if (prefs.getLong("draft_id", Long.MIN_VALUE) != forNoteId) return null
+        val cat = prefs.getLong("draft_category", -1L)
+        val rem = prefs.getLong("draft_reminder", -1L)
+        return NoteDraft(
+            id = forNoteId,
+            title = prefs.getString("draft_title", "") ?: "",
+            content = prefs.getString("draft_content", "") ?: "",
+            categoryId = if (cat < 0) null else cat,
+            color = prefs.getInt("draft_color", 0),
+            isChecklist = prefs.getBoolean("draft_checklist", false),
+            reminderAt = if (rem <= 0) null else rem,
+            lockTimeoutSecs = prefs.getInt("draft_lock_timeout", 0),
+            isLocked = prefs.getBoolean("draft_locked", false)
+        )
+    }
+
+    fun clearDraft() {
+        prefs.edit()
+            .remove("draft_active").remove("draft_id")
+            .remove("draft_title").remove("draft_content")
+            .remove("draft_category").remove("draft_color")
+            .remove("draft_checklist").remove("draft_reminder")
+            .remove("draft_lock_timeout").remove("draft_locked")
+            .apply()
+    }
+
     fun saveNote(
         id: Long,
         title: String,
@@ -589,3 +642,16 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
         return restored
     }
 }
+
+/** An unsaved editor draft, restored when the same note is re-opened. */
+data class NoteDraft(
+    val id: Long,
+    val title: String,
+    val content: String,
+    val categoryId: Long?,
+    val color: Int,
+    val isChecklist: Boolean,
+    val reminderAt: Long?,
+    val lockTimeoutSecs: Int,
+    val isLocked: Boolean
+)
