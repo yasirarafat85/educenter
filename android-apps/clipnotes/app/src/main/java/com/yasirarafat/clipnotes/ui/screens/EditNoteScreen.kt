@@ -3,6 +3,7 @@ package com.yasirarafat.clipnotes.ui.screens
 import android.Manifest
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -39,9 +40,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,8 +52,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.yasirarafat.clipnotes.data.Category
 import com.yasirarafat.clipnotes.ui.NotesViewModel
 import com.yasirarafat.clipnotes.ui.theme.NoteStripColors
@@ -85,9 +92,24 @@ fun EditNoteScreen(
     var showExitDialog by rememberSaveable { mutableStateOf(false) }
 
     val context = LocalContext.current
+    // Whether notifications are blocked — a reminder can't ring without them.
+    var notifBlocked by remember { mutableStateOf(false) }
+    fun refreshNotifState() {
+        notifBlocked = !NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { /* result ignored; the reminder is still set either way */ }
+    ) { refreshNotifState() }
+
+    // Re-check on every resume, so returning from system settings updates it.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshNotifState()
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
 
     fun pickReminder() {
         val cal = Calendar.getInstance()
@@ -252,6 +274,24 @@ fun EditNoteScreen(
                     pickReminder()
                 }) { Text("Set") }
             }
+            // A reminder can only ring if notifications are allowed. Without this
+            // warning the alarm fires silently and the user never knows why.
+            if (reminderAt != null && notifBlocked) {
+                Spacer(Modifier.size(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "⚠ Notifications are off — this reminder won't ring.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = {
+                        val i = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        runCatching { context.startActivity(i) }
+                    }) { Text("Turn on") }
+                }
+            }
             Spacer(Modifier.size(12.dp))
             Text("Lock this note", style = MaterialTheme.typography.labelLarge)
             if (!vm.lockEnabled) {
@@ -314,10 +354,12 @@ fun EditNoteScreen(
             Spacer(Modifier.size(12.dp))
             Text("Note color", style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.size(6.dp))
-            Row {
-                NoteStripColors.forEachIndexed { index, c ->
+            // LazyRow (not Row) so the full palette stays reachable on narrow phones.
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(NoteStripColors.size) { index ->
+                    val c = NoteStripColors[index]
                     val selected = colorIndex == index
-                    Box(modifier = Modifier.size(38.dp).padding(end = 10.dp)) {
+                    Box(modifier = Modifier.size(38.dp), contentAlignment = Alignment.Center) {
                         Box(
                             modifier = Modifier
                                 .size(30.dp)

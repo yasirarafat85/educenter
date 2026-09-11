@@ -8,6 +8,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -33,16 +37,37 @@ class ReminderReceiver : BroadcastReceiver() {
         showNotification(context, id, title, text)
     }
 
+    /**
+     * Alarm-style reminder sound.
+     *
+     * NOTE: a NotificationChannel's sound/importance are IMMUTABLE once created,
+     * so changing them requires a NEW channel id — hence [CHANNEL] is versioned.
+     * The old channel is deleted so users don't see a stale duplicate in Settings.
+     */
     private fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            runCatching { nm.deleteNotificationChannel(OLD_CHANNEL) }
+
             val channel = NotificationChannel(CHANNEL, "Reminders", NotificationManager.IMPORTANCE_HIGH)
             channel.description = "Note reminders"
             channel.enableVibration(true)
+            channel.vibrationPattern = longArrayOf(0, 500, 300, 500, 300, 500)
             channel.enableLights(true)
-            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            // Play at ALARM volume so it is actually audible, like a real alarm.
+            val attrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            channel.setSound(alarmSound(), attrs)
             nm.createNotificationChannel(channel)
         }
     }
+
+    /** Default alarm tone, falling back to the notification tone. */
+    private fun alarmSound(): Uri =
+        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
     private fun showNotification(context: Context, id: Long, title: String, text: String) {
         ensureChannel(context)
@@ -56,10 +81,15 @@ class ReminderReceiver : BroadcastReceiver() {
             .setContentText(text.ifBlank { "You have a reminder" })
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(openIntent)
+        // Pre-Android 8 has no channels, so sound/vibration go on the builder.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            builder.setSound(alarmSound(), AudioManager.STREAM_ALARM)
+                .setVibrate(longArrayOf(0, 500, 300, 500, 300, 500))
+        }
 
         val allowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(
@@ -86,6 +116,8 @@ class ReminderReceiver : BroadcastReceiver() {
         const val EXTRA_ID = "id"
         const val EXTRA_TITLE = "title"
         const val EXTRA_TEXT = "text"
-        const val CHANNEL = "reminders"
+        /** Versioned: bump this whenever the channel's sound/importance changes. */
+        const val CHANNEL = "reminders_v2"
+        private const val OLD_CHANNEL = "reminders"
     }
 }

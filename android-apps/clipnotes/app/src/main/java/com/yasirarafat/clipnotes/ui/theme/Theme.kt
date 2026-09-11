@@ -26,14 +26,25 @@ val ClipAccents = listOf(
 )
 
 /** Per-note strip colours. Index 0 = none (no strip). Stored on each note. */
+// Note strip colours. APPEND ONLY — a note stores the index, so reordering or
+// removing an entry would silently repaint existing notes.
 val NoteStripColors = listOf(
-    Color(0x00000000), // 0 none
-    Color(0xFFEF4444), // red
-    Color(0xFFF59E0B), // amber
-    Color(0xFF10B981), // green
-    Color(0xFF3B82F6), // blue
-    Color(0xFF8B5CF6), // purple
-    Color(0xFFEC4899)  // pink
+    Color(0x00000000), // 0  none
+    Color(0xFFEF4444), // 1  red
+    Color(0xFFF59E0B), // 2  amber
+    Color(0xFF10B981), // 3  green
+    Color(0xFF3B82F6), // 4  blue
+    Color(0xFF8B5CF6), // 5  purple
+    Color(0xFFEC4899), // 6  pink
+    Color(0xFFF97316), // 7  orange
+    Color(0xFF14B8A6), // 8  teal
+    Color(0xFF06B6D4), // 9  cyan
+    Color(0xFF6366F1), // 10 indigo
+    Color(0xFF84CC16), // 11 lime
+    Color(0xFFD946EF), // 12 fuchsia
+    Color(0xFFF43F5E), // 13 rose
+    Color(0xFF0EA5E9), // 14 sky
+    Color(0xFF78716C)  // 15 stone (neutral)
 )
 
 private val LightBase = lightColorScheme(

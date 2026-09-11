@@ -1,5 +1,6 @@
 package com.yasirarafat.clipnotes.ui
 
+import androidx.activity.compose.BackHandler
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -162,10 +163,27 @@ fun ClipApp(vm: NotesViewModel) {
 
     fun requestUnlock(note: Note) { pendingUnlock = note }
 
+    // Mobile back button navigates inside the app instead of closing it:
+    // drawer → close, search → exit search, category view → Categories,
+    // any other screen → All Notes. Only on the All Notes home does back
+    // fall through to the system (leave the app).
+    BackHandler(
+        enabled = drawerState.isOpen || searchActive || screen != Screen.Notes || categoryFilter > 0
+    ) {
+        when {
+            drawerState.isOpen -> scope.launch { drawerState.close() }
+            searchActive -> { searchActive = false; query = "" }
+            categoryFilter > 0 -> goTo(Screen.Categories)
+            else -> goTo(Screen.Notes)
+        }
+    }
+
     // Tapping a note opens a read-only detail view (full content visible).
     if (viewingId != NOT_EDITING) {
         val detailNote = notes.firstOrNull { it.id == viewingId }
         if (detailNote != null) {
+            // Mobile back button closes the detail view instead of the app.
+            BackHandler { viewingId = NOT_EDITING }
             val catName = detailNote.categoryId?.let { id -> categories.firstOrNull { it.id == id }?.name }
             NoteDetailScreen(
                 note = detailNote,
