@@ -73,6 +73,48 @@ function admin_super_only_pages(): array
     return ['team.php', 'backup.php'];
 }
 
+// প্রতি সেকশনে যে ৩ ধরনের ক্ষমতা: দেখা / এডিট (যোগ+পরিবর্তন) / ডিলিট
+function admin_capabilities(): array
+{
+    return ['view' => 'দেখা', 'edit' => 'যোগ / এডিট', 'delete' => 'ডিলিট'];
+}
+
+// POST-এ যেসব action-মার্কার (GET বা POST) মানে "ডিলিট" — বাকি সব "এডিট" ধরা হয়।
+// (২০২৬-০৯-১৪ অডিটে পাওয়া — প্রতিটা ডিলিট-পথ এই তালিকায়; কোনো নীরব ডিলিট নেই)
+function admin_delete_actions(): array
+{
+    return ['delete', 'delete-batch', 'del', 'del-note', 'clear-all', 'purge'];
+}
+
+// permissions (DB/session) → সেকশন=>caps[] ম্যাপ-এ নরমালাইজ।
+// পুরনো ফরম্যাট (["orders","content"] — flat list) হলে প্রতিটা সেকশনে পূর্ণ caps ধরা হয়।
+function admin_normalize_permissions($raw): array
+{
+    $out = [];
+    if (!is_array($raw) || !$raw) {
+        return $out;
+    }
+    $isList = array_keys($raw) === range(0, count($raw) - 1);
+    if ($isList) {
+        foreach ($raw as $sec) {
+            if (is_string($sec)) {
+                $out[$sec] = ['view', 'edit', 'delete']; // পুরনো = পূর্ণ
+            }
+        }
+        return $out;
+    }
+    foreach ($raw as $sec => $caps) {
+        $c = array_values(array_intersect(['view', 'edit', 'delete'], (array) $caps));
+        if ($c) {
+            if (!in_array('view', $c, true)) {
+                $c[] = 'view'; // এডিট/ডিলিট থাকলে দেখা স্বয়ংক্রিয়
+            }
+            $out[$sec] = $c;
+        }
+    }
+    return $out;
+}
+
 function admin_role(): string
 {
     // লেগাসি সেশন (এই ফিচারের আগের) → 'admin' (তখন সবাই মূল অ্যাডমিন ছিল)
@@ -84,33 +126,40 @@ function admin_is_super(): bool
     return admin_role() === 'admin';
 }
 
-// একটা সেকশনে অ্যাক্সেস আছে কিনা (super সবসময় true)
-function admin_can(string $section): bool
+// একটা সেকশনে নির্দিষ্ট ক্ষমতা (view/edit/delete) আছে কিনা (super সবসময় true)
+function admin_can(string $section, string $cap = 'view'): bool
 {
     if (admin_is_super()) {
         return true;
     }
-    return in_array($section, $_SESSION['admin_permissions'] ?? [], true);
+    $perms = $_SESSION['admin_permissions'] ?? [];
+    return in_array($cap, $perms[$section] ?? [], true);
 }
 
-// একটা পেজ ফাইল খোলার অনুমতি আছে কিনা (কেন্দ্রীয় গার্ড এটাই ব্যবহার করে)
+// একটা পেজ ফাইল খোলার (view) অনুমতি আছে কিনা — কেন্দ্রীয় গার্ড এটাই ব্যবহার করে
 function admin_can_page(string $script): bool
+{
+    return admin_can_action($script, 'view');
+}
+
+// একটা পেজে নির্দিষ্ট কাজ (view/edit/delete) করার অনুমতি আছে কিনা
+function admin_can_action(string $script, string $cap): bool
 {
     if (admin_is_super()) {
         return true;
     }
     if (in_array($script, admin_always_allowed_pages(), true)) {
-        return true;
+        return true; // self-service (নিজ পাসওয়ার্ড/ফিঙ্গার) — সব caps
     }
     if (in_array($script, admin_super_only_pages(), true)) {
         return false;
     }
     $sections = admin_page_sections()[$script] ?? null;
     if ($sections === null) {
-        return false; // অজানা পেজ → fail-closed (শুধু super)
+        return false; // অজানা পেজ → fail-closed
     }
     foreach ($sections as $s) {
-        if (admin_can($s)) {
+        if (admin_can($s, $cap)) {
             return true;
         }
     }

@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-09-14 (🔐 মডারেটর অনুমতি v2 — প্রতি সেকশনে দেখা/এডিট/ডিলিট আলাদা)
+
+- ইউজার: সেকশন-অ্যাক্সেসের চেয়ে সূক্ষ্ম — প্রতি সেকশনে কে শুধু দেখবে, কে এডিট, কে ডিলিট করতে পারবে।
+- **permissions JSON এখন সেকশন=>caps[] ম্যাপ** (আগের flat list backward-compat = পূর্ণ caps)। `admin_capabilities()` view/edit/delete; `admin_normalize_permissions()`; `admin_can($sec,$cap)` + `admin_can_action($script,$cap)`।
+- **🔴 কেন্দ্রীয় action-গার্ড** `admin_require_login()`-এ: মডারেটরের POST এলে action-মার্কার (GET/POST) দেখে ডিলিট নাকি এডিট বুঝে অনুমতি চেক — `admin_delete_actions()` = delete/delete-batch/del/del-note/clear-all/purge (সম্পূর্ণ অডিটে পাওয়া, প্রতিটা DELETE-পথ কভার)। অনুমতি না থাকলে flash + ফেরত।
+- **team.php**: প্রতি সেকশনে ৩ চেকবক্স (দেখা/এডিট/ডিলিট), add ও edit দুই ফর্মে। DB মাইগ্রেশন লাগে না (একই permissions কলাম, format বদল)।
+- isolated টেস্ট (২৭টি): view-only → এডিট/ডিলিট ব্লক; edit → save পারে delete ব্লক; সব ডিলিট-মার্কার সনাক্ত; save/restore edit হিসেবে; পুরনো ফরম্যাট পূর্ণ; super সব — সব পাস। lint পরিষ্কার।
+
 ## 2026-09-14 (👥 মডারেটর/স্টাফ রোল-ভিত্তিক অ্যাক্সেস — RBAC)
 
 - ইউজার: মূল অ্যাডমিন ছাড়াও মডারেটর অ্যাকাউন্ট, কে কী দেখবে/করবে তা মূল অ্যাডমিন থেকে নিয়ন্ত্রণ। (ইউজার cPanel Directory Privacy পপআপ সরিয়ে দিয়েছেন — এখন অ্যাপ-লগইন+রোলই গার্ড।)

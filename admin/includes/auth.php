@@ -61,7 +61,7 @@ function admin_establish_session(array $admin): void
     $_SESSION['admin_username'] = $admin['username'];
     $_SESSION['admin_role'] = $admin['role'] ?? 'admin';
     $decoded = json_decode($admin['permissions'] ?? '[]', true);
-    $_SESSION['admin_permissions'] = is_array($decoded) ? $decoded : [];
+    $_SESSION['admin_permissions'] = admin_normalize_permissions($decoded); // সেকশন=>caps[] ম্যাপ
     $_SESSION['admin_last_activity'] = time(); // নিষ্ক্রিয়তা টাইমআউটের ভিত্তি
 }
 
@@ -88,9 +88,24 @@ function admin_require_login(): void
 
     // রোল-ভিত্তিক অ্যাক্সেস: এই পেজে মডারেটরের অনুমতি আছে কিনা (মূল অ্যাডমিন সবসময় পায়)
     $script = basename($_SERVER['SCRIPT_NAME'] ?? $_SERVER['PHP_SELF'] ?? '');
-    if ($script !== '' && !admin_can_page($script)) {
+    if ($script === '' || admin_is_super()) {
+        return; // super সব পায়, বাকি চেক লাগে না
+    }
+    // (ক) পেজ খোলার (view) অনুমতি
+    if (!admin_can_page($script)) {
         set_flash('error', 'দুঃখিত, এই অংশে আপনার অ্যাক্সেস নেই।');
         redirect('index.php');
+    }
+    // (খ) কোনো পরিবর্তন (POST) হলে — সেটা ডিলিট নাকি এডিট বুঝে সেই অনুমতি চেক
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $act = $_POST['action'] ?? ($_GET['action'] ?? '');
+        $cap = in_array($act, admin_delete_actions(), true) ? 'delete' : 'edit';
+        if (!admin_can_action($script, $cap)) {
+            set_flash('error', $cap === 'delete' ? 'দুঃখিত, এখানে ডিলিট করার অনুমতি নেই।' : 'দুঃখিত, এখানে পরিবর্তন করার অনুমতি নেই।');
+            $ref = $_SERVER['HTTP_REFERER'] ?? '';
+            $host = $_SERVER['HTTP_HOST'] ?? '';
+            redirect(($ref !== '' && $host !== '' && strpos($ref, '://' . $host . '/') !== false) ? $ref : 'index.php');
+        }
     }
 }
 

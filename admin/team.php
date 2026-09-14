@@ -9,12 +9,21 @@ $db = get_db();
 $sections = admin_permission_sections();
 $selfId = (int) $_SESSION['admin_id'];
 
-// POST থেকে বৈধ পারমিশন সেকশনগুলো বের করা
+// POST থেকে সেকশন=>caps[] ম্যাপ বানানো (এডিট/ডিলিট থাকলে দেখা স্বয়ংক্রিয়)
 function team_clean_perms(array $sections): string
 {
-    $chosen = (array) ($_POST['perms'] ?? []);
-    $valid = array_values(array_intersect(array_keys($sections), $chosen));
-    return json_encode($valid, JSON_UNESCAPED_UNICODE);
+    $out = [];
+    $raw = (array) ($_POST['perms'] ?? []);
+    foreach (array_keys($sections) as $key) {
+        $caps = array_values(array_intersect(['view', 'edit', 'delete'], (array) ($raw[$key] ?? [])));
+        if ($caps) {
+            if (!in_array('view', $caps, true)) {
+                $caps[] = 'view';
+            }
+            $out[$key] = $caps;
+        }
+    }
+    return json_encode($out, JSON_UNESCAPED_UNICODE);
 }
 
 // একটা moderator id সত্যিই moderator কিনা (admin অ্যাকাউন্ট এই পেজ থেকে বদলানো/মোছা যাবে না)
@@ -96,6 +105,21 @@ $admins = $db->query("SELECT * FROM admin_users WHERE role = 'admin' ORDER BY id
 $mods   = $db->query("SELECT * FROM admin_users WHERE role = 'moderator' ORDER BY full_name")->fetchAll();
 
 require __DIR__ . '/includes/layout-top.php';
+
+// প্রতি সেকশনে দেখা/এডিট/ডিলিট চেকবক্স-সারি রেন্ডার (add ও edit দুই ফর্মে রিইউজ)
+$capLabels = admin_capabilities();
+$renderCapRow = function (string $key, string $label, array $current) use ($capLabels): string {
+    $h = '<div class="p-3 rounded-xl border border-gray-200">';
+    $h .= '<div class="text-sm font-semibold text-gray-800 mb-2">' . e($label) . '</div>';
+    $h .= '<div class="flex flex-wrap gap-x-4 gap-y-1">';
+    foreach ($capLabels as $cap => $clabel) {
+        $checked = in_array($cap, $current, true) ? 'checked' : '';
+        $h .= '<label class="inline-flex items-center gap-1.5 text-sm cursor-pointer">'
+            . '<input type="checkbox" name="perms[' . e($key) . '][]" value="' . e($cap) . '" ' . $checked . '> ' . e($clabel) . '</label>';
+    }
+    $h .= '</div></div>';
+    return $h;
+};
 ?>
 <div class="max-w-3xl space-y-6">
 
@@ -140,14 +164,9 @@ require __DIR__ . '/includes/layout-top.php';
                 </div>
             </div>
             <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">কোন কোন অংশে অ্যাক্সেস দেবেন?</label>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">কোন কোন অংশে কী কী করতে পারবে? (দেখা / এডিট / ডিলিট আলাদা)</label>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <?php foreach ($sections as $key => $label): ?>
-                        <label class="flex items-start gap-2 p-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 cursor-pointer text-sm">
-                            <input type="checkbox" name="perms[]" value="<?= e($key) ?>" class="mt-0.5">
-                            <span><?= e($label) ?></span>
-                        </label>
-                    <?php endforeach; ?>
+                    <?php foreach ($sections as $key => $label) { echo $renderCapRow($key, $label, []); } ?>
                 </div>
             </div>
             <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2.5 rounded-xl">মডারেটর যোগ করুন</button>
@@ -161,7 +180,7 @@ require __DIR__ . '/includes/layout-top.php';
             <div class="bg-white rounded-2xl shadow p-6 text-center text-gray-500 text-sm">এখনো কোনো মডারেটর যোগ করা হয়নি।</div>
         <?php else: ?>
             <div class="space-y-4">
-            <?php foreach ($mods as $m): $perms = json_decode($m['permissions'] ?? '[]', true) ?: []; ?>
+            <?php foreach ($mods as $m): $mCaps = admin_normalize_permissions(json_decode($m['permissions'] ?? '[]', true)); ?>
                 <div class="bg-white rounded-2xl shadow p-5 <?= $m['is_active'] ? '' : 'opacity-60' ?>">
                     <div class="flex items-center gap-3 mb-4">
                         <span class="avatar avatar-sm"><?= e(mb_substr($m['full_name'], 0, 1)) ?></span>
@@ -183,12 +202,7 @@ require __DIR__ . '/includes/layout-top.php';
                             <input type="text" name="full_name" value="<?= e($m['full_name']) ?>" class="w-full border rounded-xl px-3 py-2">
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <?php foreach ($sections as $key => $label): ?>
-                                <label class="flex items-start gap-2 p-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 cursor-pointer text-sm">
-                                    <input type="checkbox" name="perms[]" value="<?= e($key) ?>" class="mt-0.5" <?= in_array($key, $perms, true) ? 'checked' : '' ?>>
-                                    <span><?= e($label) ?></span>
-                                </label>
-                            <?php endforeach; ?>
+                            <?php foreach ($sections as $key => $label) { echo $renderCapRow($key, $label, $mCaps[$key] ?? []); } ?>
                         </div>
                         <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2 rounded-xl text-sm">অনুমতি সংরক্ষণ</button>
                     </form>
