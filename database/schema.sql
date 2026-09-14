@@ -357,6 +357,8 @@ CREATE TABLE registrations (
     messenger_group_added TINYINT(1) NOT NULL DEFAULT 0, -- Messenger গ্রুপে যোগ হয়েছে? (কোর্স ট্র্যাকিং)
     income_approved TINYINT(1) NOT NULL DEFAULT 0, -- এই অর্ডার থেকে আয় হিসেবে অনুমোদন করা হয়েছে কিনা (income টেবিলে ডুপ্লিকেট এন্ট্রি ঠেকাতে)
     income_amount DECIMAL(10,2) NULL,               -- অনুমোদনের সময় যে পরিমাণ আয় ধরা হয়েছিল
+    due_amount DECIMAL(10,2) NOT NULL DEFAULT 0,   -- এখনো কত টাকা বাকি (তালিকা থেকে অ্যাডমিন লেখেন; 🔴 আয়ের হিসাব ছোঁয় না — শুধু স্মরণ/ট্র্যাকিং)
+    admin_note VARCHAR(500) DEFAULT NULL,          -- অ্যাডমিনের সাধারণ মন্তব্য (কুরিয়ার নোট registration_courier_notes থেকে আলাদা; notes = গ্রাহকের নিজের মন্তব্য)
     approved_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

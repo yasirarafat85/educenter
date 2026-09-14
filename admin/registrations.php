@@ -151,6 +151,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'update-income-amount')
     redirect($returnUrl);
 }
 
+// ─────────────────────────────────────────────────────────────
+// তালিকা থেকেই দ্রুত সম্পাদনা (ভেতরে না ঢুকে) — কনফার্ম করার সময় যা যা লাগে:
+//   quick-group  : ফেসবুক/মেসেঞ্জার গ্রুপে যোগ হয়েছে কিনা টিক (course-parcel.php-এর একই কলাম)
+//   quick-fields : বকেয়া টাকা + অ্যাডমিন নোট
+// 🔴 দুটোর কোনোটাই আয়ের হিসাব (income/income_amount/income_approved) ছোঁয় না — বকেয়া নিছক স্মরণ/ট্র্যাকিং।
+// RBAC: action-মার্কার delete-তালিকায় নেই বলে কেন্দ্রীয় গার্ড (auth.php) এতে 'edit' ক্ষমতা চায় — ঠিক আছে।
+// ─────────────────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'quick-group') {
+    $returnUrl = safe_return_url($_POST['return_url'] ?? null, 'registrations.php');
+
+    if (!csrf_verify()) {
+        set_flash('error', 'ফর্ম টোকেন মিলছে না।');
+        redirect($returnUrl);
+    }
+
+    $id = (int) ($_POST['id'] ?? 0);
+    // হোয়াইটলিস্ট — কলামের নাম কখনো সরাসরি POST থেকে কুয়েরিতে বসানো হয় না
+    $column = ($_POST['field'] ?? '') === 'messenger' ? 'messenger_group_added' : 'fb_group_added';
+    $value = (int) ($_POST['value'] ?? 0) ? 1 : 0;
+
+    $db->prepare("UPDATE registrations SET $column = :v WHERE id = :id")->execute(['v' => $value, 'id' => $id]);
+
+    $label = $column === 'messenger_group_added' ? 'মেসেঞ্জার' : 'ফেসবুক';
+    set_flash('success', $value ? ($label . ' গ্রুপে যোগ — টিক দেওয়া হলো।') : ($label . ' গ্রুপের টিক তুলে নেওয়া হলো।'));
+    redirect($returnUrl);
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'quick-fields') {
+    $returnUrl = safe_return_url($_POST['return_url'] ?? null, 'registrations.php');
+
+    if (!csrf_verify()) {
+        set_flash('error', 'ফর্ম টোকেন মিলছে না।');
+        redirect($returnUrl);
+    }
+
+    $id = (int) ($_POST['id'] ?? 0);
+    $due = (float) str_replace(',', '', trim((string) ($_POST['due_amount'] ?? '0')));
+    if ($due < 0) {
+        $due = 0;
+    }
+    $note = trim((string) ($_POST['admin_note'] ?? ''));
+    if (function_exists('mb_substr')) {
+        $note = mb_substr($note, 0, 500);   // কলাম VARCHAR(500) — কেটে নেওয়া হয়, সেভ যেন কখনো ব্যর্থ না হয়
+    }
+
+    try {
+        $db->prepare('UPDATE registrations SET due_amount = :due, admin_note = :note WHERE id = :id')
+            ->execute(['due' => $due, 'note' => $note !== '' ? $note : null, 'id' => $id]);
+    } catch (PDOException $ex) {
+        // কলাম দুটো নতুন — মাইগ্রেশন (database/migrate-reg-quick-fields.sql) না চালালে এখানে আটকাবে।
+        // সাদা পেজ না দেখিয়ে অ্যাডমিনকে ঠিক কী করতে হবে বলে দেওয়া হয় (ইউজারের কোডিং জ্ঞান নেই)।
+        set_flash('error', 'বকেয়া/নোট সংরক্ষণ করা যায়নি — ডাটাবেসে "due_amount"/"admin_note" কলাম এখনো যোগ হয়নি। '
+            . 'phpMyAdmin-এ database/migrate-reg-quick-fields.sql ফাইলের SQL একবার চালিয়ে নিন।');
+        redirect($returnUrl);
+    }
+
+    set_flash('success', 'বকেয়া ও নোট সংরক্ষণ করা হয়েছে।');
+    redirect($returnUrl);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'update-details') {
     $id = (int) ($_POST['id'] ?? 0);
     $editUrl = 'registrations.php?action=edit&id=' . $id;
@@ -460,6 +520,96 @@ function reg_url(array $overrides = []): string
 $currentListUrl = reg_url($page > 1 ? ['page' => $page] : []);
 $hasActiveFilters = !empty($activeFilters);
 
+// ── তালিকা/ডিটেইল দুই জায়গাতেই ব্যবহৃত সেল-রেন্ডারার (ডুপ্লিকেট না করে শেয়ার্ড)
+// স্ট্যাটাস ড্রপডাউন সেল — তিনটা কলাম-লেআউটেই হুবহু একই, তাই একটা ফাংশনে বের করা হলো (DRY)
+function reg_status_cell(array $row, array $statusLabels, string $currentListUrl): void
+{
+    $s = $statusLabels[$row['status']] ?? ['?', 'bg-gray-100'];
+    ?>
+    <form method="post" action="registrations.php?action=update-status">
+        <?= csrf_field() ?>
+        <input type="hidden" name="id" value="<?= $row['id'] ?>">
+        <input type="hidden" name="return_url" value="<?= e($currentListUrl) ?>">
+        <div class="relative inline-block">
+            <select name="status" data-original="<?= e($row['status']) ?>" onchange="confirmStatusChange(this)" class="status-select appearance-none pl-3 pr-7 py-1.5 rounded-full text-xs font-semibold border-0 cursor-pointer shadow-sm hover:shadow transition-shadow focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1 <?= $s[1] ?>">
+                <?php foreach ($statusLabels as $key => $lbl): ?>
+                    <option value="<?= e($key) ?>" <?= $row['status'] === $key ? 'selected' : '' ?>><?= e($lbl[0]) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <i data-lucide="chevron-down" class="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-60"></i>
+        </div>
+    </form>
+    <?php
+}
+function reg_income_cell(array $row): void
+{
+    if ($row['income_approved']): ?>
+        <span class="text-green-700 font-semibold text-xs">✅ ৳<?= number_format((float) $row['income_amount'], 2) ?></span>
+    <?php else: ?>
+        <span class="text-gray-300 text-xs">—</span>
+    <?php endif;
+}
+
+// ── গ্রুপে যোগ হয়েছে? (ফেসবুক / মেসেঞ্জার) — তালিকা থেকেই এক ট্যাপে টিক।
+// একই কলাম course-parcel.php-ও ব্যবহার করে (fb_group_added / messenger_group_added), তাই
+// দুই পেজে অবস্থা সবসময় এক থাকে। টিক তোলার সময় ওয়ার্নিং, টিক দেওয়ার সময় না (প্রথমবার-ছাড়া-পরে নিয়ম)।
+function reg_group_cell(array $row, string $currentListUrl): void
+{
+    if (($row['type'] ?? '') !== 'course') {
+        echo '<span class="text-gray-300 text-xs">—</span>';   // গ্রুপ শুধু কোর্সে প্রযোজ্য
+        return;
+    }
+    $toggles = [
+        ['field' => 'fb',        'label' => 'ফেসবুক',    'column' => 'fb_group_added'],
+        ['field' => 'messenger', 'label' => 'মেসেঞ্জার', 'column' => 'messenger_group_added'],
+    ];
+    echo '<div class="flex flex-wrap gap-1.5">';
+    foreach ($toggles as $t) {
+        $on = !empty($row[$t['column']]);
+        $onsubmit = $on
+            ? "return confirmSubmit(this, '" . $t['label'] . " গ্রুপের টিক তুলে ফেলবেন? এই শিক্ষার্থী গ্রুপে নেই বলে চিহ্নিত হবে।', 'টিক তুলবেন?')"
+            : 'return true';
+        ?>
+        <form method="post" action="registrations.php?action=quick-group" class="inline" onsubmit="<?= e($onsubmit) ?>;">
+            <?= csrf_field() ?>
+            <input type="hidden" name="id" value="<?= $row['id'] ?>">
+            <input type="hidden" name="field" value="<?= e($t['field']) ?>">
+            <input type="hidden" name="value" value="<?= $on ? 0 : 1 ?>">
+            <input type="hidden" name="return_url" value="<?= e($currentListUrl) ?>">
+            <button type="submit" title="<?= e($t['label']) ?> গ্রুপে যোগ হয়েছে?" class="px-2 py-1 rounded-lg text-xs font-semibold <?= $on ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-500 border border-gray-200' ?>"><?= $on ? '✓ ' : '' ?><?= e($t['label']) ?></button>
+        </form>
+        <?php
+    }
+    echo '</div>';
+}
+
+// ── বকেয়া টাকা + অ্যাডমিন নোট — তালিকাতেই লেখা/সম্পাদনা (ভেতরে ঢোকা লাগে না)।
+// 🔴 বকেয়া নিছক স্মরণ/ট্র্যাকিং — আয়ের হিসাবের (income/income_amount) সাথে কোনো সম্পর্ক নেই।
+// আগে থেকে কিছু লেখা থাকলে সেভে ওয়ার্নিং (প্রথমবার-ছাড়া-পরে নিয়ম)।
+function reg_quick_cell(array $row, string $currentListUrl): void
+{
+    $due = (float) ($row['due_amount'] ?? 0);
+    $note = (string) ($row['admin_note'] ?? '');
+    $hasExisting = $due > 0 || $note !== '';
+    $onsubmit = $hasExisting
+        ? "return confirmSubmit(this, 'আগে লেখা বকেয়া/নোট পরিবর্তন করে সংরক্ষণ করতে চান?', 'পরিবর্তনের নিশ্চিতকরণ')"
+        : 'return true';
+    // 500.00 → "500" (ইনপুটে গোল সংখ্যা পরিষ্কার দেখাতে), 0 হলে খালি
+    $dueValue = $due > 0 ? rtrim(rtrim(number_format($due, 2, '.', ''), '0'), '.') : '';
+    ?>
+    <form method="post" action="registrations.php?action=quick-fields" class="reg-quick flex flex-wrap items-center gap-1.5" onsubmit="<?= e($onsubmit) ?>;">
+        <?= csrf_field() ?>
+        <input type="hidden" name="id" value="<?= $row['id'] ?>">
+        <input type="hidden" name="return_url" value="<?= e($currentListUrl) ?>">
+        <input type="number" name="due_amount" step="any" min="0" value="<?= e($dueValue) ?>" placeholder="বকেয়া ৳" title="এখনো কত টাকা বাকি"
+               class="border rounded-lg px-2 py-1 text-xs <?= $due > 0 ? 'border-red-300 text-red-700 font-semibold' : '' ?>" style="width:5.5rem">
+        <input type="text" name="admin_note" value="<?= e($note) ?>" maxlength="500" placeholder="নোট" title="অ্যাডমিন নোট (কুরিয়ার নোট থেকে আলাদা)"
+               class="border rounded-lg px-2 py-1 text-xs" style="flex:1;min-width:6.5rem">
+        <button type="submit" class="reg-quick-save px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500" title="সংরক্ষণ করুন">সেভ</button>
+    </form>
+    <?php
+}
+
 require __DIR__ . '/includes/layout-top.php';
 ?>
 
@@ -522,36 +672,6 @@ require __DIR__ . '/includes/layout-top.php';
 
     <p class="text-sm text-gray-500 mb-4">মোট <strong><?= $totalRows ?></strong> টি ফলাফল<?= $totalPages > 1 ? " — পৃষ্ঠা {$page}/{$totalPages}" : '' ?></p>
 
-    <?php
-        // স্ট্যাটাস ড্রপডাউন সেল — তিনটা কলাম-লেআউটেই হুবহু একই, তাই একটা ফাংশনে বের করা হলো (DRY)
-        function reg_status_cell(array $row, array $statusLabels, string $currentListUrl): void
-        {
-            $s = $statusLabels[$row['status']] ?? ['?', 'bg-gray-100'];
-            ?>
-            <form method="post" action="registrations.php?action=update-status">
-                <?= csrf_field() ?>
-                <input type="hidden" name="id" value="<?= $row['id'] ?>">
-                <input type="hidden" name="return_url" value="<?= e($currentListUrl) ?>">
-                <div class="relative inline-block">
-                    <select name="status" data-original="<?= e($row['status']) ?>" onchange="confirmStatusChange(this)" class="status-select appearance-none pl-3 pr-7 py-1.5 rounded-full text-xs font-semibold border-0 cursor-pointer shadow-sm hover:shadow transition-shadow focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1 <?= $s[1] ?>">
-                        <?php foreach ($statusLabels as $key => $lbl): ?>
-                            <option value="<?= e($key) ?>" <?= $row['status'] === $key ? 'selected' : '' ?>><?= e($lbl[0]) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                    <i data-lucide="chevron-down" class="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-60"></i>
-                </div>
-            </form>
-            <?php
-        }
-        function reg_income_cell(array $row): void
-        {
-            if ($row['income_approved']): ?>
-                <span class="text-green-700 font-semibold text-xs">✅ ৳<?= number_format((float) $row['income_amount'], 2) ?></span>
-            <?php else: ?>
-                <span class="text-gray-300 text-xs">—</span>
-            <?php endif;
-        }
-    ?>
     <div class="bg-white rounded-2xl shadow overflow-x-auto">
         <table class="w-full text-sm">
             <?php if ($filterType === 'course'): ?>
@@ -569,6 +689,8 @@ require __DIR__ . '/includes/layout-top.php';
                     <th class="py-3 px-4">রিসিভার নাম্বার</th>
                     <th class="py-3 px-4">ঠিকানা</th>
                     <th class="py-3 px-4">স্ট্যাটাস</th>
+                    <th class="py-3 px-4">গ্রুপে যোগ</th>
+                    <th class="py-3 px-4">বকেয়া / নোট</th>
                     <th class="py-3 px-4">আয়</th>
                     <th class="py-3 px-4">তারিখ</th>
                     <th class="py-3 px-4">অ্যাকশন</th>
@@ -576,7 +698,7 @@ require __DIR__ . '/includes/layout-top.php';
             </thead>
             <tbody>
             <?php if (!$rows): ?>
-                <tr><td colspan="14" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
+                <tr><td colspan="16" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
             <?php endif; ?>
             <?php foreach ($rows as $row): ?>
                 <tr class="border-b last:border-0 hover:bg-gray-50">
@@ -591,6 +713,8 @@ require __DIR__ . '/includes/layout-top.php';
                     <td class="py-2.5 px-4"><?= e($row['receiver_phone'] ?: '-') ?></td>
                     <td class="py-2.5 px-4 max-w-[200px] truncate" title="<?= e($row['address'] ?? '') ?>"><?= e($row['address'] ?: '-') ?></td>
                     <td class="py-2.5 px-4"><?php reg_status_cell($row, $statusLabels, $currentListUrl); ?></td>
+                    <td class="py-2.5 px-4"><?php reg_group_cell($row, $currentListUrl); ?></td>
+                    <td class="py-2.5 px-4" style="min-width:16rem"><?php reg_quick_cell($row, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_income_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?= e($row['created_at']) ?></td>
                     <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
@@ -608,6 +732,7 @@ require __DIR__ . '/includes/layout-top.php';
                     <th class="py-3 px-4">আইটেম</th>
                     <th class="py-3 px-4">পরিমাণ</th>
                     <th class="py-3 px-4">স্ট্যাটাস</th>
+                    <th class="py-3 px-4">বকেয়া / নোট</th>
                     <th class="py-3 px-4">আয়</th>
                     <th class="py-3 px-4">তারিখ</th>
                     <th class="py-3 px-4">অ্যাকশন</th>
@@ -615,7 +740,7 @@ require __DIR__ . '/includes/layout-top.php';
             </thead>
             <tbody>
             <?php if (!$rows): ?>
-                <tr><td colspan="10" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
+                <tr><td colspan="11" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
             <?php endif; ?>
             <?php foreach ($rows as $row): ?>
                 <tr class="border-b last:border-0 hover:bg-gray-50">
@@ -626,6 +751,7 @@ require __DIR__ . '/includes/layout-top.php';
                     <td class="py-2.5 px-4"><?= e($row['item_title']) ?></td>
                     <td class="py-2.5 px-4"><?= (int) $row['quantity'] ?></td>
                     <td class="py-2.5 px-4"><?php reg_status_cell($row, $statusLabels, $currentListUrl); ?></td>
+                    <td class="py-2.5 px-4" style="min-width:16rem"><?php reg_quick_cell($row, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_income_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?= e($row['created_at']) ?></td>
                     <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
@@ -643,6 +769,8 @@ require __DIR__ . '/includes/layout-top.php';
                     <th class="py-3 px-4">ব্যাচ</th>
                     <th class="py-3 px-4">ঠিকানা</th>
                     <th class="py-3 px-4">স্ট্যাটাস</th>
+                    <th class="py-3 px-4">গ্রুপে যোগ</th>
+                    <th class="py-3 px-4">বকেয়া / নোট</th>
                     <th class="py-3 px-4">আয়</th>
                     <th class="py-3 px-4">তারিখ</th>
                     <th class="py-3 px-4">অ্যাকশন</th>
@@ -650,7 +778,7 @@ require __DIR__ . '/includes/layout-top.php';
             </thead>
             <tbody>
             <?php if (!$rows): ?>
-                <tr><td colspan="10" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
+                <tr><td colspan="12" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
             <?php endif; ?>
             <?php foreach ($rows as $row): ?>
                 <tr class="border-b last:border-0 hover:bg-gray-50">
@@ -661,6 +789,8 @@ require __DIR__ . '/includes/layout-top.php';
                     <td class="py-2.5 px-4"><?= e($row['batch'] ?: '-') ?></td>
                     <td class="py-2.5 px-4 max-w-[200px] truncate" title="<?= e($row['address'] ?? '') ?>"><?= e($row['address'] ?: '-') ?></td>
                     <td class="py-2.5 px-4"><?php reg_status_cell($row, $statusLabels, $currentListUrl); ?></td>
+                    <td class="py-2.5 px-4"><?php reg_group_cell($row, $currentListUrl); ?></td>
+                    <td class="py-2.5 px-4" style="min-width:16rem"><?php reg_quick_cell($row, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_income_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?= e($row['created_at']) ?></td>
                     <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
@@ -754,6 +884,22 @@ require __DIR__ . '/includes/layout-top.php';
             <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2.5 rounded-xl">আপডেট করুন</button>
         </form>
         <p class="text-xs text-gray-400 -mt-3">স্ট্যাটাস "কনফার্ম"/"পাঠানো হয়েছে"/"ডেলিভার্ড" করলে স্বয়ংক্রিয়ভাবে আয় যোগ হয়ে যাবে (দাম × পরিমাণ অনুযায়ী)।</p>
+
+        <?php // গ্রুপে যোগ + বকেয়া/নোট — তালিকার সাথে হুবহু একই উইজেট (শেয়ার্ড ফাংশন), তাই দুই জায়গায় অবস্থা সবসময় এক ?>
+        <?php $viewUrlSelf = 'registrations.php?action=view&id=' . (int) $viewRow['id']; ?>
+        <div class="pt-4 border-t space-y-3">
+            <?php if ($viewRow['type'] === 'course'): ?>
+                <div>
+                    <h4 class="text-sm font-bold text-gray-700 mb-2">গ্রুপে যোগ হয়েছে?</h4>
+                    <?php reg_group_cell($viewRow, $viewUrlSelf); ?>
+                </div>
+            <?php endif; ?>
+            <div>
+                <h4 class="text-sm font-bold text-gray-700 mb-2">বকেয়া টাকা ও নোট</h4>
+                <?php reg_quick_cell($viewRow, $viewUrlSelf); ?>
+                <p class="text-xs text-gray-400 mt-1.5">বকেয়া শুধু মনে রাখার জন্য — আয়ের হিসাবে কোনো প্রভাব ফেলে না।</p>
+            </div>
+        </div>
 
         <?php // কুরিয়ার নোট — এখানে দেওয়া নোট "কুরিয়ার পার্সেল প্রস্তুত" পেজের কার্ডে অটোমেটিক দেখা যাবে ?>
         <div class="pt-4 border-t">
@@ -1016,6 +1162,28 @@ require __DIR__ . '/includes/layout-top.php';
         }
         return true;
     }
+
+    // তালিকার ইনলাইন বকেয়া/নোট ফর্ম — কিছু বদলালে "সেভ" বাটন রঙিন হয়ে অসংরক্ষিত পরিবর্তন বোঝায়
+    // (ওয়ার্নিং মডালটা ফর্মের onsubmit-এ, PHP থেকে — আগে থেকে লেখা থাকলেই দেখায়)
+    (function () {
+        document.querySelectorAll('form.reg-quick').forEach(function (form) {
+            var saveBtn = form.querySelector('.reg-quick-save');
+            if (!saveBtn) { return; }
+            var initial = {};
+            form.querySelectorAll('input[name="due_amount"], input[name="admin_note"]').forEach(function (inp) {
+                initial[inp.name] = inp.value;
+            });
+            function refresh() {
+                var dirty = Array.prototype.some.call(
+                    form.querySelectorAll('input[name="due_amount"], input[name="admin_note"]'),
+                    function (inp) { return inp.value !== initial[inp.name]; }
+                );
+                saveBtn.className = 'reg-quick-save px-2.5 py-1 rounded-lg text-xs font-semibold '
+                    + (dirty ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500');
+            }
+            form.addEventListener('input', refresh);
+        });
+    })();
 </script>
 
 <?php require __DIR__ . '/includes/layout-bottom.php'; ?>
