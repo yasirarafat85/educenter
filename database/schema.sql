@@ -45,6 +45,9 @@ CREATE TABLE admin_users (
     username VARCHAR(50) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(100) NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'admin',   -- 'admin' (সব অ্যাক্সেস) / 'moderator' (সীমিত)
+    permissions TEXT NULL,                        -- JSON array of section keys (শুধু moderator)
+    is_active TINYINT(1) NOT NULL DEFAULT 1,       -- 0 হলে লগইন বন্ধ
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

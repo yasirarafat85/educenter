@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-09-14 (👥 মডারেটর/স্টাফ রোল-ভিত্তিক অ্যাক্সেস — RBAC)
+
+- ইউজার: মূল অ্যাডমিন ছাড়াও মডারেটর অ্যাকাউন্ট, কে কী দেখবে/করবে তা মূল অ্যাডমিন থেকে নিয়ন্ত্রণ। (ইউজার cPanel Directory Privacy পপআপ সরিয়ে দিয়েছেন — এখন অ্যাপ-লগইন+রোলই গার্ড।)
+- **`admin_users`-এ role/permissions/is_active** কলাম (migrate-admin-roles.sql + schema; 🔴 লাইভ+লোকাল চালাতে হবে)।
+- **কেন্দ্রীয় হেল্পার `admin/includes/permissions.php`** (৯ সেকশন: content/orders/parcel/courier/users/logs/finance/settings/archive) + **কেন্দ্রীয় গার্ড `admin_require_login()`-এ** (প্রতি পেজে admin_can_page চেক, অজানা পেজ fail-closed)। প্রায় সব পেজ অটো সুরক্ষিত।
+- **লগইনে role/permissions সেট** — `admin_establish_session()` (পাসওয়ার্ড+ফিঙ্গার দুই পথে, is_active চেক সহ)।
+- **সাইডবার** মডারেটরভেদে ফিল্টার (যা পারে না দেখেই না)।
+- **`admin/team.php`** (super-only, সাইডবার→"টিম / মডারেটর"): মডারেটর যোগ/অনুমতি এডিট/পাসওয়ার্ড রিসেট/সক্রিয়-নিষ্ক্রিয়/ডিলিট। গার্ড: শুধু role='moderator' ও id≠self — মূল অ্যাডমিন অক্ষত (self-lockout অসম্ভব)।
+- isolated লজিক টেস্ট: super সব পারে; মডারেটর শুধু অনুমোদিত সেকশন, finance/settings/team/backup পারে না, always-allowed পেজ পারে, অজানা পেজ fail-closed — সব পাস। PHP lint পরিষ্কার। **লগইন পেজ একটাই** (মডারেটর নিজের credential-এ ঢোকে)।
+
 ## 2026-08-31 (🏷️ প্রোডাক্ট ও ওয়ার্কশিটে ডিসকাউন্ট — কাটা দাম + % ছাড়)
 
 - ইউজার: product ও worksheet-এ মূল দাম থেকে ডিসকাউন্ট দেখানো, অ্যাডমিন থেকে নিয়ন্ত্রিত।

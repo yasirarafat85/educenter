@@ -260,37 +260,84 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
             <p id="sidebar-search-empty" class="hidden text-xs text-gray-400 text-center mt-2">কিছু পাওয়া যায়নি</p>
         </div>
         <nav id="admin-nav" class="flex-1 p-3 space-y-1 overflow-y-auto">
+            <?php
+                // রোল অনুযায়ী কোন সেকশন দেখাবে (মূল অ্যাডমিন সব; মডারেটর অনুমতি অনুযায়ী)
+                $isSuper    = admin_is_super();
+                $canContent = admin_can('content');
+                $canOrders  = admin_can('orders');
+                $canParcel  = admin_can('parcel');
+                $canCourier = admin_can('courier');
+                $canUsers   = admin_can('users');
+                $canLogs    = admin_can('logs');
+                $canFinance = admin_can('finance');
+                $canSettings = admin_can('settings');
+                $canArchive = admin_can('archive');
+            ?>
             <a href="index.php" class="nav-link <?= nav_active('index.php', $currentFile) ?>"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> ড্যাশবোর্ড</a>
             <a href="guide.php" class="nav-link <?= nav_active('guide.php', $currentFile) ?>"><i data-lucide="help-circle" class="w-4 h-4"></i> গাইড / সাহায্য</a>
+
+            <?php if ($canContent): ?>
             <p class="nav-section">কনটেন্ট</p>
             <?php foreach (get_entities() as $navEntityKey => $navEntityConf): ?>
                 <a href="manage.php?entity=<?= e($navEntityKey) ?>" class="nav-link <?= nav_active('manage.php', $currentFile, $navEntityKey, $currentEntity) ?>"><i data-lucide="file-text" class="w-4 h-4"></i> <?= e($navEntityConf['label_plural']) ?></a>
             <?php endforeach; ?>
+            <?php endif; ?>
+
+            <?php if ($canOrders || $canParcel || $canUsers || $canCourier): ?>
             <p class="nav-section">অর্ডার</p>
-            <a href="registrations.php" class="nav-link <?= nav_active('registrations.php', $currentFile) ?>"><i data-lucide="clipboard-list" class="w-4 h-4"></i> রেজিস্ট্রেশন/অর্ডার</a>
-            <a href="course-data.php" class="nav-link <?= nav_active('course-data.php', $currentFile) ?>"><i data-lucide="table" class="w-4 h-4"></i> ডেটা টেবিল</a>
-            <a href="course-interests.php" class="nav-link <?= nav_active('course-interests.php', $currentFile) ?>"><i data-lucide="heart-handshake" class="w-4 h-4"></i> আগ্রহ তালিকা</a>
-            <a href="course-parcel.php" class="nav-link <?= nav_active('course-parcel.php', $currentFile) ?>"><i data-lucide="package-check" class="w-4 h-4"></i> কোর্স পার্সেল</a>
-            <a href="users.php" class="nav-link <?= nav_active('users.php', $currentFile) ?>"><i data-lucide="users" class="w-4 h-4"></i> অভিভাবক অ্যাকাউন্ট</a>
-            <a href="legacy-students.php" class="nav-link <?= nav_active('legacy-students.php', $currentFile) ?>"><i data-lucide="user-round-search" class="w-4 h-4"></i> পুরাতন শিক্ষার্থী</a>
-            <a href="courier.php" class="nav-link <?= nav_active('courier.php', $currentFile) ?>"><i data-lucide="truck" class="w-4 h-4"></i> কুরিয়ার</a>
-            <a href="courier-tracking.php" class="nav-link <?= nav_active('courier-tracking.php', $currentFile) ?>"><i data-lucide="calendar-check" class="w-4 h-4"></i> কুরিয়ার ট্র্যাকিং</a>
+            <?php if ($canOrders): ?>
+                <a href="registrations.php" class="nav-link <?= nav_active('registrations.php', $currentFile) ?>"><i data-lucide="clipboard-list" class="w-4 h-4"></i> রেজিস্ট্রেশন/অর্ডার</a>
+                <a href="course-data.php" class="nav-link <?= nav_active('course-data.php', $currentFile) ?>"><i data-lucide="table" class="w-4 h-4"></i> ডেটা টেবিল</a>
+                <a href="course-interests.php" class="nav-link <?= nav_active('course-interests.php', $currentFile) ?>"><i data-lucide="heart-handshake" class="w-4 h-4"></i> আগ্রহ তালিকা</a>
+                <a href="legacy-students.php" class="nav-link <?= nav_active('legacy-students.php', $currentFile) ?>"><i data-lucide="user-round-search" class="w-4 h-4"></i> পুরাতন শিক্ষার্থী</a>
+            <?php endif; ?>
+            <?php if ($canParcel): ?>
+                <a href="course-parcel.php" class="nav-link <?= nav_active('course-parcel.php', $currentFile) ?>"><i data-lucide="package-check" class="w-4 h-4"></i> কোর্স পার্সেল</a>
+            <?php endif; ?>
+            <?php if ($canUsers): ?>
+                <a href="users.php" class="nav-link <?= nav_active('users.php', $currentFile) ?>"><i data-lucide="users" class="w-4 h-4"></i> অভিভাবক অ্যাকাউন্ট</a>
+            <?php endif; ?>
+            <?php if ($canCourier): ?>
+                <a href="courier.php" class="nav-link <?= nav_active('courier.php', $currentFile) ?>"><i data-lucide="truck" class="w-4 h-4"></i> কুরিয়ার</a>
+                <a href="courier-tracking.php" class="nav-link <?= nav_active('courier-tracking.php', $currentFile) ?>"><i data-lucide="calendar-check" class="w-4 h-4"></i> কুরিয়ার ট্র্যাকিং</a>
+            <?php endif; ?>
+            <?php endif; ?>
+
+            <?php if ($canLogs || $canCourier): ?>
             <p class="nav-section">লগ</p>
-            <a href="registration-errors.php" class="nav-link <?= nav_active('registration-errors.php', $currentFile) ?>"><i data-lucide="alert-triangle" class="w-4 h-4"></i> রেজিস্ট্রেশন এরর</a>
-            <a href="download-logs.php" class="nav-link <?= nav_active('download-logs.php', $currentFile) ?>"><i data-lucide="download" class="w-4 h-4"></i> ডাউনলোড লগ</a>
-            <a href="visitor-logs.php" class="nav-link <?= nav_active('visitor-logs.php', $currentFile) ?>"><i data-lucide="footprints" class="w-4 h-4"></i> ভিজিটর লগ</a>
-            <a href="courier-shipment-logs.php" class="nav-link <?= nav_active('courier-shipment-logs.php', $currentFile) ?>"><i data-lucide="history" class="w-4 h-4"></i> কুরিয়ার শিপমেন্ট লগ</a>
+            <?php if ($canLogs): ?>
+                <a href="registration-errors.php" class="nav-link <?= nav_active('registration-errors.php', $currentFile) ?>"><i data-lucide="alert-triangle" class="w-4 h-4"></i> রেজিস্ট্রেশন এরর</a>
+                <a href="download-logs.php" class="nav-link <?= nav_active('download-logs.php', $currentFile) ?>"><i data-lucide="download" class="w-4 h-4"></i> ডাউনলোড লগ</a>
+                <a href="visitor-logs.php" class="nav-link <?= nav_active('visitor-logs.php', $currentFile) ?>"><i data-lucide="footprints" class="w-4 h-4"></i> ভিজিটর লগ</a>
+            <?php endif; ?>
+            <?php if ($canCourier): ?>
+                <a href="courier-shipment-logs.php" class="nav-link <?= nav_active('courier-shipment-logs.php', $currentFile) ?>"><i data-lucide="history" class="w-4 h-4"></i> কুরিয়ার শিপমেন্ট লগ</a>
+            <?php endif; ?>
+            <?php endif; ?>
+
+            <?php if ($canFinance): ?>
             <p class="nav-section">আয়-ব্যয়</p>
             <a href="finance.php" class="nav-link <?= nav_active('finance.php', $currentFile) ?>"><i data-lucide="pie-chart" class="w-4 h-4"></i> ড্যাশবোর্ড</a>
             <a href="income.php" class="nav-link <?= nav_active('income.php', $currentFile) ?>"><i data-lucide="trending-up" class="w-4 h-4"></i> আয়</a>
             <a href="expenses.php" class="nav-link <?= nav_active('expenses.php', $currentFile) ?>"><i data-lucide="trending-down" class="w-4 h-4"></i> খরচ</a>
+            <?php endif; ?>
+
             <p class="nav-section">সেটিংস</p>
-            <a href="settings.php" class="nav-link <?= nav_active('settings.php', $currentFile) ?>"><i data-lucide="settings" class="w-4 h-4"></i> সাইট সেটিংস</a>
-            <a href="payment-methods.php" class="nav-link <?= nav_active('payment-methods.php', $currentFile) ?>"><i data-lucide="wallet" class="w-4 h-4"></i> পেমেন্ট মেথড</a>
+            <?php if ($canSettings): ?>
+                <a href="settings.php" class="nav-link <?= nav_active('settings.php', $currentFile) ?>"><i data-lucide="settings" class="w-4 h-4"></i> সাইট সেটিংস</a>
+                <a href="payment-methods.php" class="nav-link <?= nav_active('payment-methods.php', $currentFile) ?>"><i data-lucide="wallet" class="w-4 h-4"></i> পেমেন্ট মেথড</a>
+            <?php endif; ?>
+            <?php if ($isSuper): ?>
+                <a href="team.php" class="nav-link <?= nav_active('team.php', $currentFile) ?>"><i data-lucide="user-cog" class="w-4 h-4"></i> টিম / মডারেটর</a>
+            <?php endif; ?>
             <a href="change-password.php" class="nav-link <?= nav_active('change-password.php', $currentFile) ?>"><i data-lucide="key" class="w-4 h-4"></i> পাসওয়ার্ড পরিবর্তন</a>
             <a href="security.php" class="nav-link <?= nav_active('security.php', $currentFile) ?>"><i data-lucide="fingerprint" class="w-4 h-4"></i> নিরাপত্তা / ফিঙ্গারপ্রিন্ট</a>
-            <a href="backup.php" class="nav-link <?= nav_active('backup.php', $currentFile) ?>"><i data-lucide="hard-drive-download" class="w-4 h-4"></i> ব্যাকআপ ও ডাউনলোড</a>
-            <a href="archive.php" class="nav-link <?= nav_active('archive.php', $currentFile) ?>"><i data-lucide="archive" class="w-4 h-4"></i> আর্কাইভ (রিস্টোর)</a>
+            <?php if ($isSuper): ?>
+                <a href="backup.php" class="nav-link <?= nav_active('backup.php', $currentFile) ?>"><i data-lucide="hard-drive-download" class="w-4 h-4"></i> ব্যাকআপ ও ডাউনলোড</a>
+            <?php endif; ?>
+            <?php if ($canArchive): ?>
+                <a href="archive.php" class="nav-link <?= nav_active('archive.php', $currentFile) ?>"><i data-lucide="archive" class="w-4 h-4"></i> আর্কাইভ (রিস্টোর)</a>
+            <?php endif; ?>
         </nav>
         <?php
             $adminName = current_admin_name();

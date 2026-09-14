@@ -54,13 +54,14 @@ if (!$admin) {
     admin_record_login_attempt($ip, 'webauthn', false);
     wa_out(['error' => 'অ্যাডমিন অ্যাকাউন্ট পাওয়া যায়নি'], 401);
 }
+// নিষ্ক্রিয় করা অ্যাকাউন্ট ফিঙ্গারপ্রিন্টেও ঢুকতে পারবে না
+if ((int) ($admin['is_active'] ?? 1) !== 1) {
+    admin_record_login_attempt($ip, $admin['username'], false);
+    wa_out(['error' => 'এই অ্যাকাউন্টটি নিষ্ক্রিয় করা হয়েছে'], 403);
+}
 
-// সফল — পাসওয়ার্ড লগইনের মতোই সেশন তৈরি
-session_regenerate_id(true);
-$_SESSION['admin_id'] = $admin['id'];
-$_SESSION['admin_name'] = $admin['full_name'];
-$_SESSION['admin_username'] = $admin['username'];
-$_SESSION['admin_last_activity'] = time();
+// সফল — পাসওয়ার্ড লগইনের মতোই সেশন তৈরি (role/permissions সহ)
+admin_establish_session($admin);
 
 $db->prepare('UPDATE admin_webauthn_credentials SET last_used_at = NOW(), sign_count = :s WHERE id = :id')
     ->execute(['s' => $res['signCount'], 'id' => $cred['id']]);

@@ -2,6 +2,7 @@
 // এডমিন লগইন যাচাই, সেশন ম্যানেজমেন্ট ও ব্রুট-ফোর্স প্রতিরোধ
 
 require_once __DIR__ . '/../../includes/functions.php';
+require_once __DIR__ . '/permissions.php';
 
 const ADMIN_MAX_LOGIN_ATTEMPTS = 5;
 const ADMIN_LOGIN_WINDOW_MINUTES = 15;
@@ -42,16 +43,26 @@ function admin_attempt_login(string $username, string $password): bool
     $stmt->execute(['u' => $username]);
     $admin = $stmt->fetch();
 
-    if ($admin && password_verify($password, $admin['password_hash'])) {
-        session_regenerate_id(true);
-        $_SESSION['admin_id'] = $admin['id'];
-        $_SESSION['admin_name'] = $admin['full_name'];
-        $_SESSION['admin_username'] = $admin['username'];
-        $_SESSION['admin_last_activity'] = time(); // নিষ্ক্রিয়তা টাইমআউটের ভিত্তি
+    // is_active=0 (নিষ্ক্রিয় করা) অ্যাকাউন্ট লগইন করতে পারবে না
+    if ($admin && (int) ($admin['is_active'] ?? 1) === 1 && password_verify($password, $admin['password_hash'])) {
+        admin_establish_session($admin);
         return true;
     }
 
     return false;
+}
+
+// লগইন সফল হলে সেশন-কী বসানো (পাসওয়ার্ড ও ফিঙ্গারপ্রিন্ট দুই পথেই ব্যবহার হয় — DRY)
+function admin_establish_session(array $admin): void
+{
+    session_regenerate_id(true);
+    $_SESSION['admin_id'] = $admin['id'];
+    $_SESSION['admin_name'] = $admin['full_name'];
+    $_SESSION['admin_username'] = $admin['username'];
+    $_SESSION['admin_role'] = $admin['role'] ?? 'admin';
+    $decoded = json_decode($admin['permissions'] ?? '[]', true);
+    $_SESSION['admin_permissions'] = is_array($decoded) ? $decoded : [];
+    $_SESSION['admin_last_activity'] = time(); // নিষ্ক্রিয়তা টাইমআউটের ভিত্তি
 }
 
 function admin_logged_in(): bool
@@ -74,6 +85,13 @@ function admin_require_login(): void
         redirect('login.php?expired=1');
     }
     $_SESSION['admin_last_activity'] = $now;
+
+    // রোল-ভিত্তিক অ্যাক্সেস: এই পেজে মডারেটরের অনুমতি আছে কিনা (মূল অ্যাডমিন সবসময় পায়)
+    $script = basename($_SERVER['SCRIPT_NAME'] ?? $_SERVER['PHP_SELF'] ?? '');
+    if ($script !== '' && !admin_can_page($script)) {
+        set_flash('error', 'দুঃখিত, এই অংশে আপনার অ্যাক্সেস নেই।');
+        redirect('index.php');
+    }
 }
 
 function admin_logout(): void
