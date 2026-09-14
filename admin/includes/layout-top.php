@@ -263,7 +263,9 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
             <?php
                 // রোল অনুযায়ী কোন সেকশন দেখাবে (মূল অ্যাডমিন সব; মডারেটর অনুমতি অনুযায়ী)
                 $isSuper    = admin_is_super();
-                $canContent = admin_can('content');
+                $navEntities = get_entities();
+                $canAnyContent = false;
+                foreach (array_keys($navEntities) as $ek) { if (admin_can('content:' . $ek)) { $canAnyContent = true; break; } }
                 $canOrders  = admin_can('orders');
                 $canParcel  = admin_can('parcel');
                 $canCourier = admin_can('courier');
@@ -271,15 +273,19 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                 $canLogs    = admin_can('logs');
                 $canFinance = admin_can('finance');
                 $canSettings = admin_can('settings');
+                $canPayment = admin_can('payment');
+                $canBackup  = admin_can('backup');
                 $canArchive = admin_can('archive');
             ?>
             <a href="index.php" class="nav-link <?= nav_active('index.php', $currentFile) ?>"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> ড্যাশবোর্ড</a>
             <a href="guide.php" class="nav-link <?= nav_active('guide.php', $currentFile) ?>"><i data-lucide="help-circle" class="w-4 h-4"></i> গাইড / সাহায্য</a>
 
-            <?php if ($canContent): ?>
+            <?php if ($canAnyContent): ?>
             <p class="nav-section">কনটেন্ট</p>
-            <?php foreach (get_entities() as $navEntityKey => $navEntityConf): ?>
+            <?php foreach ($navEntities as $navEntityKey => $navEntityConf): ?>
+                <?php if (admin_can('content:' . $navEntityKey)): ?>
                 <a href="manage.php?entity=<?= e($navEntityKey) ?>" class="nav-link <?= nav_active('manage.php', $currentFile, $navEntityKey, $currentEntity) ?>"><i data-lucide="file-text" class="w-4 h-4"></i> <?= e($navEntityConf['label_plural']) ?></a>
+                <?php endif; ?>
             <?php endforeach; ?>
             <?php endif; ?>
 
@@ -325,6 +331,8 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
             <p class="nav-section">সেটিংস</p>
             <?php if ($canSettings): ?>
                 <a href="settings.php" class="nav-link <?= nav_active('settings.php', $currentFile) ?>"><i data-lucide="settings" class="w-4 h-4"></i> সাইট সেটিংস</a>
+            <?php endif; ?>
+            <?php if ($canPayment): ?>
                 <a href="payment-methods.php" class="nav-link <?= nav_active('payment-methods.php', $currentFile) ?>"><i data-lucide="wallet" class="w-4 h-4"></i> পেমেন্ট মেথড</a>
             <?php endif; ?>
             <?php if ($isSuper): ?>
@@ -332,7 +340,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
             <?php endif; ?>
             <a href="change-password.php" class="nav-link <?= nav_active('change-password.php', $currentFile) ?>"><i data-lucide="key" class="w-4 h-4"></i> পাসওয়ার্ড পরিবর্তন</a>
             <a href="security.php" class="nav-link <?= nav_active('security.php', $currentFile) ?>"><i data-lucide="fingerprint" class="w-4 h-4"></i> নিরাপত্তা / ফিঙ্গারপ্রিন্ট</a>
-            <?php if ($isSuper): ?>
+            <?php if ($canBackup): ?>
                 <a href="backup.php" class="nav-link <?= nav_active('backup.php', $currentFile) ?>"><i data-lucide="hard-drive-download" class="w-4 h-4"></i> ব্যাকআপ ও ডাউনলোড</a>
             <?php endif; ?>
             <?php if ($canArchive): ?>

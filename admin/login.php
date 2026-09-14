@@ -71,7 +71,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">পাসওয়ার্ড</label>
-            <input type="password" name="password" required class="w-full border rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none">
+            <div style="position:relative">
+                <input type="password" name="password" id="login-pw" required class="w-full border rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none" style="padding-right:2.8rem">
+                <button type="button" id="login-pw-eye" tabindex="-1" aria-label="পাসওয়ার্ড দেখান" style="position:absolute;top:0;bottom:0;right:0;padding:0 .8rem;color:#9ca3af">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+            </div>
         </div>
         <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl transition-colors">লগইন</button>
     </form>
@@ -91,6 +96,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </div>
 <script>
+(function(){
+    var eye = document.getElementById('login-pw-eye'), pw = document.getElementById('login-pw');
+    if (eye && pw) { eye.addEventListener('click', function(){ pw.type = (pw.type === 'password') ? 'text' : 'password'; }); }
+})();
 (function(){
     const CSRF = '<?= e(csrf_token()) ?>';
     const fpBtn = document.getElementById('fp-login-btn');

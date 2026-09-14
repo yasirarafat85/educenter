@@ -10,28 +10,42 @@
 // একই ম্যাপ ব্যবহার করে (DRY)।
 // ─────────────────────────────────────────────────────────────
 
-// মডারেটরকে যে যে অংশে অনুমতি দেওয়া যায় (checkbox UI + সাইডবার এখান থেকে)
+// মডারেটরকে যে যে অংশে অনুমতি দেওয়া যায় (checkbox UI + সাইডবার এখান থেকে)।
+// কনটেন্ট প্রতিটা টাইপ আলাদা (content:courses, content:worksheets ...) — get_entities() থেকে ডাইনামিক,
+// যাতে পুরো অ্যাপের প্রতিটা অংশ আলাদাভাবে নিয়ন্ত্রণ করা যায়।
 function admin_permission_sections(): array
 {
-    return [
-        'content'  => 'কনটেন্ট (কোর্স/ওয়ার্কশিট/প্রোডাক্ট/নোটিশ/গ্যালারি ইত্যাদি)',
+    require_once __DIR__ . '/entities.php';
+    $out = [];
+    foreach (get_entities() as $ek => $ec) {
+        $out['content:' . $ek] = 'কনটেন্ট — ' . ($ec['label_plural'] ?? $ek);
+    }
+    return $out + [
         'orders'   => 'অর্ডার / রেজিস্ট্রেশন / আগ্রহ তালিকা / পুরাতন শিক্ষার্থী',
         'parcel'   => 'কোর্স পার্সেল',
         'courier'  => 'কুরিয়ার (পাঠানো ও ট্র্যাকিং)',
         'users'    => 'অভিভাবক অ্যাকাউন্ট',
         'logs'     => 'লগ (ভিজিটর / ডাউনলোড / এরর)',
-        'finance'  => 'আয়-ব্যয়',
-        'settings' => 'সাইট সেটিংস ও পেমেন্ট মেথড',
+        'finance'  => 'আয়-ব্যয় (আয়/খরচ)',
+        'settings' => 'সাইট সেটিংস',
+        'payment'  => 'পেমেন্ট মেথড',
+        'backup'   => 'ব্যাকআপ ও ডাউনলোড',
         'archive'  => 'আর্কাইভ (রিস্টোর)',
     ];
+}
+
+// কনটেন্ট সেকশন কিনা (content:<entity>) — UI-তে আলাদা গ্রুপে দেখাতে
+function admin_is_content_section(string $key): bool
+{
+    return strncmp($key, 'content:', 8) === 0;
 }
 
 // পেজ ফাইল → যে সেকশন(গুলো) থাকলে অ্যাক্সেস (যেকোনো একটা থাকলেই চলবে)
 function admin_page_sections(): array
 {
     return [
-        'manage.php'                => ['content'],
-        'course-batches.php'        => ['content'],
+        // manage.php entity-নির্ভর — admin_can_action()-এ আলাদা হ্যান্ডল করা হয়
+        'course-batches.php'        => ['content:courses'],
         'registrations.php'         => ['orders'],
         'course-data.php'           => ['orders'],
         'course-interests.php'      => ['orders'],
@@ -53,7 +67,8 @@ function admin_page_sections(): array
         'income.php'                => ['finance'],
         'expenses.php'              => ['finance'],
         'settings.php'              => ['settings'],
-        'payment-methods.php'       => ['settings'],
+        'payment-methods.php'       => ['payment'],
+        'backup.php'                => ['backup'],
         'archive.php'               => ['archive'],
     ];
 }
@@ -67,10 +82,11 @@ function admin_always_allowed_pages(): array
     ];
 }
 
-// শুধু মূল অ্যাডমিন (super) — মডারেটর কখনো পাবে না
+// শুধু মূল অ্যাডমিন (super) — মডারেটর কখনো পাবে না।
+// শুধু team.php (মডারেটর-ম্যানেজমেন্ট — মডারেটরকে দিলে সে নিজেই নিজেকে সব অনুমতি দিয়ে দিতে পারত = privilege escalation)।
 function admin_super_only_pages(): array
 {
-    return ['team.php', 'backup.php'];
+    return ['team.php'];
 }
 
 // প্রতি সেকশনে যে ৩ ধরনের ক্ষমতা: দেখা / এডিট (যোগ+পরিবর্তন) / ডিলিট
@@ -153,6 +169,11 @@ function admin_can_action(string $script, string $cap): bool
     }
     if (in_array($script, admin_super_only_pages(), true)) {
         return false;
+    }
+    // manage.php entity-নির্ভর: ?entity=courses → content:courses সেকশন
+    if ($script === 'manage.php') {
+        $ent = $_GET['entity'] ?? '';
+        return $ent !== '' && admin_can('content:' . $ent, $cap);
     }
     $sections = admin_page_sections()[$script] ?? null;
     if ($sections === null) {

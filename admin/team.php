@@ -120,6 +120,39 @@ $renderCapRow = function (string $key, string $label, array $current) use ($capL
     $h .= '</div></div>';
     return $h;
 };
+
+// পুরো অনুমতি-গ্রিড (কনটেন্ট গ্রুপ + অন্যান্য) + সম্পূর্ণ-অ্যাক্সেস/সব-বাদ বোতাম — add ও edit দুই ফর্মে
+$renderCapGrid = function (array $currentMap) use ($sections, $renderCapRow): string {
+    $content = [];
+    $others = [];
+    foreach ($sections as $key => $label) {
+        if (admin_is_content_section($key)) {
+            $content[$key] = $label;
+        } else {
+            $others[$key] = $label;
+        }
+    }
+    $section = function (string $title, array $items) use ($renderCapRow, $currentMap): string {
+        if (!$items) {
+            return '';
+        }
+        $h = '<p class="text-xs font-bold text-gray-400 mt-2 mb-1" style="letter-spacing:.05em;text-transform:uppercase">' . e($title) . '</p>';
+        $h .= '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">';
+        foreach ($items as $k => $l) {
+            $h .= $renderCapRow($k, $l, $currentMap[$k] ?? []);
+        }
+        $h .= '</div>';
+        return $h;
+    };
+    return '<div class="perm-grid space-y-1">'
+        . '<div class="flex flex-wrap gap-2 mb-2">'
+        . '<button type="button" class="perm-all text-xs font-bold text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg">✓ সম্পূর্ণ অ্যাক্সেস দিন</button>'
+        . '<button type="button" class="perm-none text-xs font-bold text-gray-600 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg">সব বাদ</button>'
+        . '</div>'
+        . $section('কনটেন্ট (প্রতিটা আলাদা)', $content)
+        . $section('অন্যান্য অংশ', $others)
+        . '</div>';
+};
 ?>
 <div class="max-w-3xl space-y-6">
 
@@ -160,14 +193,15 @@ $renderCapRow = function (string $key, string $label, array $current) use ($capL
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-1">পাসওয়ার্ড</label>
-                    <input type="text" name="password" required minlength="6" autocomplete="new-password" class="w-full border rounded-xl px-3 py-2.5">
+                    <div class="pw-wrap" style="position:relative">
+                        <input type="password" name="password" required minlength="6" autocomplete="new-password" class="w-full border rounded-xl px-3 py-2.5" style="padding-right:2.6rem">
+                        <button type="button" class="pw-eye" tabindex="-1" aria-label="পাসওয়ার্ড দেখান" style="position:absolute;top:0;bottom:0;right:0;padding:0 .7rem;color:#9ca3af"><i data-lucide="eye" class="w-4 h-4"></i></button>
+                    </div>
                 </div>
             </div>
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-2">কোন কোন অংশে কী কী করতে পারবে? (দেখা / এডিট / ডিলিট আলাদা)</label>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <?php foreach ($sections as $key => $label) { echo $renderCapRow($key, $label, []); } ?>
-                </div>
+                <?= $renderCapGrid([]) ?>
             </div>
             <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2.5 rounded-xl">মডারেটর যোগ করুন</button>
         </form>
@@ -201,9 +235,7 @@ $renderCapRow = function (string $key, string $label, array $current) use ($capL
                             <label class="block text-xs font-semibold text-gray-500 mb-1">পুরো নাম</label>
                             <input type="text" name="full_name" value="<?= e($m['full_name']) ?>" class="w-full border rounded-xl px-3 py-2">
                         </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <?php foreach ($sections as $key => $label) { echo $renderCapRow($key, $label, $mCaps[$key] ?? []); } ?>
-                        </div>
+                        <?= $renderCapGrid($mCaps) ?>
                         <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2 rounded-xl text-sm">অনুমতি সংরক্ষণ</button>
                     </form>
 
@@ -213,7 +245,10 @@ $renderCapRow = function (string $key, string $label, array $current) use ($capL
                             <?= csrf_field() ?>
                             <input type="hidden" name="action" value="reset_password">
                             <input type="hidden" name="id" value="<?= (int) $m['id'] ?>">
-                            <input type="text" name="new_password" placeholder="নতুন পাসওয়ার্ড" minlength="6" class="border rounded-lg px-3 py-1.5 text-sm w-40">
+                            <span class="pw-wrap" style="position:relative;display:inline-block">
+                                <input type="password" name="new_password" placeholder="নতুন পাসওয়ার্ড" minlength="6" class="border rounded-lg px-3 py-1.5 text-sm" style="width:11rem;padding-right:2.2rem">
+                                <button type="button" class="pw-eye" tabindex="-1" aria-label="দেখান" style="position:absolute;top:0;bottom:0;right:0;padding:0 .5rem;color:#9ca3af"><i data-lucide="eye" class="w-4 h-4"></i></button>
+                            </span>
                             <button type="submit" class="text-indigo-700 hover:text-indigo-900 font-semibold text-sm">রিসেট</button>
                         </form>
                         <span class="text-gray-300">|</span>
@@ -237,4 +272,20 @@ $renderCapRow = function (string $key, string $label, array $current) use ($capL
         <?php endif; ?>
     </div>
 </div>
+<script>
+document.addEventListener('click', function (e) {
+    var eye = e.target.closest ? e.target.closest('.pw-eye') : null;
+    if (eye) {
+        var w = eye.closest('.pw-wrap'); var i = w && w.querySelector('input');
+        if (i) { i.type = (i.type === 'password') ? 'text' : 'password';
+            eye.innerHTML = '<i data-lucide="' + (i.type === 'password' ? 'eye' : 'eye-off') + '" class="w-4 h-4"></i>';
+            if (window.lucide) lucide.createIcons(); }
+        return;
+    }
+    var all = e.target.closest ? e.target.closest('.perm-all') : null;
+    if (all) { all.closest('.perm-grid').querySelectorAll('input[type=checkbox]').forEach(function (c) { c.checked = true; }); return; }
+    var none = e.target.closest ? e.target.closest('.perm-none') : null;
+    if (none) { none.closest('.perm-grid').querySelectorAll('input[type=checkbox]').forEach(function (c) { c.checked = false; }); return; }
+});
+</script>
 <?php require __DIR__ . '/includes/layout-bottom.php'; ?>
