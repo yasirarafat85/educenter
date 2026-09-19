@@ -33,6 +33,10 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
     private val dao = db.dao()
     private val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
+    // Device-local flags that must NOT survive a reinstall. backup_rules.xml
+    // backs up settings.xml only, so this file is deliberately excluded.
+    private val localState = app.getSharedPreferences("local_state", Context.MODE_PRIVATE)
+
     val notes: StateFlow<List<Note>> =
         dao.activeNotes().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val favorites: StateFlow<List<Note>> =
@@ -416,9 +420,34 @@ class NotesViewModel(app: Application) : AndroidViewModel(app) {
             )
         } catch (_: Exception) { /* some providers don't support persistable grants */ }
         backupUri = uri.toString()
-        // Do NOT auto-enable mirroring: keep the file a restore point the user controls.
-        prefs.edit().putString("backup_uri", backupUri).apply()
+        // Turn mirroring ON by default: setting up cloud backup and then silently
+        // not syncing is the behaviour users trip over. They can switch it off.
+        autoBackup = true
+        prefs.edit()
+            .putString("backup_uri", backupUri)
+            .putBoolean("auto_backup", true)
+            .apply()
         writeBackup(uri, onResult)
+    }
+
+    /**
+     * After a reinstall: the app is empty but a cloud backup file is still
+     * remembered (settings.xml comes back via Android auto-backup) — offer to
+     * restore instead of leaving the user staring at an empty app.
+     *
+     * The "already asked" flag lives in [localState], NOT the backed-up
+     * settings.xml, so a reinstall genuinely asks again.
+     */
+    suspend fun shouldOfferCloudRestore(): Boolean {
+        if (backupUri == null) return false
+        if (localState.getBoolean("restore_offered", false)) return false
+        return withContext(Dispatchers.IO) {
+            try { dao.allNotesOnce().isEmpty() } catch (_: Exception) { false }
+        }
+    }
+
+    fun markRestoreOffered() {
+        localState.edit().putBoolean("restore_offered", true).apply()
     }
 
     fun setAutoBackupEnabled(on: Boolean) {

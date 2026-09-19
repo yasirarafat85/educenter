@@ -107,6 +107,12 @@ fun ClipApp(vm: NotesViewModel) {
     var query by rememberSaveable { mutableStateOf("") }
     var sortMenuOpen by remember { mutableStateOf(false) }
     var pendingUnlock by remember { mutableStateOf<Note?>(null) }
+    // Offer to restore from the cloud backup after a reinstall (empty app).
+    var offerRestore by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (vm.shouldOfferCloudRestore()) offerRestore = true
+    }
 
     val notes by vm.notes.collectAsState()
     val favorites by vm.favorites.collectAsState()
@@ -217,6 +223,35 @@ fun ClipApp(vm: NotesViewModel) {
                 if (vm.verifyMaster(pw)) { revealPending(); true } else false
             },
             onBiometric = if (fingerprintUnlock) ({ requestFingerprint() }) else null
+        )
+    }
+
+    // Reinstalled and the app is empty, but a cloud backup is remembered.
+    if (offerRestore) {
+        AlertDialog(
+            onDismissRequest = { offerRestore = false; vm.markRestoreOffered() },
+            title = { Text("Restore your notes?") },
+            text = { Text("A cloud backup was found for this app. Do you want to restore your notes from it now?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    offerRestore = false
+                    vm.markRestoreOffered()
+                    vm.restoreNow { n ->
+                        Toast.makeText(
+                            context,
+                            when {
+                                n > 0 -> "Restored $n note(s) ✓"
+                                n == -2 -> "The backup is empty"
+                                else -> "Could not read the backup — set it up again in Settings"
+                            },
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }) { Text("Restore") }
+            },
+            dismissButton = {
+                TextButton(onClick = { offerRestore = false; vm.markRestoreOffered() }) { Text("Not now") }
+            }
         )
     }
 

@@ -174,10 +174,18 @@ fun SettingsScreen(vm: NotesViewModel) {
         Text("On this phone (automatic)", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         Text(
             "Your notes are saved on this phone automatically and updated on every change. " +
-                "Tap Restore to bring them back — no file or path needed. Reinstalling on the " +
-                "same Google account (with backup on) also restores them on its own.",
+                "Tap Restore to bring them back — no file or path needed.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.size(6.dp))
+        // Be honest: app-private storage is wiped by Android on uninstall.
+        Text(
+            "⚠ This copy is deleted if you uninstall the app. Set up cloud backup below " +
+                "to keep your notes safe across uninstall or a new phone.",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (vm.backupUri == null) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(Modifier.size(8.dp))
         Button(
@@ -205,7 +213,7 @@ fun SettingsScreen(vm: NotesViewModel) {
         Spacer(Modifier.size(16.dp))
 
         // Optional cloud copy (Google Drive / file).
-        Text("Cloud backup (optional)", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        Text("Cloud backup (recommended)", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         if (vm.backupUri == null) {
             Text(
                 "Keep an extra copy in Google Drive or your phone storage.",
@@ -355,7 +363,7 @@ fun SettingsScreen(vm: NotesViewModel) {
 
         // ---- About ----
         SectionTitle("About")
-        Text("Clip Notes  •  version 2.1", style = MaterialTheme.typography.bodyMedium)
+        Text("Clip Notes  •  version 2.2", style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.size(6.dp))
         Text(
             "Save the text you use often and copy it with a single tap. " +
