@@ -62,6 +62,57 @@ function pay_month_span_label(int $from, int $to): string
     return pay_month_ordinal($from) . '–' . pay_month_ordinal($to) . ' মাস';
 }
 
+// লেবেল থেকে মাস-নম্বর ফেরত ("৩য়" → 3) — কুরিয়ারের মাসের সাথে খাতার কিস্তি মেলাতে লাগে
+function pay_ordinal_to_number(string $ord): int
+{
+    static $map = null;
+    if ($map === null) {
+        $map = [];
+        for ($i = 1; $i <= 60; $i++) { $map[pay_month_ordinal($i)] = $i; }
+    }
+    return $map[trim($ord)] ?? 0;
+}
+
+// একটা কিস্তির লেবেল কোন কোন মাস ঢাকে — "২য় মাস" → [2], "১ম–২য় মাস" → [1, 2]
+// (মাসিক কিস্তি না হলে খালি অ্যারে)
+function pay_label_months(string $label): array
+{
+    $label = trim($label);
+    if (!str_ends_with($label, ' মাস')) {
+        return [];
+    }
+    $body = trim(substr($label, 0, -strlen(' মাস')));
+    $parts = explode('–', $body);
+    if (count($parts) === 1) {
+        $n = pay_ordinal_to_number($parts[0]);
+        return $n > 0 ? [$n] : [];
+    }
+    $a = pay_ordinal_to_number($parts[0]);
+    $b = pay_ordinal_to_number($parts[1]);
+    return ($a > 0 && $b >= $a) ? range($a, $b) : [];
+}
+
+// 🔑 কুরিয়ারের N-তম মাসের পার্সেল খাতার কোন কিস্তির সাথে মেলে
+// (বেতন কম কিস্তিতে নেওয়া হলে এক কিস্তি একাধিক মাস ঢাকে — তখন সেই কিস্তিটাই ফেরে)
+function pay_row_for_month(array $rows, int $month): ?array
+{
+    foreach ($rows as $r) {
+        if (in_array($month, pay_label_months((string) $r['label']), true)) {
+            return $r;
+        }
+    }
+    return null;
+}
+
+// ঐ কিস্তিতে আর কত টাকা পাওনা (নিট − জমা)। বাদ দেওয়া বা বেশি জমা থাকলে ০।
+function pay_row_outstanding(?array $row): float
+{
+    if (!$row || pay_is_skipped($row)) {
+        return 0.0;
+    }
+    return round(max(0.0, pay_net($row) - (float) $row['amount_paid']), 2);
+}
+
 // ছাড় — % হলে প্রাপ্যের শতাংশ, নাহলে সরাসরি টাকা। কখনো প্রাপ্যের বেশি বা ঋণাত্মক না।
 function pay_compute_discount(float $due, string $type, float $value): float
 {

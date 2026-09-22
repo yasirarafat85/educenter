@@ -9,6 +9,7 @@ require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/courier/CourierManager.php';
 require_once __DIR__ . '/includes/courier-notes.php';
+require_once __DIR__ . '/includes/payments.php'; // 🔑 টাকার খাতা — কালেকশনের পরিমাণ এখান থেকেই আসে
 admin_require_login();
 
 $db = get_db();
@@ -84,6 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $regMap = [];
         foreach ($rm->fetchAll() as $rr) { $regMap[(int) $rr['id']] = $rr; }
 
+        // 🔑 খাতা → পার্সেল: এই মাসে কার কত টাকা বাকি (খাতা না থাকলে মাসিক ফি-ই ধরা হয়)
+        $ledgerMap = pay_fetch_many($db, array_keys($regMap));
+
         $findBatch = $db->prepare('SELECT id, send_status FROM courier_batches WHERE registration_id = :r AND period_label = :p ORDER BY id DESC LIMIT 1');
         $insDraft = $db->prepare(
             'INSERT INTO courier_batches
@@ -117,7 +121,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $zone = in_array($row['zone'] ?? '', ['dhaka', 'near', 'outside'], true) ? $row['zone'] : 'dhaka';
             $wx   = !empty($row['wx']);
             $adj  = (float) ($row['adj'] ?? 0);
-            $amt  = courier_compute_collection($courseFee, 1, $zone, $wx, $adj); // মাল্টিপ্লায়ার সবসময় ১
+            $ledgerRows = $ledgerMap[$rid] ?? [];
+            $basis = $ledgerRows ? pay_row_outstanding(pay_row_for_month($ledgerRows, $month)) : $courseFee;
+            $amt  = courier_compute_collection($basis, 1, $zone, $wx, $adj); // মাল্টিপ্লায়ার সবসময় ১
             if (is_numeric($row['amt'] ?? null)) { $amt = max(0, round((float) $row['amt'])); } // সরাসরি লেখা পরিমাণই চূড়ান্ত
             $desc   = trim($row['desc'] ?? '') ?: null;
             $reason = trim($row['reason'] ?? '') ?: null;
@@ -253,6 +259,7 @@ if ($regs) {
 }
 
 $notesByReg = fetch_registration_notes($db, array_map(fn($r) => (int) $r['id'], $regs));
+$ledgerByReg = pay_fetch_many($db, array_map(fn($r) => (int) $r['id'], $regs)); // 🔑 খাতা (কালেকশনের ভিত্তি)
 $activeRegs   = array_values(array_filter($regs, fn($r) => (int) ($r['courier_active'] ?? 1) === 1));
 $inactiveRegs = array_values(array_filter($regs, fn($r) => (int) ($r['courier_active'] ?? 1) !== 1));
 $pendingGroupRemoval = array_values(array_filter($inactiveRegs, fn($r) => !empty($r['fb_group_added']) || !empty($r['messenger_group_added'])));
@@ -472,8 +479,15 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
                 $exAdj = $ex['adjustment'] ?? 0; $exReason = $ex['adjustment_reason'] ?? '';
                 $exAmt = ($ex && $ex['amount_to_collect'] !== null && $ex['send_status'] !== 'declined') ? (string) (int) round((float) $ex['amount_to_collect']) : '';
                 $notes = $notesByReg[$rid] ?? [];
+
+                // 🔑 খাতা → এই মাসের কালেকশনের ভিত্তি
+                $lRows = $ledgerByReg[$rid] ?? [];
+                $lRow  = $lRows ? pay_row_for_month($lRows, $selMonth) : null;
+                $lDue  = $lRows ? pay_row_outstanding($lRow) : (float) $courseFee;   // খাতা না থাকলে পুরনো নিয়ম
+                $lSum  = $lRows ? pay_summary($lRows) : null;
+                $lSkip = $lRow && pay_is_skipped($lRow);
             ?>
-                <div class="stu bg-white rounded-2xl shadow p-4 <?= $isNo ? 'opacity-60' : '' ?>" data-fee="<?= (int) $courseFee ?>" data-sent="<?= $isSent ? 1 : 0 ?>">
+                <div class="stu bg-white rounded-2xl shadow p-4 <?= $isNo ? 'opacity-60' : '' ?>" data-fee="<?= (int) $courseFee ?>" data-due="<?= (int) round($lDue) ?>" data-sent="<?= $isSent ? 1 : 0 ?>">
                     <input type="hidden" name="bd[<?= $rid ?>][present]" value="1">
                     <input type="hidden" name="bd[<?= $rid ?>][decision]" class="decision" value="<?= $isNo ? 'no' : 'go' ?>">
                     <input type="hidden" name="bd[<?= $rid ?>][unlocked]" class="unlocked" value="">
@@ -497,6 +511,22 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
                     </div>
                     <?php if ($isFailed): ?><div class="text-[11px] text-orange-700 bg-orange-50 rounded px-2 py-1 mb-2">গতবার পাঠানো ব্যর্থ হয়েছিল — আবার চেষ্টা করতে পারেন।</div><?php endif; ?>
                     <?php if ($notes): ?><div class="flex flex-wrap items-center gap-1.5 mb-3"><?php render_note_chips($notes); ?></div><?php endif; ?>
+                    <?php // 🔑 খাতার অবস্থা — কালেকশনের টাকা এখান থেকেই বসে ?>
+                    <div class="text-[11px] rounded-lg px-2 py-1.5 mb-2 <?= $lRows ? 'bg-indigo-50 text-indigo-800' : 'bg-amber-50 text-amber-800' ?>">
+                        <?php if (!$lRows): ?>
+                            💰 <b>খাতা নেই</b> — মাসিক ফি ৳<?= e(number_format($courseFee)) ?> ধরা হয়েছে। অর্ডার তালিকার “খাতা” থেকে সেভ করলে এখানে আসল বাকি বসবে।
+                        <?php elseif ($lSkip): ?>
+                            💰 খাতায় এই মাস <b>⊘ বাদ</b> দেওয়া আছে — বাকি ৳0।
+                        <?php elseif (!$lRow): ?>
+                            💰 খাতায় এই মাসের কিস্তি নেই — বাকি ৳0 ধরা হয়েছে (দরকার হলে হাতে লিখুন)।
+                        <?php else: ?>
+                            💰 খাতা — <b><?= e($lRow['label']) ?></b>: প্রাপ্য ৳<?= e(number_format((float) $lRow['amount_due'])) ?>
+                            <?php if ((float) $lRow['discount_amount'] > 0): ?> · ছাড় ৳<?= e(number_format((float) $lRow['discount_amount'])) ?><?php endif; ?>
+                            · জমা ৳<?= e(number_format((float) $lRow['amount_paid'])) ?>
+                            · <b class="<?= $lDue > 0 ? 'text-red-700' : 'text-green-700' ?>"><?= $lDue > 0 ? 'বাকি ৳' . e(number_format($lDue)) : '✅ এই মাসের টাকা পাওয়া হয়ে গেছে' ?></b>
+                            <?php if ($lSum && $lSum['balance'] > 0): ?><span class="text-gray-500"> · সব মিলিয়ে বাকি ৳<?= e(number_format($lSum['balance'])) ?></span><?php endif; ?>
+                        <?php endif; ?>
+                    </div>
                     <div class="builder <?= $isSent ? 'opacity-50 pointer-events-none' : '' ?>">
                         <div class="grid gap-2" style="grid-template-columns:1.3fr auto 1fr; align-items:end;">
                             <label class="text-xs text-gray-600">ডেলিভারি<select name="bd[<?= $rid ?>][zone]" class="zone block w-full border rounded-lg px-2 py-2 text-sm mt-1">
@@ -506,7 +536,7 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
                             <label class="text-xs text-gray-600">সমন্বয়±<input type="number" step="1" value="<?= e((string)(int)$exAdj) ?>" name="bd[<?= $rid ?>][adj]" class="adj block w-full border rounded-lg px-2 py-2 text-sm mt-1"></label>
                         </div>
                         <div class="flex items-center justify-between gap-2 mt-3 pt-3 border-t">
-                            <div class="text-xs text-gray-500">কালেকশন (টাকা)<div class="autohint text-[11px] text-gray-400">অটো হিসাব: ৳<span class="autoval">0</span> · <button type="button" class="text-indigo-600 font-semibold underline autobtn">অটো বসান</button></div></div>
+                            <div class="text-xs text-gray-500">কালেকশন (টাকা)<div class="autohint text-[11px] text-gray-400"><?= $lRows ? 'খাতার বাকি + ডেলিভারি' : 'মাসিক ফি + ডেলিভারি' ?> = ৳<span class="autoval">0</span> · <button type="button" class="text-indigo-600 font-semibold underline autobtn">অটো বসান</button></div></div>
                             <div class="flex items-center gap-1.5 flex-shrink-0">
                                 <span class="text-lg font-black text-gray-900">৳</span>
                                 <input type="number" step="1" min="0" name="bd[<?= $rid ?>][amt]" value="<?= e($exAmt) ?>" class="amt border-2 border-indigo-200 focus:border-indigo-500 rounded-lg px-2 py-1.5 text-lg font-black text-gray-900 text-right" style="width:120px;">
@@ -549,9 +579,10 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
     else { btn.textContent='✓ যাবে'; btn.className='goNoBtn flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-green-300 bg-green-50 text-green-700'; el.classList.remove('opacity-60'); if(bld)bld.style.display=''; }
   }
   function calc(el){
-    var fee=+el.getAttribute('data-fee'), zone=el.querySelector('.zone').value;
+    // ভিত্তি = খাতায় এই মাসের বাকি (খাতা না থাকলে মাসিক ফি) — সার্ভারেও হুবহু একই হিসাব
+    var base=+el.getAttribute('data-due'), zone=el.querySelector('.zone').value;
     var wx=el.querySelector('.wx').checked?WX:0, adj=+el.querySelector('.adj').value||0;
-    var auto=Math.max(0,Math.round(fee+(DC[zone]||0)+wx+adj));
+    var auto=Math.max(0,Math.round(base+(DC[zone]||0)+wx+adj));
     var amtEl=el.querySelector('.amt'), manual=el.querySelector('.manual').value==='1';
     el.querySelector('.autoval').textContent=auto;
     if(!manual){ amtEl.value=auto; }

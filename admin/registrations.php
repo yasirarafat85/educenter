@@ -711,6 +711,14 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
     $rid     = (int) $row['id'];
     $isNew   = !$ledger;
     $rows    = $isNew ? pay_build_plan($db, $row) : $ledger;
+
+    // 🔴 খাতা এখনো সেভ হয়নি অথচ আগেই আয় অনুমোদিত (পুরনো নিয়মে কনফার্ম করা) — তখন
+    // প্রস্তাবিত কিস্তিতে ঐ টাকাটা জমা হিসেবে বসিয়ে দেওয়া হয়। নাহলে জমা ০ দেখাত আর
+    // সেভ করলে আয় নীরবে ০ হয়ে যেত (আয় = খাতার মোট জমা)।
+    $prefill = ($isNew && !empty($row['income_approved'])) ? (float) ($row['income_amount'] ?? 0) : 0.0;
+    if ($prefill > 0) {
+        $rows = pay_allocate_paid($rows, $prefill);
+    }
     $summary = pay_summary($rows);
     $note    = (string) ($row['admin_note'] ?? '');
     $warn    = $isNew
@@ -730,7 +738,7 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                 <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
                     <h4 class="font-bold text-gray-800 text-sm">💰 টাকার খাতা — <?= e($row['customer_name']) ?></h4>
                     <?php if ($isNew): ?>
-                        <span class="text-xs text-indigo-700 font-semibold">কোর্সের সেটিংস দেখে কিস্তিগুলো বসানো হয়েছে — মিলিয়ে নিয়ে সেভ করুন</span>
+                        <span class="text-xs text-indigo-700 font-semibold">কোর্সের সেটিংস দেখে কিস্তিগুলো বসানো হয়েছে — মিলিয়ে নিয়ে সেভ করুন<?php if ($prefill > 0): ?> (আগে অনুমোদিত আয় ৳<?= $money($prefill) ?> জমা হিসেবে বসানো)<?php endif; ?></span>
                     <?php else: ?>
                         <?php // পুরনো (মাইগ্রেশনে বসানো) খাতা — কোর্সের সেটিংস দেখে কিস্তিতে ভাগ করে দেওয়া যায় ?>
                         <button type="button" class="pay-rebuild text-xs font-bold px-3 py-1 rounded-lg <?= $isLegacy ? 'bg-amber-100 text-amber-800' : 'text-gray-500' ?>"
