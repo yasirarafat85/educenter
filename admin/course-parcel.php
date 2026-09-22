@@ -511,6 +511,22 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
                     </div>
                     <?php if ($isFailed): ?><div class="text-[11px] text-orange-700 bg-orange-50 rounded px-2 py-1 mb-2">গতবার পাঠানো ব্যর্থ হয়েছিল — আবার চেষ্টা করতে পারেন।</div><?php endif; ?>
                     <?php if ($notes): ?><div class="flex flex-wrap items-center gap-1.5 mb-3"><?php render_note_chips($notes); ?></div><?php endif; ?>
+                    <?php
+                    // লেখা মন্তব্য দুটো — খাতার নোট (অ্যাডমিনের) ও রেজিস্ট্রেশন ফর্মে অভিভাবকের লেখা।
+                    // টাকা ঠিক করার সময় "কেন এমন" বোঝার জন্য এখানেই দেখানো (ভেতরে ঢুকতে হয় না)।
+                    $ledgerNote = trim((string) ($r['admin_note'] ?? ''));
+                    $formNote   = trim((string) ($r['notes'] ?? ''));
+                    ?>
+                    <?php if ($ledgerNote !== '' || $formNote !== ''): ?>
+                        <div class="text-[11px] bg-gray-50 text-gray-600 rounded-lg px-2 py-1.5 mb-2 break-words">
+                            <?php if ($ledgerNote !== ''): ?>
+                                <div>📝 <b>খাতার নোট:</b> <?= e($ledgerNote) ?></div>
+                            <?php endif; ?>
+                            <?php if ($formNote !== ''): ?>
+                                <div class="<?= $ledgerNote !== '' ? 'mt-0.5' : '' ?>">🗒️ <b>রেজিস্ট্রেশনের মন্তব্য:</b> <?= e($formNote) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                     <?php // 🔑 খাতার অবস্থা — কালেকশনের টাকা এখান থেকেই বসে ?>
                     <div class="text-[11px] rounded-lg px-2 py-1.5 mb-2 <?= $lRows ? 'bg-indigo-50 text-indigo-800' : 'bg-amber-50 text-amber-800' ?>">
                         <?php if (!$lRows): ?>
