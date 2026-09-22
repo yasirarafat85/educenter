@@ -40,10 +40,26 @@ function pay_guess_fee_mode(array $batch): string
 // (ধাপ ৩-এ কুরিয়ারের period_label-এর সাথে মেলাতে হবে বলে ইচ্ছাকৃতভাবে এক রাখা)
 function pay_month_label(int $i): string
 {
-    static $names = [1 => '১ম মাস', 2 => '২য় মাস', 3 => '৩য় মাস', 4 => '৪র্থ মাস', 5 => '৫ম মাস', 6 => '৬ষ্ঠ মাস',
-                     7 => '৭ম মাস', 8 => '৮ম মাস', 9 => '৯ম মাস', 10 => '১০ম মাস', 11 => '১১তম মাস', 12 => '১২তম মাস'];
+    return pay_month_ordinal($i) . ' মাস';
+}
+
+// শুধু ক্রমবাচক অংশ ("১ম") — একাধিক মাস একসাথে দেখাতে লাগে ("১ম–২য় মাস")
+function pay_month_ordinal(int $i): string
+{
+    static $names = [1 => '১ম', 2 => '২য়', 3 => '৩য়', 4 => '৪র্থ', 5 => '৫ম', 6 => '৬ষ্ঠ',
+                     7 => '৭ম', 8 => '৮ম', 9 => '৯ম', 10 => '১০ম', 11 => '১১তম', 12 => '১২তম'];
     if (isset($names[$i])) { return $names[$i]; }
-    return strtr((string) $i, ['0'=>'০','1'=>'১','2'=>'২','3'=>'৩','4'=>'৪','5'=>'৫','6'=>'৬','7'=>'৭','8'=>'৮','9'=>'৯']) . 'তম মাস';
+    return strtr((string) $i, ['0'=>'০','1'=>'১','2'=>'২','3'=>'৩','4'=>'৪','5'=>'৫','6'=>'৬','7'=>'৭','8'=>'৮','9'=>'৯']) . 'তম';
+}
+
+// এক কিস্তিতে একাধিক মাস ঢুকলে তার লেবেল — এক মাস হলে হুবহু pay_month_label()
+// (কুরিয়ারের period_label-এর সাথে মেলাতে হয় বলে এক-মাসের ফরম্যাট বদলানো যাবে না)
+function pay_month_span_label(int $from, int $to): string
+{
+    if ($to <= $from) {
+        return pay_month_label($from);
+    }
+    return pay_month_ordinal($from) . '–' . pay_month_ordinal($to) . ' মাস';
 }
 
 // ছাড় — % হলে প্রাপ্যের শতাংশ, নাহলে সরাসরি টাকা। কখনো প্রাপ্যের বেশি বা ঋণাত্মক না।
@@ -107,6 +123,67 @@ function pay_batch_months(array $batch): int
     return 1;
 }
 
+// রেজিস্ট্রেশন ফি কয় কিস্তিতে নেওয়া হয় (কিছু কোর্সে ৩ বারে) — ০/খালি = একবারে।
+function pay_batch_reg_installments(array $batch): int
+{
+    $n = (int) ($batch['reg_installments'] ?? 0);
+    return $n > 0 ? min(12, $n) : 1;
+}
+
+// বেতন কয় কিস্তিতে নেওয়া হয় — ০/খালি = প্রতি মাসে একবার (মাসের সংখ্যার সমান)।
+// মাসের চেয়ে বেশি দেওয়া যাবে না (৩ মাসের কোর্সে ৪ কিস্তি অর্থহীন)।
+function pay_batch_tuition_installments(array $batch, int $months): int
+{
+    $n = (int) ($batch['tuition_installments'] ?? 0);
+    if ($n <= 0) {
+        return max(1, $months);
+    }
+    return max(1, min($months, $n));
+}
+
+// মোট টাকা কয়েক কিস্তিতে ভাগ — যোগফল সবসময় হুবহু মোটের সমান থাকে
+// (পয়সার অবশিষ্ট আগের কিস্তিগুলোতে বসে; যেমন ৫০০ ÷ ৩ = 166.67 + 166.67 + 166.66)।
+function pay_split_amount(float $total, int $parts): array
+{
+    $parts = max(1, $parts);
+    $cents = (int) round($total * 100);
+    $neg   = $cents < 0;
+    $cents = abs($cents);
+    $base  = intdiv($cents, $parts);
+    $extra = $cents - ($base * $parts);
+    $out   = [];
+    for ($i = 0; $i < $parts; $i++) {
+        $c = $base + ($i < $extra ? 1 : 0);
+        $out[] = ($neg ? -$c : $c) / 100;
+    }
+    return $out;
+}
+
+// N মাসকে K কিস্তিতে ভাগ → [[from, to], ...] (আগের কিস্তিতে বেশি মাস)
+// যেমন ৩ মাস ২ কিস্তিতে → [[1,2],[3]]; ৪ মাস ২ কিস্তিতে → [[1,2],[3,4]]
+function pay_month_groups(int $months, int $parts): array
+{
+    $months = max(1, $months);
+    $parts  = max(1, min($months, $parts));
+    $base   = intdiv($months, $parts);
+    $extra  = $months - ($base * $parts);
+    $groups = [];
+    $from   = 1;
+    for ($i = 0; $i < $parts; $i++) {
+        $len = $base + ($i < $extra ? 1 : 0);
+        $groups[] = [$from, $from + $len - 1];
+        $from    += $len;
+    }
+    return $groups;
+}
+
+// একাধিক কিস্তিতে নেওয়া ফি-র লেবেল — একবারে হলে নামটাই, নাহলে "নাম (কিস্তি 2/3)"
+// (সংখ্যা ইংরেজিতে — প্রজেক্ট কনভেনশন)
+function pay_part_label(string $base, int $i, int $total): string
+{
+    return $total > 1 ? $base . ' (কিস্তি ' . $i . '/' . $total . ')' : $base;
+}
+
 // ব্যাচের কনফিগ থেকে কিস্তির তালিকা তৈরি (এখনো সেভ করা হয় না — শুধু প্রস্তাব)
 function pay_build_plan(PDO $db, array $reg): array
 {
@@ -139,12 +216,21 @@ function pay_build_plan(PDO $db, array $reg): array
     if ($mode === 'onetime') {
         return [pay_blank_row(1, 'onetime', 'পুরো কোর্স ফি', $fee)];
     }
+    // রেজিস্ট্রেশন ফি — এক বা একাধিক কিস্তিতে (reg_installments)
     if ($mode === 'reg_monthly') {
-        $label = trim((string) ($batch['secondary_fee_label'] ?? '')) ?: 'রেজিস্ট্রেশন ফি';
-        $rows[] = pay_blank_row($seq++, 'registration', $label, $regFee);
+        $label    = trim((string) ($batch['secondary_fee_label'] ?? '')) ?: 'রেজিস্ট্রেশন ফি';
+        $regParts = pay_batch_reg_installments($batch);
+        foreach (pay_split_amount($regFee, $regParts) as $i => $part) {
+            $rows[] = pay_blank_row($seq++, 'registration', pay_part_label($label, $i + 1, $regParts), $part);
+        }
     }
-    for ($i = 1; $i <= $months; $i++) {
-        $rows[] = pay_blank_row($seq++, 'monthly', pay_month_label($i), $fee);
+
+    // বেতন — ডিফল্টে প্রতি মাসে একটা কিস্তি, কিন্তু tuition_installments দিলে কম কিস্তিতে
+    // (যেমন ৪ মাসের কোর্সের বেতন ২ বারে → "১ম–২য় মাস" ও "৩য়–৪র্থ মাস", প্রতিটায় ২ মাসের টাকা)
+    $tuitionParts = pay_batch_tuition_installments($batch, $months);
+    foreach (pay_month_groups($months, $tuitionParts) as $group) {
+        [$from, $to] = $group;
+        $rows[] = pay_blank_row($seq++, 'monthly', pay_month_span_label($from, $to), $fee * ($to - $from + 1));
     }
     return $rows;
 }

@@ -135,6 +135,8 @@ CREATE TABLE course_batches (
     payment_schedule TEXT, -- পেমেন্ট সময়সূচি (কখন কত দিতে হবে) — রেজিস্ট্রেশন সফল কার্ডে দেখায়, ডিসপ্লে-only
     registration_fee DECIMAL(10,2) NOT NULL DEFAULT 0, -- 🔑 খাতার হিসাবের রেজিস্ট্রেশন ফি (সংখ্যা)। secondary_fee ডিসপ্লে-only টেক্সট — ০ থাকলে কোড সেখান থেকে আন্দাজ করে
     course_months INT NOT NULL DEFAULT 0,             -- 🔑 কোর্স কয় মাসের (খাতার কিস্তি-সংখ্যা)। ০ হলে total_parcels → duration থেকে আন্দাজ
+    reg_installments INT NOT NULL DEFAULT 0,          -- রেজিস্ট্রেশন ফি কয় কিস্তিতে নেওয়া হয় (০/খালি = একবারে)
+    tuition_installments INT NOT NULL DEFAULT 0,      -- বেতন কয় কিস্তিতে নেওয়া হয় (০/খালি = প্রতি মাসে একবার)
     fee_mode VARCHAR(20) NOT NULL DEFAULT '', -- ফি'র গঠন (পেমেন্ট খাতার কিস্তি অটো তৈরির ভিত্তি): reg_monthly / monthly / onetime; খালি = কোড নিজে আন্দাজ করে (pay_guess_fee_mode)
     duration VARCHAR(100),
     instructor VARCHAR(100),
