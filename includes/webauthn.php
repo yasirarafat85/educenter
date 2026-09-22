@@ -160,7 +160,14 @@ function wa_parse_registration(string $attestationObject, string $clientDataJSON
     if (!hash_equals(hash('sha256', wa_rp_id(), true), $parsed['rpIdHash'])) {
         throw new RuntimeException('rpId মিলছে না');
     }
-    return ['credId' => $parsed['credId'], 'pem' => $parsed['pem'], 'signCount' => $parsed['signCount']];
+    return [
+        'credId'    => $parsed['credId'],
+        'pem'       => $parsed['pem'],
+        'signCount' => $parsed['signCount'],
+        // BE (0x08) = "Backup Eligible" — এই পাসকি গুগল/Apple অ্যাকাউন্টে সিঙ্ক হতে পারে,
+        // অর্থাৎ একই অ্যাকাউন্টে লগইন করা অন্য ডিভাইসেও কাজ করবে (device-bound নয়)।
+        'synced'    => (bool) ($parsed['flags'] & 0x08),
+    ];
 }
 
 // লগইন — assertion signature যাচাই (এটাই আসল নিরাপত্তা)
@@ -188,8 +195,19 @@ function wa_verify_assertion(string $pem, string $authData, string $clientDataJS
     if (!($flags & 0x01)) { // UP — user present বিট
         return ['ok' => false, 'signCount' => 0, 'error' => 'user-present বিট নেই'];
     }
+    // 🔴 UV — ফিঙ্গারপ্রিন্ট/Face/PIN দিয়ে ব্যবহারকারী আসলেই যাচাই হয়েছে কিনা।
+    // আগে শুধু UP (কেউ একজন ট্যাপ করেছে) দেখা হতো — কিছু অথেন্টিকেটর তখন বায়োমেট্রিক
+    // ছাড়াই (শুধু ট্যাপে) UV=0 নিয়ে পাস করে যেতে পারত। অ্যাডমিন লগইনে সেটা যথেষ্ট না।
+    if (!($flags & 0x04)) {
+        return ['ok' => false, 'signCount' => 0, 'error' => 'ফিঙ্গারপ্রিন্ট/PIN যাচাই হয়নি'];
+    }
     $signCount = unpack('N', substr($authData, 33, 4))[1];
     $signedData = $authData . hash('sha256', $clientDataJSON, true);
     $res = openssl_verify($signedData, $signature, $pem, OPENSSL_ALGO_SHA256);
-    return ['ok' => $res === 1, 'signCount' => $signCount, 'error' => $res === 1 ? '' : 'স্বাক্ষর যাচাই ব্যর্থ'];
+    return [
+        'ok' => $res === 1,
+        'signCount' => $signCount,
+        'synced' => (bool) ($flags & 0x08), // BE — সিঙ্কযোগ্য (মাল্টি-ডিভাইস) পাসকি
+        'error' => $res === 1 ? '' : 'স্বাক্ষর যাচাই ব্যর্থ',
+    ];
 }

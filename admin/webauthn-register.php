@@ -34,15 +34,26 @@ $exists = $db->prepare('SELECT id FROM admin_webauthn_credentials WHERE credenti
 $exists->execute(['c' => $credIdB64]);
 if ($exists->fetch()) { wa_out(['error' => 'এই ডিভাইস ইতিমধ্যে যোগ করা আছে'], 409); }
 
-$db->prepare(
-    'INSERT INTO admin_webauthn_credentials (admin_id, credential_id, public_key, sign_count, device_name)
-     VALUES (:a, :c, :p, :s, :n)'
-)->execute([
+$fields = [
     'a' => $_SESSION['admin_id'],
     'c' => $credIdB64,
     'p' => $reg['pem'],
     's' => $reg['signCount'],
     'n' => $deviceName,
-]);
+];
+try {
+    // is_synced = এই পাসকি গুগল/Apple অ্যাকাউন্টে সিঙ্ক হয় কিনা (BE বিট) — নিরাপত্তা পেজে দেখানো হয়,
+    // যাতে "অন্য ডিভাইসেও খুলে গেল কেন" — এই বিভ্রান্তি আর না হয়।
+    $db->prepare(
+        'INSERT INTO admin_webauthn_credentials (admin_id, credential_id, public_key, sign_count, device_name, is_synced)
+         VALUES (:a, :c, :p, :s, :n, :y)'
+    )->execute($fields + ['y' => $reg['synced'] ? 1 : 0]);
+} catch (PDOException $ex) {
+    // is_synced কলাম এখনো যোগ হয়নি (migrate-webauthn-synced.sql চালানো হয়নি) — ডিভাইস যোগ যেন আটকে না যায়
+    $db->prepare(
+        'INSERT INTO admin_webauthn_credentials (admin_id, credential_id, public_key, sign_count, device_name)
+         VALUES (:a, :c, :p, :s, :n)'
+    )->execute($fields);
+}
 
 wa_out(['ok' => true]);

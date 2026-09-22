@@ -25,9 +25,25 @@ require __DIR__ . '/includes/layout-top.php';
     <!-- পরিচিতি -->
     <div class="bg-indigo-50 border border-indigo-100 rounded-2xl p-5 text-sm text-gray-700 leading-relaxed">
         <p class="font-bold text-indigo-800 mb-1">ফিঙ্গারপ্রিন্ট দিয়ে সহজ লগইন</p>
-        পাসওয়ার্ডের পাশাপাশি এই ডিভাইসের (ফোন/কম্পিউটার) ফিঙ্গারপ্রিন্ট বা Face/PIN দিয়ে লগইন করতে পারবেন।
+        পাসওয়ার্ডের পাশাপাশি ফিঙ্গারপ্রিন্ট বা Face/PIN দিয়ে লগইন করতে পারবেন।
         <span class="font-semibold">আপনার ফিঙ্গারপ্রিন্ট কখনো সার্ভারে যায় না</span> — ডিভাইস নিজে যাচাই করে।
-        পাসওয়ার্ড সবসময় ব্যাকআপ হিসেবে থাকবে। যে ডিভাইসে যোগ করবেন, শুধু সেখানেই কাজ করবে।
+        পাসওয়ার্ড সবসময় ব্যাকআপ হিসেবে থাকবে।
+    </div>
+
+    <!-- ☁️ সিঙ্ক-পাসকি ব্যাখ্যা — "অন্য ডিভাইসেও খুলে গেল কেন?" এই প্রশ্নের উত্তর -->
+    <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-gray-700 leading-relaxed">
+        <p class="font-bold text-amber-800 mb-1">☁️ অন্য ডিভাইসেও খুলে যাচ্ছে? — এটা স্বাভাবিক</p>
+        অ্যান্ড্রয়েড/Chrome-এ ফিঙ্গারপ্রিন্ট যোগ করার সময় যদি <span class="font-semibold">গুগল অ্যাকাউন্ট ও PIN</span> চায়,
+        তাহলে চাবিটা ফোনের ভেতরে আটকে থাকে না — <span class="font-semibold">আপনার গুগল অ্যাকাউন্টে সেভ হয়ে সব ডিভাইসে সিঙ্ক হয়ে যায়</span>
+        (Apple-এ iCloud Keychain একইভাবে কাজ করে)। তাই একই গুগল অ্যাকাউন্টে লগইন করা <span class="font-semibold">যেকোনো ডিভাইসে</span>
+        আপনার আঙুল দিলে খুলে যাবে — নতুন করে যোগ করতে হয় না।
+        <div class="mt-2 pt-2 border-t border-amber-200">
+            <span class="font-semibold">তাহলে নিরাপত্তা কীসে?</span> দুটোই লাগে —
+            (১) আপনার গুগল অ্যাকাউন্টে লগইন করা ডিভাইস, <span class="font-semibold">এবং</span>
+            (২) সেই ডিভাইসের নিজের ফিঙ্গারপ্রিন্ট/PIN। অন্য কারো ফোনে আপনার আঙুল দিলে কিছুই হবে না।
+            <span class="font-semibold text-amber-800">তাই গুগল অ্যাকাউন্টে অবশ্যই 2-Step Verification চালু রাখুন</span> —
+            এখন ওটাই আপনার অ্যাডমিন প্যানেলের চাবি পাহারা দিচ্ছে।
+        </div>
     </div>
 
     <!-- এই ডিভাইস যোগ -->
@@ -56,6 +72,7 @@ require __DIR__ . '/includes/layout-top.php';
                     <thead>
                         <tr class="text-left text-gray-500 border-b">
                             <th class="px-4 py-3 font-semibold">ডিভাইস</th>
+                            <th class="px-4 py-3 font-semibold">ধরন</th>
                             <th class="px-4 py-3 font-semibold">যোগ হয়েছে</th>
                             <th class="px-4 py-3 font-semibold">শেষ ব্যবহার</th>
                             <th class="px-4 py-3 font-semibold text-right">অ্যাকশন</th>
@@ -65,6 +82,16 @@ require __DIR__ . '/includes/layout-top.php';
                         <?php foreach ($devices as $dv): ?>
                             <tr class="border-b last:border-0">
                                 <td class="px-4 py-3 font-semibold text-gray-800"><?= e($dv['device_name']) ?></td>
+                                <td class="px-4 py-3">
+                                    <?php $sync = $dv['is_synced'] ?? null; ?>
+                                    <?php if ($sync === null): ?>
+                                        <span class="text-gray-400 text-xs">অজানা</span>
+                                    <?php elseif ((int) $sync === 1): ?>
+                                        <span class="inline-block px-2 py-1 rounded-lg text-xs font-semibold bg-amber-100 text-amber-800" title="গুগল/Apple অ্যাকাউন্টে সিঙ্ক — একই অ্যাকাউন্টে লগইন করা অন্য ডিভাইসেও কাজ করবে">☁️ সব ডিভাইসে</span>
+                                    <?php else: ?>
+                                        <span class="inline-block px-2 py-1 rounded-lg text-xs font-semibold bg-green-100 text-green-800" title="চাবিটা শুধু এই ডিভাইসেই আছে, কোথাও সিঙ্ক হয় না">📱 শুধু এই ডিভাইসে</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="px-4 py-3 text-gray-600"><?= e(date('Y-m-d H:i', strtotime($dv['created_at']))) ?></td>
                                 <td class="px-4 py-3 text-gray-600"><?= $dv['last_used_at'] ? e(date('Y-m-d H:i', strtotime($dv['last_used_at']))) : '—' ?></td>
                                 <td class="px-4 py-3 text-right">

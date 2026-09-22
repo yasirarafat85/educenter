@@ -66,6 +66,7 @@ CREATE TABLE admin_webauthn_credentials (
     public_key TEXT NOT NULL,                      -- PEM (P-256 পাবলিক কী)
     sign_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
     device_name VARCHAR(100) NOT NULL DEFAULT 'আমার ডিভাইস',
+    is_synced TINYINT(1) DEFAULT NULL,             -- 1 = গুগল/Apple অ্যাকাউন্টে সিঙ্ক হওয়া পাসকি (অন্য ডিভাইসেও কাজ করবে), 0 = শুধু এই ডিভাইসে, NULL = পুরনো এন্ট্রি (জানা নেই)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_used_at TIMESTAMP NULL DEFAULT NULL,
     CONSTRAINT fk_webauthn_admin FOREIGN KEY (admin_id) REFERENCES admin_users(id) ON DELETE CASCADE

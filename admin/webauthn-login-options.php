@@ -22,7 +22,7 @@ wa_out([
     'challenge' => wa_b64url_encode($challenge),
     'rpId' => wa_rp_id(),
     'allowCredentials' => $allow,
-    'userVerification' => 'preferred',
+    'userVerification' => 'required', // 🔴 ফিঙ্গারপ্রিন্ট/PIN বাধ্যতামূলক (শুধু ট্যাপে ঢোকা যাবে না)
     'timeout' => 60000,
     'hasCredentials' => count($allow) > 0,
 ]);

@@ -31,7 +31,7 @@ wa_out([
     ],
     'pubKeyCredParams' => [['type' => 'public-key', 'alg' => -7]], // ES256
     'excludeCredentials' => $exclude,
-    'authenticatorSelection' => ['residentKey' => 'preferred', 'userVerification' => 'preferred'],
+    'authenticatorSelection' => ['residentKey' => 'preferred', 'userVerification' => 'required'], // 🔴 বায়োমেট্রিক/PIN বাধ্যতামূলক
     'attestation' => 'none',
     'timeout' => 60000,
 ]);
