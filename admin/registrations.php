@@ -688,8 +688,9 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                     $net = pay_net($r);
                     $st  = pay_row_status($r);
                     ?>
-                    <div class="pay-row bg-white rounded-xl p-3 mb-2">
+                    <div class="pay-row bg-white rounded-xl p-3 mb-2<?= $st === 'skipped' ? ' opacity-60' : '' ?>">
                         <input type="hidden" name="p[<?= $idx ?>][id]" value="<?= (int) $r['id'] ?>">
+                        <input type="hidden" class="pay-skip" name="p[<?= $idx ?>][is_skipped]" value="<?= $st === 'skipped' ? 1 : 0 ?>">
                         <input type="hidden" name="p[<?= $idx ?>][seq]" value="<?= (int) $r['seq'] ?>">
                         <input type="hidden" name="p[<?= $idx ?>][kind]" value="<?= e($r['kind']) ?>">
                         <input type="hidden" name="p[<?= $idx ?>][label]" value="<?= e($r['label']) ?>">
@@ -720,10 +721,12 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                             </label>
 
                             <span class="pay-badge inline-block px-2 py-1 rounded-lg text-xs font-semibold <?= $st === 'paid' ? 'bg-green-100 text-green-800' : ($st === 'partial' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500') ?>">
-                                <?= $st === 'paid' ? '✅ পেইড' : ($st === 'partial' ? '◐ আংশিক' : '○ বাকি') ?>
+                                <?= $st === 'paid' ? '✅ পেইড' : ($st === 'partial' ? '◐ আংশিক' : ($st === 'skipped' ? '⊘ বাদ' : '○ বাকি')) ?>
                             </span>
 
                             <button type="button" class="pay-fill text-xs font-semibold text-indigo-600" title="নিট পরিমাণটা জমায় বসিয়ে দিন">পুরোটা জমা</button>
+                            <?php // মাঝপথে কোর্স ছেড়ে দিলে বাকি মাসগুলো "বাদ" — তখন ঐ কিস্তি প্রাপ্য/বাকিতে গোনা হয় না ?>
+                            <button type="button" class="pay-skip-btn text-xs font-semibold text-gray-500" title="এই মাসটা আর প্রযোজ্য নয় (কোর্স ছেড়ে দিয়েছে)"><?= $st === 'skipped' ? '↩ ফেরাও' : '⊘ বাদ' ?></button>
                         </div>
                     </div>
                 <?php endforeach; ?>
@@ -1323,6 +1326,8 @@ require __DIR__ . '/includes/layout-top.php';
 
         // একটা কিস্তির ছাড়/নিট/অবস্থা
         function rowCalc(row) {
+            var skipped = (row.querySelector('.pay-skip') || {}).value === '1';
+            if (skipped) { return { due: 0, disc: 0, net: 0, paid: num(row.querySelector('.pay-paid')), skipped: true }; }
             var due = num(row.querySelector('.pay-due'));
             var dv = num(row.querySelector('.pay-disc'));
             var dt = row.querySelector('.pay-disc-type');
@@ -1343,10 +1348,14 @@ require __DIR__ . '/includes/layout-top.php';
                 var b = row.querySelector('.pay-badge');
                 if (b) {
                     var paidFull = c.paid >= c.net;
-                    b.textContent = paidFull ? '✅ পেইড' : (c.paid > 0 ? '◐ আংশিক' : '○ বাকি');
+                    b.textContent = c.skipped ? '⊘ বাদ' : (paidFull ? '✅ পেইড' : (c.paid > 0 ? '◐ আংশিক' : '○ বাকি'));
                     b.className = 'pay-badge inline-block px-2 py-1 rounded-lg text-xs font-semibold '
-                        + (paidFull ? 'bg-green-100 text-green-800' : (c.paid > 0 ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500'));
+                        + (c.skipped ? 'bg-gray-100 text-gray-500'
+                           : (paidFull ? 'bg-green-100 text-green-800' : (c.paid > 0 ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500')));
                 }
+                row.classList.toggle('opacity-60', !!c.skipped);
+                var sb = row.querySelector('.pay-skip-btn');
+                if (sb) { sb.textContent = c.skipped ? '↩ ফেরাও' : '⊘ বাদ'; }
             });
             var bal = Math.max(0, tNet - tPaid);
             var set = function (sel, txt) { var el = form.querySelector(sel); if (el) { el.textContent = txt; } };
@@ -1371,6 +1380,14 @@ require __DIR__ . '/includes/layout-top.php';
                     var row = fill.closest('.pay-row');
                     var paidEl = row.querySelector('.pay-paid');
                     if (paidEl) { paidEl.value = rowCalc(row).net; refresh(form); }
+                    return;
+                }
+                // "⊘ বাদ" / "↩ ফেরাও" — মাঝপথে ছেড়ে দেওয়া মাস প্রাপ্যের হিসাব থেকে বাদ
+                var skipBtn = ev.target.closest('.pay-skip-btn');
+                if (skipBtn) {
+                    var srow = skipBtn.closest('.pay-row');
+                    var sf = srow.querySelector('.pay-skip');
+                    if (sf) { sf.value = sf.value === '1' ? '0' : '1'; refresh(form); }
                     return;
                 }
                 // "সব মাসে একই ছাড়" — প্রথম মাসের ছাড় বাকি সব মাসে কপি (রেজিস্ট্রেশন ফি অছোঁয়া থাকে)

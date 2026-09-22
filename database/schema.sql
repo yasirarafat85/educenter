@@ -133,6 +133,8 @@ CREATE TABLE course_batches (
     secondary_fee_label VARCHAR(100) NOT NULL DEFAULT '', -- দ্বিতীয় ফি'র নাম (যেমন উপকরণ/রেজিস্ট্রেশন ফি) — ডিসপ্লে-only
     secondary_fee VARCHAR(50) NOT NULL DEFAULT '',
     payment_schedule TEXT, -- পেমেন্ট সময়সূচি (কখন কত দিতে হবে) — রেজিস্ট্রেশন সফল কার্ডে দেখায়, ডিসপ্লে-only
+    registration_fee DECIMAL(10,2) NOT NULL DEFAULT 0, -- 🔑 খাতার হিসাবের রেজিস্ট্রেশন ফি (সংখ্যা)। secondary_fee ডিসপ্লে-only টেক্সট — ০ থাকলে কোড সেখান থেকে আন্দাজ করে
+    course_months INT NOT NULL DEFAULT 0,             -- 🔑 কোর্স কয় মাসের (খাতার কিস্তি-সংখ্যা)। ০ হলে total_parcels → duration থেকে আন্দাজ
     fee_mode VARCHAR(20) NOT NULL DEFAULT '', -- ফি'র গঠন (পেমেন্ট খাতার কিস্তি অটো তৈরির ভিত্তি): reg_monthly / monthly / onetime; খালি = কোড নিজে আন্দাজ করে (pay_guess_fee_mode)
     duration VARCHAR(100),
     instructor VARCHAR(100),
@@ -546,6 +548,7 @@ CREATE TABLE registration_payments (
     discount_value  DECIMAL(10,2) NOT NULL DEFAULT 0,         -- অ্যাডমিন যা টাইপ করেছেন
     discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0,         -- 🔴 সার্ভারে হিসাব করা ছাড় (টাকায় জমাট)
     amount_paid     DECIMAL(10,2) NOT NULL DEFAULT 0,         -- জমা
+    is_skipped      TINYINT(1)   NOT NULL DEFAULT 0,          -- ১ = এই মাসটা বাদ (মাঝপথে ছেড়ে দিয়েছে) — প্রাপ্য/বাকির হিসাবে ধরা হয় না
     paid_at         DATE         DEFAULT NULL,
     method          VARCHAR(30)  NOT NULL DEFAULT '',
     note            VARCHAR(255) DEFAULT NULL,

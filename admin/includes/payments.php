@@ -57,18 +57,54 @@ function pay_compute_discount(float $due, string $type, float $value): float
 }
 
 // নিট প্রাপ্য = প্রাপ্য − ছাড়
+// এই কিস্তিটা "বাদ" কিনা (মাঝপথে কোর্স ছেড়ে দিয়েছে) — বাদ হলে প্রাপ্য/বাকির হিসাবে ধরা হয় না
+function pay_is_skipped(array $row): bool
+{
+    return !empty($row['is_skipped']);
+}
+
 function pay_net(array $row): float
 {
+    if (pay_is_skipped($row)) {
+        return 0.0;
+    }
     return round(max(0.0, (float) $row['amount_due'] - (float) $row['discount_amount']), 2);
 }
 
 // একটা কিস্তির অবস্থা: paid (পুরো) / partial (আংশিক) / due (কিছুই দেয়নি)
 function pay_row_status(array $row): string
 {
+    if (pay_is_skipped($row)) {
+        return 'skipped';
+    }
     $net  = pay_net($row);
     $paid = (float) $row['amount_paid'];
     if ($paid >= $net) { return 'paid'; }   // net = 0 (পুরো ছাড়) হলেও paid
     return $paid > 0 ? 'partial' : 'due';
+}
+
+// রেজিস্ট্রেশন ফি (খাতার জন্য): ডেডিকেটেড সংখ্যার ঘর আগে, নাহলে ডিসপ্লে-টেক্সট থেকে আন্দাজ।
+// (আগে শুধু secondary_fee পড়া হতো — সেটা "৳৩৫০" ধরনের ডিসপ্লে টেক্সট ও প্রায়ই খালি,
+//  তাই খাতায় প্রাপ্য ০ আসত — ইউজারের স্ক্রিনশটে ধরা পড়ে, ২০২৬-০৯-২২)
+function pay_batch_reg_fee(array $batch): float
+{
+    $fee = (float) ($batch['registration_fee'] ?? 0);
+    return $fee > 0 ? $fee : parse_price_to_number($batch['secondary_fee'] ?? '');
+}
+
+// কোর্স কয় মাসের (খাতায় কয়টা মাসিক কিস্তি): ডেডিকেটেড ঘর → পার্সেল-সংখ্যা → "মেয়াদ" লেখা থেকে।
+// "৩ মাস" → parse_price_to_number() বাংলা অঙ্ককেও ইংরেজি করে দেয় বলে ৩ বেরিয়ে আসে।
+// কিছুই না পেলে ১। সর্বোচ্চ ৬০ — ভুল টাইপে শত শত সারি তৈরি ঠেকাতে।
+function pay_batch_months(array $batch): int
+{
+    foreach ([(int) ($batch['course_months'] ?? 0),
+              (int) ($batch['total_parcels'] ?? 0),
+              (int) parse_price_to_number($batch['duration'] ?? '')] as $n) {
+        if ($n > 0) {
+            return min(60, $n);
+        }
+    }
+    return 1;
 }
 
 // ব্যাচের কনফিগ থেকে কিস্তির তালিকা তৈরি (এখনো সেভ করা হয় না — শুধু প্রস্তাব)
@@ -83,7 +119,9 @@ function pay_build_plan(PDO $db, array $reg): array
         return [pay_blank_row(1, 'onetime', 'পুরো মূল্য', $due)];
     }
 
-    $stmt = $db->prepare('SELECT price, secondary_fee, secondary_fee_label, total_parcels, fee_mode FROM course_batches WHERE id = :id');
+    // `*` ইচ্ছাকৃত — নতুন কলাম (registration_fee/course_months) মাইগ্রেশনের আগে না থাকলেও
+    // কোয়েরি ভাঙে না; হেল্পারগুলো `?? 0` দিয়ে পুরনো উৎসে ফলব্যাক করে।
+    $stmt = $db->prepare('SELECT * FROM course_batches WHERE id = :id');
     $stmt->execute(['id' => $reg['item_id']]);
     $batch = $stmt->fetch();
     if (!$batch) {
@@ -93,8 +131,8 @@ function pay_build_plan(PDO $db, array $reg): array
 
     $mode   = pay_guess_fee_mode($batch);
     $fee    = parse_price_to_number($batch['price'] ?? '');
-    $regFee = parse_price_to_number($batch['secondary_fee'] ?? '');
-    $months = max(1, (int) ($batch['total_parcels'] ?? 0));
+    $regFee = pay_batch_reg_fee($batch);
+    $months = pay_batch_months($batch);
     $rows   = [];
     $seq    = 1;
 
@@ -117,7 +155,7 @@ function pay_blank_row(int $seq, string $kind, string $label, float $due): array
     return [
         'id' => 0, 'seq' => $seq, 'kind' => $kind, 'label' => $label,
         'amount_due' => round($due, 2), 'discount_type' => 'fixed', 'discount_value' => 0.0,
-        'discount_amount' => 0.0, 'amount_paid' => 0.0, 'paid_at' => null, 'method' => '', 'note' => null,
+        'discount_amount' => 0.0, 'amount_paid' => 0.0, 'is_skipped' => 0, 'paid_at' => null, 'method' => '', 'note' => null,
     ];
 }
 
@@ -162,16 +200,22 @@ function pay_paid_total(array $rows): float
 function pay_summary(array $rows): array
 {
     $due = $discount = $paid = 0.0;
+    $skipped = 0;
     foreach ($rows as $row) {
+        $paid += (float) $row['amount_paid']; // বাদ দেওয়া মাসেও টাকা নেওয়া থাকলে সেটা জমাই
+        if (pay_is_skipped($row)) {
+            $skipped++;
+            continue; // বাদ → প্রাপ্য/ছাড়ে গোনা হয় না
+        }
         $due      += (float) $row['amount_due'];
         $discount += (float) $row['discount_amount'];
-        $paid     += (float) $row['amount_paid'];
     }
     $net     = round(max(0.0, $due - $discount), 2);
     $paid    = round($paid, 2);
     $balance = round($net - $paid, 2);
     return [
         'rows'     => count($rows),
+        'skipped'  => $skipped,
         'due'      => round($due, 2),
         'discount' => round($discount, 2),
         'net'      => $net,
@@ -196,6 +240,9 @@ function pay_status_chip(array $summary): string
         'due'     => $chip('bg-red-100 text-red-700', '● ' . $money($summary['balance']) . ' বাকি'),
         default   => $chip('bg-gray-100 text-gray-500', 'খাতা নেই'),
     };
+    if (!empty($summary['skipped'])) {
+        $out .= '<div class="mt-1">' . $chip('bg-gray-100 text-gray-500', '⊘ ' . $summary['skipped'] . ' মাস বাদ') . '</div>';
+    }
     if ($summary['discount'] > 0) {
         $out .= '<div class="mt-1">' . $chip('bg-purple-100', '🏷️ ' . $money($summary['discount']) . ' ছাড়', 'color:#7e22ce') . '</div>';
     }
@@ -209,13 +256,13 @@ function pay_save_rows(PDO $db, int $regId, array $input): int
 {
     $ins = $db->prepare(
         'INSERT INTO registration_payments
-            (registration_id, seq, kind, label, amount_due, discount_type, discount_value, discount_amount, amount_paid, paid_at, method, note)
-         VALUES (:reg, :seq, :kind, :label, :due, :dtype, :dval, :damt, :paid, :pat, :method, :note)'
+            (registration_id, seq, kind, label, amount_due, discount_type, discount_value, discount_amount, amount_paid, is_skipped, paid_at, method, note)
+         VALUES (:reg, :seq, :kind, :label, :due, :dtype, :dval, :damt, :paid, :skip, :pat, :method, :note)'
     );
     $upd = $db->prepare(
         'UPDATE registration_payments SET seq = :seq, kind = :kind, label = :label, amount_due = :due,
             discount_type = :dtype, discount_value = :dval, discount_amount = :damt, amount_paid = :paid,
-            paid_at = :pat, method = :method, note = :note
+            is_skipped = :skip, paid_at = :pat, method = :method, note = :note
          WHERE id = :id AND registration_id = :reg'
     );
 
@@ -242,6 +289,7 @@ function pay_save_rows(PDO $db, int $regId, array $input): int
             'dval'   => $dval,
             'damt'   => pay_compute_discount($due, $dtype, $dval),
             'paid'   => $paid,
+            'skip'   => !empty($raw['is_skipped']) ? 1 : 0,
             'pat'    => preg_match('/^\d{4}-\d{2}-\d{2}$/', $pat) ? $pat : ($paid > 0 ? date('Y-m-d') : null),
             'method' => mb_substr(trim((string) ($raw['method'] ?? '')), 0, 30),
             'note'   => ($n = mb_substr(trim((string) ($raw['note'] ?? '')), 0, 255)) !== '' ? $n : null,
