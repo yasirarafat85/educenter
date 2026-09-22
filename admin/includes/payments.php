@@ -235,6 +235,66 @@ function pay_build_plan(PDO $db, array $reg): array
     return $rows;
 }
 
+// এই খাতাটা কি নিছক "পুরনো হিসাব"-এর এক সারি? (মাইগ্রেশনে বসানো — কিস্তিতে ভাগ করা নেই)
+function pay_is_legacy_only(array $rows): bool
+{
+    if (!$rows) {
+        return false;
+    }
+    foreach ($rows as $r) {
+        if (($r['kind'] ?? '') !== 'legacy') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// মোট জমা টাকাটা কিস্তিগুলোতে উপর থেকে নিচে বসানো (প্রতিটা নিট প্রাপ্য পর্যন্ত),
+// উদ্বৃত্ত থাকলে শেষ কিস্তিতে। 🔴 যোগফল হুবহু অপরিবর্তিত — তাই আয়ের সংখ্যা নড়ে না।
+function pay_allocate_paid(array $rows, float $paid): array
+{
+    $left = round(max(0.0, $paid), 2);
+    foreach ($rows as $i => $r) {
+        $take = min($left, pay_net($r));
+        $rows[$i]['amount_paid'] = round($take, 2);
+        $left = round($left - $take, 2);
+    }
+    if ($left > 0 && $rows) {
+        $last = array_key_last($rows);
+        $rows[$last]['amount_paid'] = round((float) $rows[$last]['amount_paid'] + $left, 2);
+    }
+    return $rows;
+}
+
+// পুরনো (বা ভুলভাবে বসা) খাতা কোর্স-ব্যাচের **বর্তমান** সেটিংস দেখে নতুন করে সাজানো।
+// আগের সারিগুলো মুছে যায়, কিন্তু **মোট জমা ও টাকা জমার তারিখ থাকে** — শুধু কিস্তিতে ভাগ হয়ে বসে।
+function pay_rebuild_plan(PDO $db, array $reg): int
+{
+    $regId    = (int) $reg['id'];
+    $existing = pay_fetch_many($db, [$regId])[$regId] ?? [];
+    $paid     = pay_paid_total($existing);
+
+    // আগের জমার তারিখ ধরে রাখা — নাহলে pay_save_rows() আজকের তারিখ বসিয়ে দিত
+    $paidAt = '';
+    foreach ($existing as $r) {
+        if ((float) $r['amount_paid'] > 0 && !empty($r['paid_at'])) {
+            $paidAt = (string) $r['paid_at'];
+            break;
+        }
+    }
+
+    $rows = pay_allocate_paid(pay_build_plan($db, $reg), $paid);
+    foreach ($rows as $i => $r) {
+        $rows[$i]['id'] = 0; // সবগুলোই নতুন সারি হিসেবে বসবে
+        if ($paidAt !== '' && (float) $r['amount_paid'] > 0) {
+            $rows[$i]['paid_at'] = $paidAt;
+        }
+    }
+
+    $db->prepare('DELETE FROM registration_payments WHERE registration_id = :id')->execute(['id' => $regId]);
+    return pay_save_rows($db, $regId, $rows);
+}
+
 // খালি (এখনো সেভ না হওয়া) কিস্তির সারি
 function pay_blank_row(int $seq, string $kind, string $label, float $due): array
 {

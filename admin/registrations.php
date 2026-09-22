@@ -227,6 +227,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'quick-group') {
     redirect($returnUrl);
 }
 
+// পুরনো (মাইগ্রেশনে বসানো "পুরনো হিসাব") খাতাকে কোর্সের বর্তমান সেটিংস দেখে
+// কিস্তির ছকে সাজিয়ে দেওয়া — 🔴 মোট জমা অপরিবর্তিত, তাই আয়ের সংখ্যা নড়ে না।
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'pay-rebuild') {
+    $returnUrl = safe_return_url($_POST['return_url'] ?? null, 'registrations.php');
+
+    if (!csrf_verify()) {
+        set_flash('error', 'ফর্ম টোকেন মিলছে না।');
+        redirect($returnUrl);
+    }
+
+    $id = (int) ($_POST['id'] ?? 0);
+    $regStmt = $db->prepare('SELECT * FROM registrations WHERE id = :id');
+    $regStmt->execute(['id' => $id]);
+    $regRow = $regStmt->fetch();
+    if (!$regRow) {
+        set_flash('error', 'রেজিস্ট্রেশনটি পাওয়া যায়নি।');
+        redirect($returnUrl);
+    }
+
+    try {
+        $db->beginTransaction();
+        $before = pay_paid_total(pay_fetch_many($db, [$id])[$id] ?? []);
+        $count  = pay_rebuild_plan($db, $regRow);
+        $rows   = pay_fetch_many($db, [$id])[$id] ?? [];
+        $after  = pay_paid_total($rows);
+
+        // 🔴 নিরাপত্তা-জাল: মোট জমা এক পয়সাও বদলালে পুরোটা বাতিল (আয় ভুল হতে দেওয়া যাবে না)
+        if (round($before, 2) !== round($after, 2)) {
+            $db->rollBack();
+            set_flash('error', 'সাজানো বাতিল করা হলো — মোট জমা মিলছিল না (৳'
+                . number_format($before, 2) . ' → ৳' . number_format($after, 2) . ')।');
+            redirect($returnUrl);
+        }
+
+        $summary = pay_summary($rows);
+        $db->prepare('UPDATE registrations SET due_amount = :due WHERE id = :id')
+            ->execute(['due' => $summary['balance'], 'id' => $id]);
+        sync_income_for_status($db, $regRow, $regRow['status']);
+        $db->commit();
+
+        set_flash('success', $count . ' টি কিস্তিতে সাজানো হলো — জমা ৳' . number_format($after, 2)
+            . ' অপরিবর্তিত।' . ($summary['balance'] > 0 ? ' বাকি ৳' . number_format($summary['balance'], 2) : ' ✅ পুরো পেইড'));
+    } catch (PDOException $ex) {
+        if ($db->inTransaction()) { $db->rollBack(); }
+        set_flash('error', 'খাতা সাজানো যায়নি — ডাটাবেস মাইগ্রেশন চালানো আছে কিনা দেখুন।');
+    }
+    redirect($returnUrl);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'pay-save') {
     $returnUrl = safe_return_url($_POST['return_url'] ?? null, 'registrations.php');
 
@@ -667,6 +716,7 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
     $warn    = $isNew
         ? 'true'
         : "confirmSubmit(this, 'টাকার খাতার হিসাব বদলে সংরক্ষণ করতে চান?', 'পরিবর্তনের নিশ্চিতকরণ')";
+    $isLegacy = pay_is_legacy_only($rows);
     $money   = fn($v) => number_format((float) $v, (fmod((float) $v, 1) == 0.0) ? 0 : 2);
     ?>
     <tr class="reg-pay-row" id="pay-<?= $rid ?>" hidden>
@@ -681,8 +731,20 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                     <h4 class="font-bold text-gray-800 text-sm">💰 টাকার খাতা — <?= e($row['customer_name']) ?></h4>
                     <?php if ($isNew): ?>
                         <span class="text-xs text-indigo-700 font-semibold">কোর্সের সেটিংস দেখে কিস্তিগুলো বসানো হয়েছে — মিলিয়ে নিয়ে সেভ করুন</span>
+                    <?php else: ?>
+                        <?php // পুরনো (মাইগ্রেশনে বসানো) খাতা — কোর্সের সেটিংস দেখে কিস্তিতে ভাগ করে দেওয়া যায় ?>
+                        <button type="button" class="pay-rebuild text-xs font-bold px-3 py-1 rounded-lg <?= $isLegacy ? 'bg-amber-100 text-amber-800' : 'text-gray-500' ?>"
+                                title="কোর্সের রেজিস্ট্রেশন ফি ও মাস দেখে কিস্তিগুলো নতুন করে বসাবে (মোট জমা অপরিবর্তিত থাকবে)">🧩 কিস্তির ছকে সাজান</button>
                     <?php endif; ?>
                 </div>
+
+                <?php if ($isLegacy): ?>
+                    <p class="text-xs bg-amber-50 text-amber-800 rounded-xl px-3 py-2 mb-2">
+                        এটা <strong>পুরনো হিসাব</strong> — আগে অনুমোদন করা আয়ের পরিমাণটা এক সারিতে বসানো আছে।
+                        উপরের <strong>“🧩 কিস্তির ছকে সাজান”</strong> চাপলে কোর্সের রেজিস্ট্রেশন ফি ও মাস অনুযায়ী কিস্তিগুলো বসবে,
+                        আর এই জমা টাকাটা উপর থেকে নিচে ভাগ হয়ে যাবে। <strong>মোট জমা ও আয় বদলাবে না।</strong>
+                    </p>
+                <?php endif; ?>
 
                 <?php foreach ($rows as $idx => $r):
                     $net = pay_net($r);
@@ -748,7 +810,7 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                     </label>
                     <button type="submit" class="bg-indigo-600 text-white font-bold px-5 py-2 rounded-xl text-sm">সংরক্ষণ করুন</button>
                 </div>
-                <p class="text-[11px] text-gray-400 mt-2">এই খাতা এখন শুধু হিসাব রাখার জন্য — আয়-ব্যয় পেজের সংখ্যায় কোনো প্রভাব ফেলে না।</p>
+                <p class="text-[11px] text-gray-400 mt-2">🔴 আয়-ব্যয় পেজের “আয়” এই খাতার <strong>মোট জমা</strong> থেকেই আসে — জমার ঘর বদলালে আয়ও বদলাবে।</p>
             </form>
         </td>
     </tr>
@@ -1388,6 +1450,19 @@ require __DIR__ . '/includes/layout-top.php';
                     var srow = skipBtn.closest('.pay-row');
                     var sf = srow.querySelector('.pay-skip');
                     if (sf) { sf.value = sf.value === '1' ? '0' : '1'; refresh(form); }
+                    return;
+                }
+                // "🧩 কিস্তির ছকে সাজান" — পুরনো এক-সারির খাতা কোর্সের সেটিংস দেখে কিস্তিতে ভাগ করে
+                if (ev.target.closest('.pay-rebuild')) {
+                    showConfirmModal(
+                        'কোর্সের বর্তমান সেটিংস (রেজিস্ট্রেশন ফি ও মাস) দেখে কিস্তিগুলো নতুন করে বসানো হবে। '
+                        + 'এখনকার সারিগুলো মুছে যাবে, তবে মোট জমা টাকা ও আয়ের হিসাব অপরিবর্তিত থাকবে।',
+                        function () {
+                            form.action = 'registrations.php?action=pay-rebuild';
+                            form.submit();
+                        },
+                        'খাতা নতুন করে সাজাবেন?'
+                    );
                     return;
                 }
                 // "সব মাসে একই ছাড়" — প্রথম মাসের ছাড় বাকি সব মাসে কপি (রেজিস্ট্রেশন ফি অছোঁয়া থাকে)
