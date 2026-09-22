@@ -134,12 +134,28 @@ function pay_fetch_many(PDO $db, array $regIds): array
         $stmt = $db->prepare("SELECT * FROM registration_payments WHERE registration_id IN ($in) ORDER BY registration_id, seq, id");
         $stmt->execute($regIds);
         foreach ($stmt->fetchAll() as $row) {
+            // 🔴 SQL মাইগ্রেশনে বাংলা লেখা হয় না (mojibake ঠেকাতে) — তাই legacy সারির লেবেল
+            // এখানে বসে। খালি লেবেলের সারি pay_save_rows() বাদ দিয়ে দিত, তাই এটা জরুরি।
+            if (trim((string) $row['label']) === '') {
+                $row['label'] = $row['kind'] === 'legacy' ? 'পুরনো হিসাব' : 'কিস্তি';
+            }
             $out[(int) $row['registration_id']][] = $row;
         }
     } catch (PDOException $ex) {
         return []; // টেবিল এখনো তৈরি হয়নি (মাইগ্রেশন চালানো হয়নি) — পেজ ভাঙবে না
     }
     return $out;
+}
+
+// খাতায় মোট কত টাকা আসলে হাতে এসেছে — 🔴 ধাপ ২ থেকে **এটাই আয়ের ভিত্তি**
+// (ইউজারের সিদ্ধান্ত ২০২৬-০৯-২২: "যতটুকু হাতে এসেছে" = নগদ-ভিত্তিক আয়, প্রাপ্য নয়)
+function pay_paid_total(array $rows): float
+{
+    $paid = 0.0;
+    foreach ($rows as $row) {
+        $paid += (float) $row['amount_paid'];
+    }
+    return round($paid, 2);
 }
 
 // খাতার সারাংশ — প্রাপ্য / ছাড় / নিট / জমা / বাকি + সার্বিক অবস্থা

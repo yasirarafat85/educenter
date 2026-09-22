@@ -36,8 +36,56 @@ function safe_return_url(?string $url, string $fallback): string
 }
 
 // স্ট্যাটাস অনুযায়ী আয় অটোমেটিক যোগ/বাদ দেওয়া — status 'confirmed'/'shipped'/'delivered' হলে আয়, নাহলে আয় বাদ
+// 🔴🔴 খাতা-ভিত্তিক আয় (ধাপ ২, ২০২৬-০৯-২২) — আয় = **যতটুকু টাকা আসলে হাতে এসেছে**
+// (ইউজারের স্পষ্ট সিদ্ধান্ত: নগদ-ভিত্তিক, প্রাপ্য/accrual নয়)। স্ট্যাটাসও গেট হিসেবে থাকে —
+// বাতিল/পেন্ডিং হলে আয় বইয়ে থাকে না, টাকা জমা থাকলেও।
+// registration-প্রতি **একটাই** income রো রাখা হয়; পরিমাণ বদলালে সেটাই আপডেট হয় (তারিখ অক্ষত)।
+function pay_write_income(PDO $db, array $reg, string $newStatus, float $paid): void
+{
+    $id = (int) $reg['id'];
+    $amount = in_array($newStatus, INCOME_STATUSES, true) ? round(max(0.0, $paid), 2) : 0.0;
+
+    $cur = $db->prepare('SELECT id FROM income WHERE registration_id = :id ORDER BY id LIMIT 1');
+    $cur->execute(['id' => $id]);
+    $incomeId = (int) ($cur->fetchColumn() ?: 0);
+
+    if ($amount <= 0) {
+        // টাকা নেই / স্ট্যাটাস আয়-যোগ্য না → আয়ের রো সরে যায়।
+        // ⚠️ income_amount ইচ্ছাকৃতভাবে মোছা হয় না ("সর্বশেষ জানা পরিমাণ", CLAUDE.md নিয়ম)।
+        $db->prepare('DELETE FROM income WHERE registration_id = :id')->execute(['id' => $id]);
+        $db->prepare('UPDATE registrations SET income_approved = 0, approved_at = NULL WHERE id = :id')
+            ->execute(['id' => $id]);
+        return;
+    }
+
+    if ($incomeId > 0) {
+        // তারিখ অপরিবর্তিত রাখা হয় — নাহলে প্রতিবার সেভে আয় আজকের তারিখে সরে যেত
+        $db->prepare('UPDATE income SET amount = :amt WHERE id = :iid')
+            ->execute(['amt' => $amount, 'iid' => $incomeId]);
+    } else {
+        $db->prepare(
+            'INSERT INTO income (category_id, registration_id, amount, description, income_date) VALUES (:cat, :reg, :amt, :desc, CURDATE())'
+        )->execute([
+            'cat'  => find_or_create_finance_category('income', registration_type_to_category_name($reg['type'])),
+            'reg'  => $id,
+            'amt'  => $amount,
+            'desc' => $reg['item_title'] . ' - ' . $reg['customer_name'],
+        ]);
+    }
+    $db->prepare('UPDATE registrations SET income_approved = 1, income_amount = :amt, approved_at = NOW() WHERE id = :id')
+        ->execute(['amt' => $amount, 'id' => $id]);
+}
+
 function sync_income_for_status(PDO $db, array $reg, string $newStatus): void
 {
+    // 🔴 খাতা থাকলে আয় খাতা থেকেই হয় (ধাপ ২)। খাতা না থাকলে নিচের পুরনো নিয়ম চলে —
+    // তাই যেসব রেজিস্ট্রেশনে এখনো খাতা তৈরি হয়নি সেগুলোর হিসাব আগের মতোই অক্ষত থাকে।
+    $ledger = pay_fetch_many($db, [(int) $reg['id']])[(int) $reg['id']] ?? [];
+    if ($ledger) {
+        pay_write_income($db, $reg, $newStatus, pay_paid_total($ledger));
+        return;
+    }
+
     $shouldHaveIncome = in_array($newStatus, INCOME_STATUSES, true);
 
     if ($shouldHaveIncome && !$reg['income_approved']) {
@@ -201,6 +249,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'pay-save') {
         $summary = pay_summary(pay_fetch_many($db, [$id])[$id] ?? []);
         $db->prepare('UPDATE registrations SET due_amount = :due, admin_note = :note WHERE id = :id')
             ->execute(['due' => $summary['balance'], 'note' => $note !== '' ? $note : null, 'id' => $id]);
+
+        // 🔴 খাতা বদলেছে → আয়ও সাথে সাথে মিলিয়ে দেওয়া হয় (আয় = মোট জমা)
+        $regStmt = $db->prepare('SELECT * FROM registrations WHERE id = :id');
+        $regStmt->execute(['id' => $id]);
+        if ($regRow = $regStmt->fetch()) {
+            sync_income_for_status($db, $regRow, $regRow['status']);
+        }
 
         $db->commit();
         set_flash('success', $saved . ' টি কিস্তি সংরক্ষণ করা হয়েছে।'
