@@ -2,6 +2,7 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/archive.php';
 require_once __DIR__ . '/includes/courier-notes.php';
+require_once __DIR__ . '/includes/payments.php';
 require_once __DIR__ . '/../includes/bd-districts.php';
 admin_require_login();
 
@@ -154,7 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'update-income-amount')
 // ─────────────────────────────────────────────────────────────
 // তালিকা থেকেই দ্রুত সম্পাদনা (ভেতরে না ঢুকে) — কনফার্ম করার সময় যা যা লাগে:
 //   quick-group  : ফেসবুক/মেসেঞ্জার গ্রুপে যোগ হয়েছে কিনা টিক (course-parcel.php-এর একই কলাম)
-//   quick-fields : বকেয়া টাকা + অ্যাডমিন নোট
+//   pay-save     : টাকার খাতা (কিস্তি/ছাড়/জমা) + অ্যাডমিন নোট
 // 🔴 দুটোর কোনোটাই আয়ের হিসাব (income/income_amount/income_approved) ছোঁয় না — বকেয়া নিছক স্মরণ/ট্র্যাকিং।
 // RBAC: action-মার্কার delete-তালিকায় নেই বলে কেন্দ্রীয় গার্ড (auth.php) এতে 'edit' ক্ষমতা চায় — ঠিক আছে।
 // ─────────────────────────────────────────────────────────────
@@ -178,7 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'quick-group') {
     redirect($returnUrl);
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'quick-fields') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'pay-save') {
     $returnUrl = safe_return_url($_POST['return_url'] ?? null, 'registrations.php');
 
     if (!csrf_verify()) {
@@ -187,30 +188,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'quick-fields') {
     }
 
     $id = (int) ($_POST['id'] ?? 0);
-    $due = (float) str_replace(',', '', trim((string) ($_POST['due_amount'] ?? '0')));
-    if ($due < 0) {
-        $due = 0;
-    }
     $note = trim((string) ($_POST['admin_note'] ?? ''));
     if (function_exists('mb_substr')) {
-        $note = mb_substr($note, 0, 500);   // কলাম VARCHAR(500) — কেটে নেওয়া হয়, সেভ যেন কখনো ব্যর্থ না হয়
+        $note = mb_substr($note, 0, 500);
     }
 
     try {
-        $db->prepare('UPDATE registrations SET due_amount = :due, admin_note = :note WHERE id = :id')
-            ->execute(['due' => $due, 'note' => $note !== '' ? $note : null, 'id' => $id]);
-    } catch (PDOException $ex) {
-        // কলাম দুটো নতুন — মাইগ্রেশন (database/migrate-reg-quick-fields.sql) না চালালে এখানে আটকাবে।
-        // সাদা পেজ না দেখিয়ে অ্যাডমিনকে ঠিক কী করতে হবে বলে দেওয়া হয় (ইউজারের কোডিং জ্ঞান নেই)।
-        set_flash('error', 'বকেয়া/নোট সংরক্ষণ করা যায়নি — ডাটাবেসে "due_amount"/"admin_note" কলাম এখনো যোগ হয়নি। '
-            . 'phpMyAdmin-এ database/migrate-reg-quick-fields.sql ফাইলের SQL একবার চালিয়ে নিন।');
-        redirect($returnUrl);
-    }
+        $db->beginTransaction();
+        $saved = pay_save_rows($db, $id, is_array($_POST['p'] ?? null) ? $_POST['p'] : []);
 
-    set_flash('success', 'বকেয়া ও নোট সংরক্ষণ করা হয়েছে।');
+        // বাকি টাকা registrations.due_amount-এ ডিনরমালাইজড রাখা (খাতাই আসল উৎস, এটা শুধু দ্রুত রেফারেন্স)
+        $summary = pay_summary(pay_fetch_many($db, [$id])[$id] ?? []);
+        $db->prepare('UPDATE registrations SET due_amount = :due, admin_note = :note WHERE id = :id')
+            ->execute(['due' => $summary['balance'], 'note' => $note !== '' ? $note : null, 'id' => $id]);
+
+        $db->commit();
+        set_flash('success', $saved . ' টি কিস্তি সংরক্ষণ করা হয়েছে।'
+            . ($summary['balance'] > 0 ? ' বাকি ৳' . number_format($summary['balance'], 2) : ' — পুরো পেইড ✅'));
+    } catch (PDOException $ex) {
+        if ($db->inTransaction()) { $db->rollBack(); }
+        // টেবিল/কলাম এখনো তৈরি হয়নি — সাদা পেজ না দেখিয়ে কী করতে হবে বলে দেওয়া হয়
+        set_flash('error', 'টাকার খাতা সংরক্ষণ করা যায়নি — ডাটাবেসে "registration_payments" টেবিলটি এখনো তৈরি হয়নি। '
+            . 'phpMyAdmin-এ database/migrate-payment-ledger.sql ফাইলের SQL একবার চালিয়ে নিন।');
+    }
     redirect($returnUrl);
 }
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'update-details') {
     $id = (int) ($_POST['id'] ?? 0);
     $editUrl = 'registrations.php?action=edit&id=' . $id;
@@ -470,6 +472,7 @@ if ($action === 'list') {
     $stmt = $db->prepare($sql);
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
+    $ledgerByReg = pay_fetch_many($db, array_column($rows, 'id')); // প্রতি রো-তে আলাদা কোয়েরি না করে একবারে
 
     // ফিল্টার ড্রপডাউনে দেখানোর জন্য আইটেমের নামের তালিকা (টাইপ ফিল্টার করা থাকলে সেই টাইপেই সীমাবদ্ধ)
     $itemsSql = 'SELECT DISTINCT item_title FROM registrations';
@@ -583,30 +586,114 @@ function reg_group_cell(array $row, string $currentListUrl): void
     echo '</div>';
 }
 
-// ── বকেয়া টাকা + অ্যাডমিন নোট — তালিকাতেই লেখা/সম্পাদনা (ভেতরে ঢোকা লাগে না)।
-// 🔴 বকেয়া নিছক স্মরণ/ট্র্যাকিং — আয়ের হিসাবের (income/income_amount) সাথে কোনো সম্পর্ক নেই।
-// আগে থেকে কিছু লেখা থাকলে সেভে ওয়ার্নিং (প্রথমবার-ছাড়া-পরে নিয়ম)।
-function reg_quick_cell(array $row, string $currentListUrl): void
+// ── 💰 টাকার অবস্থা (তালিকার সরু কলাম) — ক্লিকে নিচের খাতা-প্যানেল খোলে/বন্ধ হয়।
+// কলাম বাড়ানোর বদলে প্যানেল নিচে খোলার কারণ: কোর্স-লেআউটে এমনিতেই ১৬ কলাম, ইনপুট-ভরা
+// চওড়া ঘর যোগ করলে ডেস্কটপেও টেবিল কেটে যাচ্ছিল (২০২৬-০৯-২২, ইউজারের স্ক্রিনশট)।
+function reg_pay_cell(array $row, array $summary): void
 {
-    $due = (float) ($row['due_amount'] ?? 0);
-    $note = (string) ($row['admin_note'] ?? '');
-    $hasExisting = $due > 0 || $note !== '';
-    $onsubmit = $hasExisting
-        ? "return confirmSubmit(this, 'আগে লেখা বকেয়া/নোট পরিবর্তন করে সংরক্ষণ করতে চান?', 'পরিবর্তনের নিশ্চিতকরণ')"
-        : 'return true';
-    // 500.00 → "500" (ইনপুটে গোল সংখ্যা পরিষ্কার দেখাতে), 0 হলে খালি
-    $dueValue = $due > 0 ? rtrim(rtrim(number_format($due, 2, '.', ''), '0'), '.') : '';
     ?>
-    <form method="post" action="registrations.php?action=quick-fields" class="reg-quick flex flex-wrap items-center gap-1.5" onsubmit="<?= e($onsubmit) ?>;">
-        <?= csrf_field() ?>
-        <input type="hidden" name="id" value="<?= $row['id'] ?>">
-        <input type="hidden" name="return_url" value="<?= e($currentListUrl) ?>">
-        <input type="number" name="due_amount" step="any" min="0" value="<?= e($dueValue) ?>" placeholder="বকেয়া ৳" title="এখনো কত টাকা বাকি"
-               class="border rounded-lg px-2 py-1 text-xs <?= $due > 0 ? 'border-red-300 text-red-700 font-semibold' : '' ?>" style="width:5.5rem">
-        <input type="text" name="admin_note" value="<?= e($note) ?>" maxlength="500" placeholder="নোট" title="অ্যাডমিন নোট (কুরিয়ার নোট থেকে আলাদা)"
-               class="border rounded-lg px-2 py-1 text-xs" style="flex:1;min-width:6.5rem">
-        <button type="submit" class="reg-quick-save px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500" title="সংরক্ষণ করুন">সেভ</button>
-    </form>
+    <button type="button" class="text-left" onclick="togglePayPanel(<?= (int) $row['id'] ?>)" title="টাকার খাতা খুলুন/বন্ধ করুন">
+        <?= pay_status_chip($summary) ?>
+        <div class="text-[11px] text-indigo-600 font-semibold mt-1">খাতা ▾</div>
+    </button>
+    <?php
+}
+
+// ── খাতার প্যানেল — সারির ঠিক নিচে পুরো চওড়া জুড়ে (ডানে স্ক্রল করা লাগে না)।
+// খাতা না থাকলে ব্যাচের কনফিগ থেকে **প্রস্তাবিত** কিস্তি দেখায় (DB-তে তখনো কিছু লেখা হয় না —
+// GET-এ কখনো লেখা নয়); সেভ চাপলে তবেই সারিগুলো তৈরি হয়।
+function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, int $colspan): void
+{
+    $rid     = (int) $row['id'];
+    $isNew   = !$ledger;
+    $rows    = $isNew ? pay_build_plan($db, $row) : $ledger;
+    $summary = pay_summary($rows);
+    $note    = (string) ($row['admin_note'] ?? '');
+    $warn    = $isNew
+        ? 'true'
+        : "confirmSubmit(this, 'টাকার খাতার হিসাব বদলে সংরক্ষণ করতে চান?', 'পরিবর্তনের নিশ্চিতকরণ')";
+    $money   = fn($v) => number_format((float) $v, (fmod((float) $v, 1) == 0.0) ? 0 : 2);
+    ?>
+    <tr class="reg-pay-row" id="pay-<?= $rid ?>" hidden>
+        <td colspan="<?= $colspan ?>" style="text-align:left;padding:0">
+            <form method="post" action="registrations.php?action=pay-save" class="pay-form p-4" data-rid="<?= $rid ?>"
+                  style="background:#EEF2FF;border-top:2px solid #C7D2FE" onsubmit="return <?= $warn ?>;">
+                <?= csrf_field() ?>
+                <input type="hidden" name="id" value="<?= $rid ?>">
+                <input type="hidden" name="return_url" value="<?= e($returnUrl) ?>">
+
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <h4 class="font-bold text-gray-800 text-sm">💰 টাকার খাতা — <?= e($row['customer_name']) ?></h4>
+                    <?php if ($isNew): ?>
+                        <span class="text-xs text-indigo-700 font-semibold">কোর্সের সেটিংস দেখে কিস্তিগুলো বসানো হয়েছে — মিলিয়ে নিয়ে সেভ করুন</span>
+                    <?php endif; ?>
+                </div>
+
+                <?php foreach ($rows as $idx => $r):
+                    $net = pay_net($r);
+                    $st  = pay_row_status($r);
+                    ?>
+                    <div class="pay-row bg-white rounded-xl p-3 mb-2">
+                        <input type="hidden" name="p[<?= $idx ?>][id]" value="<?= (int) $r['id'] ?>">
+                        <input type="hidden" name="p[<?= $idx ?>][seq]" value="<?= (int) $r['seq'] ?>">
+                        <input type="hidden" name="p[<?= $idx ?>][kind]" value="<?= e($r['kind']) ?>">
+                        <input type="hidden" name="p[<?= $idx ?>][label]" value="<?= e($r['label']) ?>">
+                        <div class="flex flex-wrap items-center" style="column-gap:.75rem;row-gap:.5rem">
+                            <span class="font-bold text-gray-800 text-sm" style="min-width:7.5rem"><?= e($r['label']) ?></span>
+
+                            <label class="text-xs text-gray-500">প্রাপ্য
+                                <input type="number" step="any" min="0" name="p[<?= $idx ?>][amount_due]" value="<?= e((string) round((float) $r['amount_due'], 2)) ?>"
+                                       class="pay-due block border rounded-lg px-2 py-1 text-sm text-gray-800" style="width:6rem">
+                            </label>
+
+                            <label class="text-xs text-gray-500">ছাড়
+                                <span class="flex gap-1">
+                                    <input type="number" step="any" min="0" name="p[<?= $idx ?>][discount_value]" value="<?= e((string) round((float) $r['discount_value'], 2)) ?>"
+                                           class="pay-disc border rounded-lg px-2 py-1 text-sm" style="width:4.5rem">
+                                    <select name="p[<?= $idx ?>][discount_type]" class="pay-disc-type border rounded-lg px-1 py-1 text-sm">
+                                        <option value="fixed" <?= $r['discount_type'] !== 'percent' ? 'selected' : '' ?>>৳</option>
+                                        <option value="percent" <?= $r['discount_type'] === 'percent' ? 'selected' : '' ?>>%</option>
+                                    </select>
+                                </span>
+                            </label>
+
+                            <span class="text-xs text-gray-500">নিট<br><span class="pay-net font-bold text-gray-800 text-sm">৳<?= $money($net) ?></span></span>
+
+                            <label class="text-xs text-gray-500">জমা
+                                <input type="number" step="any" min="0" name="p[<?= $idx ?>][amount_paid]" value="<?= e((string) round((float) $r['amount_paid'], 2)) ?>"
+                                       class="pay-paid block border rounded-lg px-2 py-1 text-sm font-semibold" style="width:6rem">
+                            </label>
+
+                            <span class="pay-badge inline-block px-2 py-1 rounded-lg text-xs font-semibold <?= $st === 'paid' ? 'bg-green-100 text-green-800' : ($st === 'partial' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500') ?>">
+                                <?= $st === 'paid' ? '✅ পেইড' : ($st === 'partial' ? '◐ আংশিক' : '○ বাকি') ?>
+                            </span>
+
+                            <button type="button" class="pay-fill text-xs font-semibold text-indigo-600" title="নিট পরিমাণটা জমায় বসিয়ে দিন">পুরোটা জমা</button>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+
+                <div class="flex flex-wrap items-center gap-3 bg-white rounded-xl p-3 mb-3 text-sm">
+                    <span class="text-gray-500">মোট প্রাপ্য <strong class="pay-t-due text-gray-800">৳<?= $money($summary['due']) ?></strong></span>
+                    <span class="text-gray-500">ছাড় <strong class="pay-t-disc" style="color:#7e22ce">৳<?= $money($summary['discount']) ?></strong></span>
+                    <span class="text-gray-500">নিট <strong class="pay-t-net text-gray-800">৳<?= $money($summary['net']) ?></strong></span>
+                    <span class="text-gray-500">জমা <strong class="pay-t-paid text-green-700">৳<?= $money($summary['paid']) ?></strong></span>
+                    <span class="pay-t-bal font-bold <?= $summary['balance'] > 0 ? 'text-red-600' : 'text-green-700' ?>">
+                        <?= $summary['balance'] > 0 ? 'বাকি ৳' . $money($summary['balance']) : '✅ পুরো পেইড' ?>
+                    </span>
+                    <button type="button" class="pay-same-disc text-xs font-semibold text-indigo-600 ml-auto" title="প্রথম মাসের ছাড়টা বাকি সব মাসে বসিয়ে দিন">সব মাসে একই ছাড়</button>
+                </div>
+
+                <div class="flex flex-wrap items-end gap-2">
+                    <label class="text-xs text-gray-500 flex-1" style="min-width:12rem">নোট (কুরিয়ার নোট থেকে আলাদা)
+                        <input type="text" name="admin_note" value="<?= e($note) ?>" maxlength="500" class="block w-full border rounded-lg px-3 py-2 text-sm">
+                    </label>
+                    <button type="submit" class="bg-indigo-600 text-white font-bold px-5 py-2 rounded-xl text-sm">সংরক্ষণ করুন</button>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-2">এই খাতা এখন শুধু হিসাব রাখার জন্য — আয়-ব্যয় পেজের সংখ্যায় কোনো প্রভাব ফেলে না।</p>
+            </form>
+        </td>
+    </tr>
     <?php
 }
 
@@ -690,7 +777,7 @@ require __DIR__ . '/includes/layout-top.php';
                     <th class="py-3 px-4">ঠিকানা</th>
                     <th class="py-3 px-4">স্ট্যাটাস</th>
                     <th class="py-3 px-4">গ্রুপে যোগ</th>
-                    <th class="py-3 px-4">বকেয়া / নোট</th>
+                    <th class="py-3 px-4">টাকা</th>
                     <th class="py-3 px-4">আয়</th>
                     <th class="py-3 px-4">তারিখ</th>
                     <th class="py-3 px-4">অ্যাকশন</th>
@@ -714,11 +801,12 @@ require __DIR__ . '/includes/layout-top.php';
                     <td class="py-2.5 px-4 max-w-[200px] truncate" title="<?= e($row['address'] ?? '') ?>"><?= e($row['address'] ?: '-') ?></td>
                     <td class="py-2.5 px-4"><?php reg_status_cell($row, $statusLabels, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_group_cell($row, $currentListUrl); ?></td>
-                    <td class="py-2.5 px-4" style="min-width:16rem"><?php reg_quick_cell($row, $currentListUrl); ?></td>
+                    <td class="py-2.5 px-4"><?php reg_pay_cell($row, pay_summary($ledgerByReg[$row['id']] ?? [])); ?></td>
                     <td class="py-2.5 px-4"><?php reg_income_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?= e($row['created_at']) ?></td>
                     <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
                 </tr>
+                <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 16); ?>
             <?php endforeach; ?>
             </tbody>
             <?php elseif ($filterType === 'worksheet' || $filterType === 'product'): ?>
@@ -732,7 +820,7 @@ require __DIR__ . '/includes/layout-top.php';
                     <th class="py-3 px-4">আইটেম</th>
                     <th class="py-3 px-4">পরিমাণ</th>
                     <th class="py-3 px-4">স্ট্যাটাস</th>
-                    <th class="py-3 px-4">বকেয়া / নোট</th>
+                    <th class="py-3 px-4">টাকা</th>
                     <th class="py-3 px-4">আয়</th>
                     <th class="py-3 px-4">তারিখ</th>
                     <th class="py-3 px-4">অ্যাকশন</th>
@@ -751,11 +839,12 @@ require __DIR__ . '/includes/layout-top.php';
                     <td class="py-2.5 px-4"><?= e($row['item_title']) ?></td>
                     <td class="py-2.5 px-4"><?= (int) $row['quantity'] ?></td>
                     <td class="py-2.5 px-4"><?php reg_status_cell($row, $statusLabels, $currentListUrl); ?></td>
-                    <td class="py-2.5 px-4" style="min-width:16rem"><?php reg_quick_cell($row, $currentListUrl); ?></td>
+                    <td class="py-2.5 px-4"><?php reg_pay_cell($row, pay_summary($ledgerByReg[$row['id']] ?? [])); ?></td>
                     <td class="py-2.5 px-4"><?php reg_income_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?= e($row['created_at']) ?></td>
                     <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
                 </tr>
+                <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 11); ?>
             <?php endforeach; ?>
             </tbody>
             <?php else: ?>
@@ -770,7 +859,7 @@ require __DIR__ . '/includes/layout-top.php';
                     <th class="py-3 px-4">ঠিকানা</th>
                     <th class="py-3 px-4">স্ট্যাটাস</th>
                     <th class="py-3 px-4">গ্রুপে যোগ</th>
-                    <th class="py-3 px-4">বকেয়া / নোট</th>
+                    <th class="py-3 px-4">টাকা</th>
                     <th class="py-3 px-4">আয়</th>
                     <th class="py-3 px-4">তারিখ</th>
                     <th class="py-3 px-4">অ্যাকশন</th>
@@ -790,11 +879,12 @@ require __DIR__ . '/includes/layout-top.php';
                     <td class="py-2.5 px-4 max-w-[200px] truncate" title="<?= e($row['address'] ?? '') ?>"><?= e($row['address'] ?: '-') ?></td>
                     <td class="py-2.5 px-4"><?php reg_status_cell($row, $statusLabels, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_group_cell($row, $currentListUrl); ?></td>
-                    <td class="py-2.5 px-4" style="min-width:16rem"><?php reg_quick_cell($row, $currentListUrl); ?></td>
+                    <td class="py-2.5 px-4"><?php reg_pay_cell($row, pay_summary($ledgerByReg[$row['id']] ?? [])); ?></td>
                     <td class="py-2.5 px-4"><?php reg_income_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?= e($row['created_at']) ?></td>
                     <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
                 </tr>
+                <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 12); ?>
             <?php endforeach; ?>
             </tbody>
             <?php endif; ?>
@@ -895,9 +985,12 @@ require __DIR__ . '/includes/layout-top.php';
                 </div>
             <?php endif; ?>
             <div>
-                <h4 class="text-sm font-bold text-gray-700 mb-2">বকেয়া টাকা ও নোট</h4>
-                <?php reg_quick_cell($viewRow, $viewUrlSelf); ?>
-                <p class="text-xs text-gray-400 mt-1.5">বকেয়া শুধু মনে রাখার জন্য — আয়ের হিসাবে কোনো প্রভাব ফেলে না।</p>
+                <h4 class="text-sm font-bold text-gray-700 mb-2">টাকার খাতা</h4>
+                <?php // তালিকার সাথে হুবহু একই প্যানেল (শেয়ার্ড ফাংশন) — একটা লুকানো টেবিলে মুড়ে, যাতে <tr> বৈধ থাকে ?>
+                <table class="w-full"><tbody>
+                    <?php reg_pay_panel($db, $viewRow, pay_fetch_many($db, [(int) $viewRow['id']])[(int) $viewRow['id']] ?? [], $viewUrlSelf, 1); ?>
+                </tbody></table>
+                <script>document.getElementById('pay-<?= (int) $viewRow['id'] ?>').hidden = false;</script>
             </div>
         </div>
 
@@ -1163,25 +1256,83 @@ require __DIR__ . '/includes/layout-top.php';
         return true;
     }
 
-    // তালিকার ইনলাইন বকেয়া/নোট ফর্ম — কিছু বদলালে "সেভ" বাটন রঙিন হয়ে অসংরক্ষিত পরিবর্তন বোঝায়
-    // (ওয়ার্নিং মডালটা ফর্মের onsubmit-এ, PHP থেকে — আগে থেকে লেখা থাকলেই দেখায়)
+    // ── টাকার খাতা: প্যানেল টগল + লাইভ হিসাব (সার্ভারেও একই হিসাব হয়, এটা শুধু চোখের জন্য)
+    function togglePayPanel(id) {
+        var el = document.getElementById('pay-' + id);
+        if (el) { el.hidden = !el.hidden; }
+    }
+
     (function () {
-        document.querySelectorAll('form.reg-quick').forEach(function (form) {
-            var saveBtn = form.querySelector('.reg-quick-save');
-            if (!saveBtn) { return; }
-            var initial = {};
-            form.querySelectorAll('input[name="due_amount"], input[name="admin_note"]').forEach(function (inp) {
-                initial[inp.name] = inp.value;
+        var money = function (v) { return '৳' + (Math.round(v * 100) / 100).toLocaleString('en-US'); };
+        var num = function (el) { var v = parseFloat(el && el.value); return isNaN(v) || v < 0 ? 0 : v; };
+
+        // একটা কিস্তির ছাড়/নিট/অবস্থা
+        function rowCalc(row) {
+            var due = num(row.querySelector('.pay-due'));
+            var dv = num(row.querySelector('.pay-disc'));
+            var dt = row.querySelector('.pay-disc-type');
+            var disc = dv <= 0 || due <= 0 ? 0 : (dt && dt.value === 'percent' ? due * Math.min(100, dv) / 100 : dv);
+            disc = Math.max(0, Math.min(due, disc));
+            var net = Math.max(0, due - disc);
+            var paid = num(row.querySelector('.pay-paid'));
+            return { due: due, disc: disc, net: net, paid: paid };
+        }
+
+        function refresh(form) {
+            var tDue = 0, tDisc = 0, tNet = 0, tPaid = 0;
+            form.querySelectorAll('.pay-row').forEach(function (row) {
+                var c = rowCalc(row);
+                tDue += c.due; tDisc += c.disc; tNet += c.net; tPaid += c.paid;
+                var netEl = row.querySelector('.pay-net');
+                if (netEl) { netEl.textContent = money(c.net); }
+                var b = row.querySelector('.pay-badge');
+                if (b) {
+                    var paidFull = c.paid >= c.net;
+                    b.textContent = paidFull ? '✅ পেইড' : (c.paid > 0 ? '◐ আংশিক' : '○ বাকি');
+                    b.className = 'pay-badge inline-block px-2 py-1 rounded-lg text-xs font-semibold '
+                        + (paidFull ? 'bg-green-100 text-green-800' : (c.paid > 0 ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500'));
+                }
             });
-            function refresh() {
-                var dirty = Array.prototype.some.call(
-                    form.querySelectorAll('input[name="due_amount"], input[name="admin_note"]'),
-                    function (inp) { return inp.value !== initial[inp.name]; }
-                );
-                saveBtn.className = 'reg-quick-save px-2.5 py-1 rounded-lg text-xs font-semibold '
-                    + (dirty ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500');
+            var bal = Math.max(0, tNet - tPaid);
+            var set = function (sel, txt) { var el = form.querySelector(sel); if (el) { el.textContent = txt; } };
+            set('.pay-t-due', money(tDue)); set('.pay-t-disc', money(tDisc));
+            set('.pay-t-net', money(tNet)); set('.pay-t-paid', money(tPaid));
+            var balEl = form.querySelector('.pay-t-bal');
+            if (balEl) {
+                balEl.textContent = bal > 0 ? ('বাকি ' + money(bal)) : '✅ পুরো পেইড';
+                balEl.className = 'pay-t-bal font-bold ' + (bal > 0 ? 'text-red-600' : 'text-green-700');
             }
-            form.addEventListener('input', refresh);
+        }
+
+        document.querySelectorAll('form.pay-form').forEach(function (form) {
+            refresh(form);
+            form.addEventListener('input', function () { refresh(form); });
+            form.addEventListener('change', function () { refresh(form); });
+
+            form.addEventListener('click', function (ev) {
+                // "পুরোটা জমা" — ঐ কিস্তির নিট পরিমাণটা জমার ঘরে বসায়
+                var fill = ev.target.closest('.pay-fill');
+                if (fill) {
+                    var row = fill.closest('.pay-row');
+                    var paidEl = row.querySelector('.pay-paid');
+                    if (paidEl) { paidEl.value = rowCalc(row).net; refresh(form); }
+                    return;
+                }
+                // "সব মাসে একই ছাড়" — প্রথম মাসের ছাড় বাকি সব মাসে কপি (রেজিস্ট্রেশন ফি অছোঁয়া থাকে)
+                if (ev.target.closest('.pay-same-disc')) {
+                    var monthly = Array.prototype.filter.call(form.querySelectorAll('.pay-row'), function (r) {
+                        return (r.querySelector('input[name*="[kind]"]') || {}).value === 'monthly';
+                    });
+                    if (monthly.length < 2) { return; }
+                    var srcV = monthly[0].querySelector('.pay-disc').value;
+                    var srcT = monthly[0].querySelector('.pay-disc-type').value;
+                    monthly.slice(1).forEach(function (r) {
+                        r.querySelector('.pay-disc').value = srcV;
+                        r.querySelector('.pay-disc-type').value = srcT;
+                    });
+                    refresh(form);
+                }
+            });
         });
     })();
 </script>

@@ -27,6 +27,7 @@ function archive_children_map(): array
         // নাহলে batch_id-যুক্ত শিপমেন্ট দুইবার সংগ্রহ হয়ে restore এ duplicate id crash করত।
         'registrations'  => [
             ['table' => 'income', 'fk' => 'registration_id'],
+            ['table' => 'registration_payments', 'fk' => 'registration_id'],
             ['table' => 'registration_courier_notes', 'fk' => 'registration_id'],
             ['table' => 'courier_batches', 'fk' => 'registration_id'],
             ['table' => 'courier_shipments', 'fk' => 'registration_id'],

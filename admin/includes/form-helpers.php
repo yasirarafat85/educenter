@@ -69,6 +69,15 @@ function render_field_input(string $key, array $f, $value, array $suggestions = 
         case 'textarea':
             return $label . '<textarea name="' . e($key) . '" rows="4" class="w-full border rounded-xl px-4 py-2.5">' . e($value) . '</textarea>';
 
+        // ড্রপডাউন — 'options' => [value => label]। (আগে এই case ছিল না বলে 'select' মার্ক করা
+        // ফিল্ডও নীরবে সাধারণ টেক্সট বক্স হয়ে যেত, যেমন courier_note_types-এর রঙ।)
+        case 'select':
+            $opts = '';
+            foreach (($f['options'] ?? []) as $optVal => $optLabel) {
+                $opts .= '<option value="' . e((string) $optVal) . '"' . ((string) $value === (string) $optVal ? ' selected' : '') . '>' . e((string) $optLabel) . '</option>';
+            }
+            return $label . '<select name="' . e($key) . '" class="w-full border rounded-xl px-4 py-2.5">' . $opts . '</select>';
+
         case 'number':
             return $label . '<input type="number" name="' . e($key) . '" value="' . e((string) $value) . '" class="w-full border rounded-xl px-4 py-2.5">';
 

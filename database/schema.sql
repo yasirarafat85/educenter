@@ -133,6 +133,7 @@ CREATE TABLE course_batches (
     secondary_fee_label VARCHAR(100) NOT NULL DEFAULT '', -- দ্বিতীয় ফি'র নাম (যেমন উপকরণ/রেজিস্ট্রেশন ফি) — ডিসপ্লে-only
     secondary_fee VARCHAR(50) NOT NULL DEFAULT '',
     payment_schedule TEXT, -- পেমেন্ট সময়সূচি (কখন কত দিতে হবে) — রেজিস্ট্রেশন সফল কার্ডে দেখায়, ডিসপ্লে-only
+    fee_mode VARCHAR(20) NOT NULL DEFAULT '', -- ফি'র গঠন (পেমেন্ট খাতার কিস্তি অটো তৈরির ভিত্তি): reg_monthly / monthly / onetime; খালি = কোড নিজে আন্দাজ করে (pay_guess_fee_mode)
     duration VARCHAR(100),
     instructor VARCHAR(100),
     description TEXT,
@@ -526,6 +527,33 @@ CREATE TABLE visitor_logs (
     user_agent VARCHAR(255),
     visited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_visited_at (visited_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- registration_payments : পেমেন্ট খাতা — এক রেজিস্ট্রেশনে একাধিক কিস্তি (রেজিস্ট্রেশন ফি +
+-- প্রতি মাসের বেতন), প্রতিটার নিজের প্রাপ্য/ছাড়/জমা। কিস্তির তালিকা ব্যাচের fee_mode +
+-- price + secondary_fee + total_parcels দেখে অটো তৈরি হয় (admin/includes/payments.php)।
+-- 🔴 ধাপ ১-এ আয়ের হিসাব (income) ছোঁয় না — শুধু ট্র্যাকিং। দ্রষ্টব্য migrate-payment-ledger.sql
+-- ------------------------------------------------------------
+CREATE TABLE registration_payments (
+    id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    registration_id INT UNSIGNED NOT NULL,
+    seq             INT          NOT NULL DEFAULT 0,          -- ক্রম (১, ২, ৩...)
+    kind            VARCHAR(20)  NOT NULL DEFAULT 'monthly',  -- registration / monthly / onetime / other / legacy
+    label           VARCHAR(100) NOT NULL DEFAULT '',         -- "রেজিস্ট্রেশন ফি" / "১ম মাস"
+    amount_due      DECIMAL(10,2) NOT NULL DEFAULT 0,         -- প্রাপ্য (স্ন্যাপশট — ব্যাচের দাম পরে বদলালেও অক্ষত)
+    discount_type   VARCHAR(10)  NOT NULL DEFAULT 'fixed',    -- fixed (৳) / percent (%)
+    discount_value  DECIMAL(10,2) NOT NULL DEFAULT 0,         -- অ্যাডমিন যা টাইপ করেছেন
+    discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0,         -- 🔴 সার্ভারে হিসাব করা ছাড় (টাকায় জমাট)
+    amount_paid     DECIMAL(10,2) NOT NULL DEFAULT 0,         -- জমা
+    paid_at         DATE         DEFAULT NULL,
+    method          VARCHAR(30)  NOT NULL DEFAULT '',
+    note            VARCHAR(255) DEFAULT NULL,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE,
+    INDEX idx_rp_reg (registration_id),
+    INDEX idx_rp_seq (registration_id, seq)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- আর্কাইভ/রিস্টোর — ডিলিট করা কনটেন্ট (রো + সব child) JSON বান্ডল হিসেবে রাখে, আসল id সহ ফিরিয়ে আনা যায়
