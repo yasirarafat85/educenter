@@ -359,6 +359,7 @@ CREATE TABLE registrations (
     courier_provider VARCHAR(50),
     courier_consignment_id VARCHAR(100),
     courier_active TINYINT(1) NOT NULL DEFAULT 1, -- অ্যাডমিন এটা বন্ধ করলে এই রেজিস্ট্রেশন কুরিয়ার লিস্টে দেখা যাবে (ইতিহাসের জন্য) কিন্তু বাল্ক-সিলেক্ট/পাঠানোর জন্য বাছাই করা যাবে না — যেমন "এটা কুরিয়ারে যাবে না" এমন confirmed অর্ডার
+    delivery_zone VARCHAR(10) NOT NULL DEFAULT '',   -- স্থায়ী ডেলিভারি এলাকা (dhaka/near/outside) — কোর্স পার্সেলে একবার সেট, সব মাসে প্রযোজ্য; মাস-ভিত্তিক ব্যতিক্রম courier_batches.delivery_zone-এ
     fb_group_added TINYINT(1) NOT NULL DEFAULT 0, -- Facebook গ্রুপে যোগ হয়েছে? (কোর্স ট্র্যাকিং)
     messenger_group_added TINYINT(1) NOT NULL DEFAULT 0, -- Messenger গ্রুপে যোগ হয়েছে? (কোর্স ট্র্যাকিং)
     income_approved TINYINT(1) NOT NULL DEFAULT 0, -- এই অর্ডার থেকে আয় হিসেবে অনুমোদন করা হয়েছে কিনা (income টেবিলে ডুপ্লিকেট এন্ট্রি ঠেকাতে)

@@ -40,6 +40,13 @@ $dc = [
 ];
 $wxExtra = (float) (get_setting('courier_weight_extra') ?: 20);
 
+// এলাকার নাম + সেটিংসে দেওয়া ডেলিভারি চার্জ (এক জায়গায়, রোস্টার ও মাস-কার্ড দুটোতেই)
+$zoneLabels = [
+    'dhaka'   => 'ঢাকা (৳' . (int) round($dc['dhaka']) . ')',
+    'near'    => 'নিকটবর্তী (৳' . (int) round($dc['near']) . ')',
+    'outside' => 'বাইরে (৳' . (int) round($dc['outside']) . ')',
+];
+
 // ---------------- POST হ্যান্ডলার ----------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify()) { set_flash('error', 'ফর্ম টোকেন মিলছে না।'); redirect('course-parcel.php'); }
@@ -52,6 +59,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $field = ($_POST['field'] ?? '') === 'messenger' ? 'messenger_group_added' : 'fb_group_added';
         $val = (int) ($_POST['value'] ?? 0) ? 1 : 0;
         $db->prepare("UPDATE registrations SET $field = :v WHERE id = :id")->execute(['v' => $val, 'id' => $regId]);
+        redirect(cp_url($itemId, $month));
+
+    } elseif ($action === 'zone') {
+        // 🔑 স্থায়ী ডেলিভারি এলাকা (অর্ডারের ডেটায়) — একবার সেট করলে সব মাসে প্রযোজ্য।
+        // মাস-ভিত্তিক ব্যতিক্রম আলাদা (courier_batches.delivery_zone) — এটা সেগুলো ছোঁয় না।
+        $zoneVal = in_array($_POST['value'] ?? '', ['dhaka', 'near', 'outside'], true) ? $_POST['value'] : '';
+        try {
+            $db->prepare('UPDATE registrations SET delivery_zone = :v WHERE id = :id')->execute(['v' => $zoneVal, 'id' => $regId]);
+            set_flash('success', 'ডেলিভারি এলাকা সেভ হয়েছে — পরের মাসগুলোতেও এটাই বসবে (আগে সেভ করা মাস অপরিবর্তিত)।');
+        } catch (PDOException $ex) {
+            set_flash('error', 'ডেলিভারি এলাকা সেভ করা যায়নি — database/migrate-reg-delivery-zone.sql চালানো হয়নি।');
+        }
         redirect(cp_url($itemId, $month));
 
     } elseif ($action === 'active') {
@@ -118,7 +137,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $alreadySent = $existing && $existing['send_status'] === 'sent';
 
             // কালেকশন (নতুন/সংশোধন/আবার-পাঠানো সব ক্ষেত্রে দরকার)
-            $zone = in_array($row['zone'] ?? '', ['dhaka', 'near', 'outside'], true) ? $row['zone'] : 'dhaka';
+            // এই মাসে আলাদা করে বাছা না থাকলে শিক্ষার্থীর স্থায়ী এলাকা, তাও না থাকলে ঢাকা
+            $regZone = (string) ($regMap[$rid]['delivery_zone'] ?? '');
+            $zone = in_array($row['zone'] ?? '', ['dhaka', 'near', 'outside'], true) ? $row['zone']
+                  : (in_array($regZone, ['dhaka', 'near', 'outside'], true) ? $regZone : 'dhaka');
             $wx   = !empty($row['wx']);
             $adj  = (float) ($row['adj'] ?? 0);
             $ledgerRows = $ledgerMap[$rid] ?? [];
@@ -369,10 +391,11 @@ $grp_toggle = function (array $r, string $field, bool $on, int $itemId, int $sel
     <?php
 };
 
-$render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId, $grp_toggle) {
+$render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId, $grp_toggle, $zoneLabels) {
     $rid = (int) $r['id'];
     $active = (int) ($r['courier_active'] ?? 1);
     $fbOn = !empty($r['fb_group_added']); $msgOn = !empty($r['messenger_group_added']);
+    $regZone = (string) ($r['delivery_zone'] ?? '');
     $needsRemoval = !$active && ($fbOn || $msgOn);
     $sentCount = 0;
     for ($i = 1; $i <= $months; $i++) { if (($byRegPeriod[$rid][cp_month_label($i)]['send_status'] ?? '') === 'sent') { $sentCount++; } }
@@ -390,6 +413,18 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
             <form method="post" action="course-parcel.php" class="inline" onsubmit="return confirmSubmit(this, <?= $active ? "'নিষ্ক্রিয় করলে এই শিক্ষার্থী আর মাসের তালিকায় আসবে না। নিশ্চিত?', 'নিষ্ক্রিয় করবেন?'" : "'আবার সক্রিয় করবেন?', 'সক্রিয় করবেন?'" ?>);"><?= csrf_field() ?>
                 <input type="hidden" name="action" value="active"><input type="hidden" name="item_id" value="<?= $itemId ?>"><input type="hidden" name="id" value="<?= $rid ?>"><input type="hidden" name="month" value="<?= $selMonth ?>"><input type="hidden" name="value" value="<?= $active ? 0 : 1 ?>">
                 <button type="submit" class="px-2.5 py-1 rounded-full text-xs font-semibold <?= $active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500' ?>"><?= $active ? 'সক্রিয়' : 'নিষ্ক্রিয়' ?></button>
+            </form>
+        </td>
+        <td class="py-2.5 px-2 text-center">
+            <?php // 🔑 স্থায়ী এলাকা — একবার সেট করলেই প্রতি মাসের কালেকশনে অটো বসে ?>
+            <form method="post" action="course-parcel.php" class="inline"><?= csrf_field() ?>
+                <input type="hidden" name="action" value="zone"><input type="hidden" name="item_id" value="<?= $itemId ?>"><input type="hidden" name="id" value="<?= $rid ?>"><input type="hidden" name="month" value="<?= $selMonth ?>">
+                <select name="value" onchange="this.form.submit()" class="border rounded-lg px-2 py-1 text-xs text-gray-700" title="এই শিক্ষার্থীর স্থায়ী ডেলিভারি এলাকা — সব মাসে প্রযোজ্য">
+                    <option value="" <?= $regZone === '' ? 'selected' : '' ?>>— সেট করা নেই —</option>
+                    <?php foreach ($zoneLabels as $zk => $zl): ?>
+                        <option value="<?= $zk ?>" <?= $regZone === $zk ? 'selected' : '' ?>><?= e($zl) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </form>
         </td>
         <?php for ($i = 1; $i <= $months; $i++): [$ch, $cls] = cp_cell($byRegPeriod[$rid][cp_month_label($i)] ?? null); ?>
@@ -412,14 +447,14 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
 <div class="bg-white rounded-2xl shadow overflow-x-auto mb-3">
     <table class="w-full text-sm">
         <thead><tr class="text-left text-gray-500 border-b bg-gray-50">
-            <th class="py-3 px-3">শিশুর নাম</th><th class="py-3 px-2 text-center">FB</th><th class="py-3 px-2 text-center">Msngr</th><th class="py-3 px-2 text-center">সক্রিয়</th>
+            <th class="py-3 px-3">শিশুর নাম</th><th class="py-3 px-2 text-center">FB</th><th class="py-3 px-2 text-center">Msngr</th><th class="py-3 px-2 text-center">সক্রিয়</th><th class="py-3 px-2 text-center whitespace-nowrap">ডেলিভারি</th>
             <?php for ($i = 1; $i <= $months; $i++): ?>
                 <th class="py-3 px-1.5 text-center whitespace-nowrap <?= $i === $selMonth ? 'bg-indigo-50' : '' ?>"><a href="<?= e(cp_url($itemId, $i)) ?>" class="<?= $i === $selMonth ? 'text-indigo-700 font-bold' : 'text-gray-500 hover:text-indigo-600' ?>" title="এই মাসে কাজ করুন">মাস <?= $i ?></a></th>
             <?php endfor; ?>
             <?php if ($months): ?><th class="py-3 px-2 text-center whitespace-nowrap">পাঠানো</th><?php endif; ?>
         </tr></thead>
         <tbody>
-        <?php if (!$activeRegs && $inactiveRegs): ?><tr><td colspan="<?= 5 + $months ?>" class="py-6 px-4 text-center text-gray-400">সব শিক্ষার্থী নিষ্ক্রিয় — নিচে থেকে সক্রিয় করুন।</td></tr><?php endif; ?>
+        <?php if (!$activeRegs && $inactiveRegs): ?><tr><td colspan="<?= 6 + $months ?>" class="py-6 px-4 text-center text-gray-400">সব শিক্ষার্থী নিষ্ক্রিয় — নিচে থেকে সক্রিয় করুন।</td></tr><?php endif; ?>
         <?php foreach ($activeRegs as $r) { $render_row($r); } ?>
         </tbody>
     </table>
@@ -475,7 +510,12 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
                 $isNo = $ex && $ex['send_status'] === 'declined';
                 $isSent = $ex && $ex['send_status'] === 'sent';
                 $isFailed = $ex && $ex['send_status'] === 'failed';
-                $exZone = $ex['delivery_zone'] ?? 'dhaka'; $exWx = !empty($ex['weight_extra']);
+                // 🔑 জোনের ক্রম: এই মাসে আগে সেভ করা → শিক্ষার্থীর স্থায়ী এলাকা → ঢাকা
+                // (সার্ভারের round-save-এও হুবহু এই ক্রম — দুই জায়গা মিলিয়ে রাখতে হবে)
+                $permZone = (string) ($r['delivery_zone'] ?? '');
+                if (!in_array($permZone, ['dhaka', 'near', 'outside'], true)) { $permZone = ''; }
+                $exZone = $ex['delivery_zone'] ?? ($permZone ?: 'dhaka');
+                $exWx = !empty($ex['weight_extra']);
                 $exAdj = $ex['adjustment'] ?? 0; $exReason = $ex['adjustment_reason'] ?? '';
                 $exAmt = ($ex && $ex['amount_to_collect'] !== null && $ex['send_status'] !== 'declined') ? (string) (int) round((float) $ex['amount_to_collect']) : '';
                 $notes = $notesByReg[$rid] ?? [];
@@ -546,8 +586,13 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
                     <div class="builder <?= $isSent ? 'opacity-50 pointer-events-none' : '' ?>">
                         <div class="grid gap-2" style="grid-template-columns:1.3fr auto 1fr; align-items:end;">
                             <label class="text-xs text-gray-600">ডেলিভারি<select name="bd[<?= $rid ?>][zone]" class="zone block w-full border rounded-lg px-2 py-2 text-sm mt-1">
-                                <option value="dhaka" <?= $exZone==='dhaka'?'selected':'' ?>>ঢাকা</option><option value="near" <?= $exZone==='near'?'selected':'' ?>>নিকটবর্তী</option><option value="outside" <?= $exZone==='outside'?'selected':'' ?>>বাইরে</option>
-                            </select></label>
+                                <?php foreach ($zoneLabels as $zk => $zl): ?><option value="<?= $zk ?>" <?= $exZone === $zk ? 'selected' : '' ?>><?= e($zl) ?></option><?php endforeach; ?>
+                            </select>
+                            <?php if ($permZone === ''): ?>
+                                <span class="block text-[10px] text-amber-700 mt-0.5">উপরের তালিকায় স্থায়ী এলাকা একবার সেট করুন — তাহলে প্রতি মাসে আর বাছতে হবে না</span>
+                            <?php elseif ($exZone !== $permZone): ?>
+                                <span class="block text-[10px] text-amber-700 mt-0.5">শুধু এই মাসে আলাদা (স্থায়ী: <?= e($zoneLabels[$permZone]) ?>)</span>
+                            <?php endif; ?></label>
                             <label class="flex items-center gap-1 text-xs text-gray-600 pb-2"><input type="checkbox" class="wx w-4 h-4 accent-indigo-600" name="bd[<?= $rid ?>][wx]" value="1" <?= $exWx?'checked':'' ?>> ওজন+</label>
                             <label class="text-xs text-gray-600">সমন্বয়±<input type="number" step="1" value="<?= e((string)(int)$exAdj) ?>" name="bd[<?= $rid ?>][adj]" class="adj block w-full border rounded-lg px-2 py-2 text-sm mt-1"></label>
                         </div>
