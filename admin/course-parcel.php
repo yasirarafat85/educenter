@@ -111,18 +111,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $insDraft = $db->prepare(
             'INSERT INTO courier_batches
                 (registration_id, period_label, item_description, item_quantity, amount_to_collect,
-                 monthly_multiplier, delivery_zone, weight_extra, adjustment, adjustment_reason, send_status)
-             VALUES (:r, :p, :d, 1, :amt, 1, :z, :wx, :adj, :rs, "draft")'
+                 monthly_multiplier, delivery_zone, weight_extra, adjustment, adjustment_reason, recipient_address, send_status)
+             VALUES (:r, :p, :d, 1, :amt, 1, :z, :wx, :adj, :rs, :addr, "draft")'
         );
         $updDraft = $db->prepare(
             'UPDATE courier_batches SET item_description=:d, amount_to_collect=:amt, monthly_multiplier=1,
-                 delivery_zone=:z, weight_extra=:wx, adjustment=:adj, adjustment_reason=:rs, send_status="draft"
+                 delivery_zone=:z, weight_extra=:wx, adjustment=:adj, adjustment_reason=:rs, recipient_address=:addr, send_status="draft"
              WHERE id = :id'
         );
         $insDeclined = $db->prepare('INSERT INTO courier_batches (registration_id, period_label, amount_to_collect, send_status) VALUES (:r, :p, 0, "declined")');
         $updDeclined = $db->prepare('UPDATE courier_batches SET send_status="declined", amount_to_collect=0 WHERE id = :id');
         // পাঠানো ব্যাচের ফিল্ড আপডেট (রেকর্ড সংশোধন) — send_status ছোঁয় না
-        $updSent = $db->prepare('UPDATE courier_batches SET item_description=:d, amount_to_collect=:amt, delivery_zone=:z, weight_extra=:wx, adjustment=:adj, adjustment_reason=:rs WHERE id = :id');
+        $updSent = $db->prepare('UPDATE courier_batches SET item_description=:d, amount_to_collect=:amt, delivery_zone=:z, weight_extra=:wx, adjustment=:adj, adjustment_reason=:rs, recipient_address=COALESCE(:addr, recipient_address) WHERE id = :id');
 
         $prep = 0; $declined = 0; $sent = 0; $resent = 0; $failed = []; $editedSent = 0;
         foreach (($_POST['bd'] ?? []) as $rid => $row) {
@@ -149,11 +149,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (is_numeric($row['amt'] ?? null)) { $amt = max(0, round((float) $row['amt'])); } // সরাসরি লেখা পরিমাণই চূড়ান্ত
             $desc   = trim($row['desc'] ?? '') ?: null;
             $reason = trim($row['reason'] ?? '') ?: null;
+            // 📍 শুধু এই মাসের ঠিকানা (খালি = অর্ডারের মূল ঠিকানাই যাবে)।
+            // courier_batches.recipient_address আগে থেকেই আছে — save_courier_batch() পাঠানোর সময়
+            // এই সারির মানটাই অগ্রাধিকার দেয়, তাই নতুন কলাম/মাইগ্রেশন লাগে না।
+            $addr   = trim($row['addr'] ?? '') ?: null;
 
             // ── ইতিমধ্যে পাঠানো ব্যাচ: আনলক করা না থাকলে অপরিবর্তিত (দুর্ঘটনা এড়াতে) ──
             if ($alreadySent) {
                 if (empty($row['unlocked'])) { continue; } // 🔓 আনলক না করলে ছোঁয়া হবে না
-                $updSent->execute(['d' => $desc, 'amt' => $amt, 'z' => $zone, 'wx' => $wx ? 1 : 0, 'adj' => $adj, 'rs' => $reason, 'id' => $existId]);
+                $updSent->execute(['d' => $desc, 'amt' => $amt, 'z' => $zone, 'wx' => $wx ? 1 : 0, 'adj' => $adj, 'rs' => $reason, 'addr' => $addr, 'id' => $existId]);
                 if ($mode === 'send' && $resend) {
                     try {
                         $res = send_courier_batch($db, $provider, $regMap[$rid], [], $existId); // নতুন consignment
@@ -174,10 +178,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($existId) {
-                $updDraft->execute(['d' => $desc, 'amt' => $amt, 'z' => $zone, 'wx' => $wx ? 1 : 0, 'adj' => $adj, 'rs' => $reason, 'id' => $existId]);
+                $updDraft->execute(['d' => $desc, 'amt' => $amt, 'z' => $zone, 'wx' => $wx ? 1 : 0, 'adj' => $adj, 'rs' => $reason, 'addr' => $addr, 'id' => $existId]);
                 $draftId = $existId;
             } else {
-                $insDraft->execute(['r' => $rid, 'p' => $period, 'd' => $desc, 'amt' => $amt, 'z' => $zone, 'wx' => $wx ? 1 : 0, 'adj' => $adj, 'rs' => $reason]);
+                $insDraft->execute(['r' => $rid, 'p' => $period, 'd' => $desc, 'amt' => $amt, 'z' => $zone, 'wx' => $wx ? 1 : 0, 'adj' => $adj, 'rs' => $reason, 'addr' => $addr]);
                 $draftId = (int) $db->lastInsertId();
             }
             $prep++;
@@ -274,7 +278,7 @@ if ($regs) {
     $ids = array_map(fn($r) => (int) $r['id'], $regs);
     $in = implode(',', array_fill(0, count($ids), '?'));
     $st = $db->prepare("SELECT id, registration_id, period_label, send_status, amount_to_collect,
-                               delivery_zone, weight_extra, adjustment, adjustment_reason
+                               delivery_zone, weight_extra, adjustment, adjustment_reason, recipient_address
                         FROM courier_batches WHERE registration_id IN ($in) ORDER BY id ASC");
     $st->execute($ids);
     foreach ($st->fetchAll() as $row) { $byRegPeriod[(int) $row['registration_id']][$row['period_label']] = $row; }
@@ -419,7 +423,7 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
             <?php // 🔑 স্থায়ী এলাকা — একবার সেট করলেই প্রতি মাসের কালেকশনে অটো বসে ?>
             <form method="post" action="course-parcel.php" class="inline"><?= csrf_field() ?>
                 <input type="hidden" name="action" value="zone"><input type="hidden" name="item_id" value="<?= $itemId ?>"><input type="hidden" name="id" value="<?= $rid ?>"><input type="hidden" name="month" value="<?= $selMonth ?>">
-                <select name="value" onchange="this.form.submit()" class="border rounded-lg px-2 py-1 text-xs text-gray-700" title="এই শিক্ষার্থীর স্থায়ী ডেলিভারি এলাকা — সব মাসে প্রযোজ্য">
+                <select name="value" data-orig="<?= e($regZone) ?>" onchange="cpPermZone(this)" class="border rounded-lg px-2 py-1 text-xs text-gray-700" title="এই শিক্ষার্থীর স্থায়ী ডেলিভারি এলাকা — সব মাসে প্রযোজ্য">
                     <option value="" <?= $regZone === '' ? 'selected' : '' ?>>— সেট করা নেই —</option>
                     <?php foreach ($zoneLabels as $zk => $zl): ?>
                         <option value="<?= $zk ?>" <?= $regZone === $zk ? 'selected' : '' ?>><?= e($zl) ?></option>
@@ -443,6 +447,19 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
         <i data-lucide="alert-triangle" class="w-4 h-4 inline"></i> উপরে <b>"মোট কয়বার পার্সেল"</b> সংখ্যাটা দিন — তারপর মাস অনুযায়ী পার্সেল প্রস্তুত করা যাবে।
     </div>
 <?php endif; ?>
+
+<script>
+// স্থায়ী ডেলিভারি এলাকা বদলানো — প্রথমবার সেট করায় ওয়ার্নিং নয়, পরে বদলালে নিশ্চিতকরণ
+function cpPermZone(sel) {
+    var orig = sel.getAttribute('data-orig') || '';
+    if (orig === '') { sel.form.submit(); return; }   // প্রথমবার সেট — ওয়ার্নিং লাগে না
+    var now = sel.value, txt = sel.options[sel.selectedIndex].text;
+    sel.value = orig;                                  // নিশ্চিত না করা পর্যন্ত আগেরটাই দেখাবে
+    showConfirmModal('এই শিক্ষার্থীর স্থায়ী ডেলিভারি এলাকা বদলে "' + txt + '" করবেন? পরের মাসগুলোর কালেকশনে এটাই বসবে (আগে সেভ করা মাস অপরিবর্তিত থাকবে)।',
+        function () { sel.value = now; sel.form.submit(); },
+        'এলাকা বদলাবেন?');
+}
+</script>
 
 <div class="bg-white rounded-2xl shadow overflow-x-auto mb-3">
     <table class="w-full text-sm">
@@ -516,6 +533,10 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
                 if (!in_array($permZone, ['dhaka', 'near', 'outside'], true)) { $permZone = ''; }
                 $exZone = $ex['delivery_zone'] ?? ($permZone ?: 'dhaka');
                 $exWx = !empty($ex['weight_extra']);
+                // 📍 এই মাসে আলাদা ঠিকানা? (মূল ঠিকানার সমান হলে "আলাদা" নয়)
+                $regAddr = trim((string) ($r['address'] ?? ''));
+                $exAddr  = trim((string) ($ex['recipient_address'] ?? ''));
+                $addrDiff = $exAddr !== '' && $exAddr !== $regAddr;
                 $exAdj = $ex['adjustment'] ?? 0; $exReason = $ex['adjustment_reason'] ?? '';
                 $exAmt = ($ex && $ex['amount_to_collect'] !== null && $ex['send_status'] !== 'declined') ? (string) (int) round((float) $ex['amount_to_collect']) : '';
                 $notes = $notesByReg[$rid] ?? [];
@@ -585,7 +606,7 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
                     </div>
                     <div class="builder <?= $isSent ? 'opacity-50 pointer-events-none' : '' ?>">
                         <div class="grid gap-2" style="grid-template-columns:1.3fr auto 1fr; align-items:end;">
-                            <label class="text-xs text-gray-600">ডেলিভারি<select name="bd[<?= $rid ?>][zone]" class="zone block w-full border rounded-lg px-2 py-2 text-sm mt-1">
+                            <label class="text-xs text-gray-600">ডেলিভারি<select name="bd[<?= $rid ?>][zone]" data-orig="<?= e($exZone) ?>" class="zone block w-full border rounded-lg px-2 py-2 text-sm mt-1">
                                 <?php foreach ($zoneLabels as $zk => $zl): ?><option value="<?= $zk ?>" <?= $exZone === $zk ? 'selected' : '' ?>><?= e($zl) ?></option><?php endforeach; ?>
                             </select>
                             <?php if ($permZone === ''): ?>
@@ -596,6 +617,20 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
                             <label class="flex items-center gap-1 text-xs text-gray-600 pb-2"><input type="checkbox" class="wx w-4 h-4 accent-indigo-600" name="bd[<?= $rid ?>][wx]" value="1" <?= $exWx?'checked':'' ?>> ওজন+</label>
                             <label class="text-xs text-gray-600">সমন্বয়±<input type="number" step="1" value="<?= e((string)(int)$exAdj) ?>" name="bd[<?= $rid ?>][adj]" class="adj block w-full border rounded-lg px-2 py-2 text-sm mt-1"></label>
                         </div>
+                        <?php // 📍 শুধু এই মাসের ঠিকানা — টিক না দিলে অর্ডারের মূল ঠিকানাতেই যাবে ?>
+                        <div class="mt-2">
+                            <label class="flex items-center gap-1.5 text-xs text-gray-600">
+                                <input type="checkbox" class="addrChk w-4 h-4 accent-indigo-600" <?= $addrDiff ? 'checked' : '' ?>>
+                                📍 এই মাসে অন্য ঠিকানায় যাবে
+                            </label>
+                            <textarea name="bd[<?= $rid ?>][addr]" rows="2"
+                                      class="addrBox block w-full border rounded-lg px-2 py-2 text-sm mt-1 <?= $addrDiff ? '' : 'hidden' ?>"
+                                      placeholder="মূল ঠিকানা: <?= e($regAddr ?: '—') ?>"><?= $addrDiff ? e($exAddr) : '' ?></textarea>
+                            <?php if ($addrDiff): ?>
+                                <span class="block text-[10px] text-amber-700 mt-0.5">এই মাসে আলাদা ঠিকানায় যাচ্ছে — অর্ডারের মূল ঠিকানা অপরিবর্তিত</span>
+                            <?php endif; ?>
+                        </div>
+
                         <div class="flex items-center justify-between gap-2 mt-3 pt-3 border-t">
                             <div class="text-xs text-gray-500">কালেকশন (টাকা)<div class="autohint text-[11px] text-gray-400"><?= $lRows ? 'খাতার বাকি + ডেলিভারি' : 'মাসিক ফি + ডেলিভারি' ?> = ৳<span class="autoval">0</span> · <button type="button" class="text-indigo-600 font-semibold underline autobtn">অটো বসান</button></div></div>
                             <div class="flex items-center gap-1.5 flex-shrink-0">
@@ -664,6 +699,24 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
     if(btn){ btn.addEventListener('click',function(){ var d=el.querySelector('.decision'); d.value=(d.value==='no')?'go':'no'; refresh(); }); }
     var amtEl=el.querySelector('.amt'), manualEl=el.querySelector('.manual');
     if(amtEl){ amtEl.addEventListener('input',function(){ manualEl.value='1'; refresh(); }); }
+    // শুধু এই মাসের এলাকা বদলাতে গেলে নিশ্চিতকরণ (স্থায়ীটা এতে বদলায় না)
+    var zoneEl=el.querySelector('.zone');
+    if(zoneEl){ zoneEl.addEventListener('change',function(){
+      var orig=zoneEl.getAttribute('data-orig')||'', now=zoneEl.value;
+      if(now===orig){ return; }
+      zoneEl.value=orig; refresh();
+      showConfirmModal('শুধু এই মাসের জন্য ডেলিভারি এলাকা বদলাবেন? স্থায়ী এলাকা অপরিবর্তিত থাকবে — অন্য মাসগুলোতে আগেরটাই বসবে।',
+        function(){ zoneEl.value=now; zoneEl.setAttribute('data-orig',now); refresh(); }, 'এই মাসে এলাকা বদলাবেন?');
+    }); }
+    // 📍 এই মাসে অন্য ঠিকানা — টিক দেওয়ার সময় নিশ্চিতকরণ, টিক তুললে লেখা মুছে যায়
+    var addrChk=el.querySelector('.addrChk'), addrBox=el.querySelector('.addrBox');
+    if(addrChk&&addrBox){ addrChk.addEventListener('change',function(){
+      if(addrChk.checked){
+        addrChk.checked=false;
+        showConfirmModal('এই মাসের পার্সেল অন্য ঠিকানায় যাবে? শুধু এই মাসেই প্রযোজ্য হবে — অর্ডারের মূল ঠিকানা বদলাবে না। এলাকা (ঢাকা/নিকটবর্তী/বাইরে) আলাদা হলে উপরের ডেলিভারি ঘরটাও বদলে দিন।',
+          function(){ addrChk.checked=true; addrBox.classList.remove('hidden'); addrBox.focus(); }, 'এই মাসে ঠিকানা বদলাবেন?');
+      } else { addrBox.classList.add('hidden'); addrBox.value=''; }
+    }); }
     var ab=el.querySelector('.autobtn');
     if(ab){ ab.addEventListener('click',function(){ manualEl.value=''; refresh(); }); }
     // পাঠানো কার্ড আনলক (ওয়ার্নিং সহ) → এডিট + "আবার পাঠান" চালু
