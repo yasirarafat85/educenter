@@ -3,6 +3,7 @@
 // এই ফাইল ব্যবহার করার আগে admin_require_login() কল করা থাকতে হবে
 
 require_once __DIR__ . '/entities.php'; // সাইডবার নেভিগেশনের জন্য get_entities() প্রয়োজন
+require_once __DIR__ . '/nav.php';     // সাইডবারের লিংক-তালিকা (ডেটা) + ⭐ প্রিয় পিন
 require_once __DIR__ . '/page-help.php'; // হেডারের "?" সাহায্য বাটনের টেক্সট
 
 $currentFile = basename($_SERVER['SCRIPT_NAME']);
@@ -78,6 +79,18 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     .nav-link:hover { background: rgb(var(--c-primary) / .08); color: rgb(var(--c-text)); }
     .nav-link.active { background: linear-gradient(135deg, rgb(var(--c-primary)), rgb(var(--c-primary-2))); color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgb(var(--c-primary) / .35); }
     .nav-link.active svg { color: #fff; }
+    /* ── ⭐ প্রিয় লিংক সাজানো (২০২৬-০৯-২৩): প্রতিটা সারি = লিংক + লুকানো তারা/তীর বোতাম।
+         "সাজান" চাপলে #admin-nav-এ .nav-arrange বসে, তখনই বোতামগুলো দেখা যায় (নাহলে লক)।
+         🔴 সাধারণ CSS-ই রাখা হয়েছে (Tailwind ক্লাস নয়) — কম্পাইলড CSS রিবিল্ড এড়াতে। */
+    .nav-row { display: flex; align-items: center; gap: 2px; }
+    .nav-row > .nav-link { flex: 1 1 auto; min-width: 0; }
+    .nav-pin { display: none; flex: 0 0 auto; }
+    #admin-nav.nav-arrange .nav-pin { display: block; }
+    .nav-pin > button, .nav-pin > span { display: block; padding: 6px 7px; border-radius: 8px; font-size: 13px; line-height: 1; color: rgb(var(--c-text-muted)); }
+    .nav-pin > button:hover { background: rgb(var(--c-primary) / .12); color: rgb(var(--c-primary)); }
+    .nav-pin > span { opacity: .3; }
+    .nav-pin.on > button { color: rgb(var(--c-primary)); }
+    #admin-nav.nav-arrange #nav-arrange-btn { background: rgb(var(--c-primary) / .14); color: rgb(var(--c-primary)); }
     .nav-section { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: rgb(var(--c-text-muted)); padding: 16px 16px 4px; opacity: .75; }
 
     /* ── কার্ড গভীরতা — থিমড হালকা বর্ডার + নরম গভীর শ্যাডো (সাদা কার্ড tinted ব্যাকগ্রাউন্ডে ফুটে ওঠে) ── */
@@ -261,91 +274,51 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
         </div>
         <nav id="admin-nav" class="flex-1 p-3 space-y-1 overflow-y-auto">
             <?php
-                // রোল অনুযায়ী কোন সেকশন দেখাবে (মূল অ্যাডমিন সব; মডারেটর অনুমতি অনুযায়ী)
-                $isSuper    = admin_is_super();
-                $navEntities = get_entities();
-                $canAnyContent = false;
-                foreach (array_keys($navEntities) as $ek) { if (admin_can('content:' . $ek)) { $canAnyContent = true; break; } }
-                $canOrders  = admin_can('orders');
-                $canParcel  = admin_can('parcel');
-                $canCourier = admin_can('courier');
-                $canUsers   = admin_can('users');
-                $canLogs    = admin_can('logs');
-                $canFinance = admin_can('finance');
-                $canSettings = admin_can('settings');
-                $canPayment = admin_can('payment');
-                $canBackup  = admin_can('backup');
-                $canArchive = admin_can('archive');
+                // ⭐ লিংকগুলো এখন ডেটা থেকে রেন্ডার হয় (admin/includes/nav.php) — তাই "প্রিয়" লিংক
+                // উপরে তোলা যায়। নতুন অ্যাডমিন পেজের লিংক **ওখানে** যোগ করুন, এখানে নয়।
+                $navGroups = admin_nav_groups();
+                $navPins   = nav_pins_get();
+                [$navPinned, $navRest] = admin_nav_split($navGroups, $navPins);
+                $navQs     = (string) ($_SERVER['QUERY_STRING'] ?? '');
+                $navReturn = nav_safe_return($currentFile . ($navQs !== '' ? '?' . $navQs : ''));
+                $navPinTotal = count($navPinned);
+
+                // একটা সারি = লিংক + (সাজানো মোডে) তারা/তীর বোতাম
+                $navRow = function (array $navItem, ?int $navPinIdx = null) use ($currentFile, $currentEntity, $navReturn, $navPinTotal) {
+                    ?>
+                    <div class="nav-row">
+                        <a href="<?= e($navItem['href']) ?>" class="nav-link <?= nav_active($navItem['file'], $currentFile, $navItem['entity'] ?? '', $currentEntity) ?>"><i data-lucide="<?= e($navItem['icon']) ?>" class="w-4 h-4"></i> <?= e($navItem['label']) ?></a>
+                        <?php if ($navPinIdx !== null): ?>
+                            <?= nav_pin_form('up',   $navItem['key'], '↑', 'উপরে তুলুন',       $navReturn, $navPinIdx === 0) ?>
+                            <?= nav_pin_form('down', $navItem['key'], '↓', 'নিচে নামান',       $navReturn, $navPinIdx === $navPinTotal - 1) ?>
+                            <?= nav_pin_form('unpin', $navItem['key'], '★', 'প্রিয় থেকে সরান', $navReturn, false, true) ?>
+                        <?php else: ?>
+                            <?= nav_pin_form('pin', $navItem['key'], '☆', 'প্রিয়তে যোগ করুন', $navReturn) ?>
+                        <?php endif; ?>
+                    </div>
+                    <?php
+                };
             ?>
-            <a href="index.php" class="nav-link <?= nav_active('index.php', $currentFile) ?>"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> ড্যাশবোর্ড</a>
-            <a href="guide.php" class="nav-link <?= nav_active('guide.php', $currentFile) ?>"><i data-lucide="help-circle" class="w-4 h-4"></i> গাইড / সাহায্য</a>
 
-            <?php if ($canAnyContent): ?>
-            <p class="nav-section">কনটেন্ট</p>
-            <?php foreach ($navEntities as $navEntityKey => $navEntityConf): ?>
-                <?php if (admin_can('content:' . $navEntityKey)): ?>
-                <a href="manage.php?entity=<?= e($navEntityKey) ?>" class="nav-link <?= nav_active('manage.php', $currentFile, $navEntityKey, $currentEntity) ?>"><i data-lucide="file-text" class="w-4 h-4"></i> <?= e($navEntityConf['label_plural']) ?></a>
-                <?php endif; ?>
+            <div class="flex items-center justify-end px-1.5 pb-1">
+                <button type="button" id="nav-arrange-btn" class="text-[11px] font-bold px-2 py-1 rounded-lg bg-gray-100 text-gray-500" title="প্রিয় লিংক সাজান — শেষ হলে আবার চাপুন (লক)">⭐ সাজান</button>
+            </div>
+
+            <?php if ($navPinned): ?>
+                <p class="nav-section">⭐ প্রিয়</p>
+                <?php foreach ($navPinned as $navIdx => $navItem) { $navRow($navItem, $navIdx); } ?>
+                <form method="post" action="nav-pins.php" class="nav-pin px-1.5 mt-1">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="pin_action" value="reset">
+                    <input type="hidden" name="return_url" value="<?= e($navReturn) ?>">
+                    <button type="submit" class="text-[11px] text-gray-400" title="শুরুর তালিকায় ফিরে যান">↩ ডিফল্টে ফেরান</button>
+                </form>
+            <?php endif; ?>
+
+            <?php foreach ($navRest as $navGroup): ?>
+                <?php if ($navGroup['section'] !== ''): ?><p class="nav-section"><?= e($navGroup['section']) ?></p><?php endif; ?>
+                <?php foreach ($navGroup['items'] as $navItem) { $navRow($navItem); } ?>
             <?php endforeach; ?>
-            <?php endif; ?>
-
-            <?php if ($canOrders || $canParcel || $canUsers || $canCourier): ?>
-            <p class="nav-section">অর্ডার</p>
-            <?php if ($canOrders): ?>
-                <a href="registrations.php" class="nav-link <?= nav_active('registrations.php', $currentFile) ?>"><i data-lucide="clipboard-list" class="w-4 h-4"></i> রেজিস্ট্রেশন/অর্ডার</a>
-                <a href="course-data.php" class="nav-link <?= nav_active('course-data.php', $currentFile) ?>"><i data-lucide="table" class="w-4 h-4"></i> ডেটা টেবিল</a>
-                <a href="course-interests.php" class="nav-link <?= nav_active('course-interests.php', $currentFile) ?>"><i data-lucide="heart-handshake" class="w-4 h-4"></i> আগ্রহ তালিকা</a>
-                <a href="legacy-students.php" class="nav-link <?= nav_active('legacy-students.php', $currentFile) ?>"><i data-lucide="user-round-search" class="w-4 h-4"></i> পুরাতন শিক্ষার্থী</a>
-            <?php endif; ?>
-            <?php if ($canParcel): ?>
-                <a href="course-parcel.php" class="nav-link <?= nav_active('course-parcel.php', $currentFile) ?>"><i data-lucide="package-check" class="w-4 h-4"></i> কোর্স পার্সেল</a>
-            <?php endif; ?>
-            <?php if ($canUsers): ?>
-                <a href="users.php" class="nav-link <?= nav_active('users.php', $currentFile) ?>"><i data-lucide="users" class="w-4 h-4"></i> অভিভাবক অ্যাকাউন্ট</a>
-            <?php endif; ?>
-            <?php if ($canCourier): ?>
-                <a href="courier.php" class="nav-link <?= nav_active('courier.php', $currentFile) ?>"><i data-lucide="truck" class="w-4 h-4"></i> কুরিয়ার</a>
-                <a href="courier-tracking.php" class="nav-link <?= nav_active('courier-tracking.php', $currentFile) ?>"><i data-lucide="calendar-check" class="w-4 h-4"></i> কুরিয়ার ট্র্যাকিং</a>
-            <?php endif; ?>
-            <?php endif; ?>
-
-            <?php if ($canLogs || $canCourier): ?>
-            <p class="nav-section">লগ</p>
-            <?php if ($canLogs): ?>
-                <a href="registration-errors.php" class="nav-link <?= nav_active('registration-errors.php', $currentFile) ?>"><i data-lucide="alert-triangle" class="w-4 h-4"></i> রেজিস্ট্রেশন এরর</a>
-                <a href="download-logs.php" class="nav-link <?= nav_active('download-logs.php', $currentFile) ?>"><i data-lucide="download" class="w-4 h-4"></i> ডাউনলোড লগ</a>
-                <a href="visitor-logs.php" class="nav-link <?= nav_active('visitor-logs.php', $currentFile) ?>"><i data-lucide="footprints" class="w-4 h-4"></i> ভিজিটর লগ</a>
-            <?php endif; ?>
-            <?php if ($canCourier): ?>
-                <a href="courier-shipment-logs.php" class="nav-link <?= nav_active('courier-shipment-logs.php', $currentFile) ?>"><i data-lucide="history" class="w-4 h-4"></i> কুরিয়ার শিপমেন্ট লগ</a>
-            <?php endif; ?>
-            <?php endif; ?>
-
-            <?php if ($canFinance): ?>
-            <p class="nav-section">আয়-ব্যয়</p>
-            <a href="finance.php" class="nav-link <?= nav_active('finance.php', $currentFile) ?>"><i data-lucide="pie-chart" class="w-4 h-4"></i> ড্যাশবোর্ড</a>
-            <a href="income.php" class="nav-link <?= nav_active('income.php', $currentFile) ?>"><i data-lucide="trending-up" class="w-4 h-4"></i> আয়</a>
-            <a href="expenses.php" class="nav-link <?= nav_active('expenses.php', $currentFile) ?>"><i data-lucide="trending-down" class="w-4 h-4"></i> খরচ</a>
-            <?php endif; ?>
-
-            <p class="nav-section">সেটিংস</p>
-            <?php if ($canSettings): ?>
-                <a href="settings.php" class="nav-link <?= nav_active('settings.php', $currentFile) ?>"><i data-lucide="settings" class="w-4 h-4"></i> সাইট সেটিংস</a>
-            <?php endif; ?>
-            <?php if ($canPayment): ?>
-                <a href="payment-methods.php" class="nav-link <?= nav_active('payment-methods.php', $currentFile) ?>"><i data-lucide="wallet" class="w-4 h-4"></i> পেমেন্ট মেথড</a>
-            <?php endif; ?>
-            <?php if ($isSuper): ?>
-                <a href="team.php" class="nav-link <?= nav_active('team.php', $currentFile) ?>"><i data-lucide="user-cog" class="w-4 h-4"></i> টিম / মডারেটর</a>
-            <?php endif; ?>
-            <a href="change-password.php" class="nav-link <?= nav_active('change-password.php', $currentFile) ?>"><i data-lucide="key" class="w-4 h-4"></i> পাসওয়ার্ড পরিবর্তন</a>
-            <a href="security.php" class="nav-link <?= nav_active('security.php', $currentFile) ?>"><i data-lucide="fingerprint" class="w-4 h-4"></i> নিরাপত্তা / ফিঙ্গারপ্রিন্ট</a>
-            <?php if ($canBackup): ?>
-                <a href="backup.php" class="nav-link <?= nav_active('backup.php', $currentFile) ?>"><i data-lucide="hard-drive-download" class="w-4 h-4"></i> ব্যাকআপ ও ডাউনলোড</a>
-            <?php endif; ?>
-            <?php if ($canArchive): ?>
-                <a href="archive.php" class="nav-link <?= nav_active('archive.php', $currentFile) ?>"><i data-lucide="archive" class="w-4 h-4"></i> আর্কাইভ (রিস্টোর)</a>
-            <?php endif; ?>
         </nav>
         <?php
             $adminName = current_admin_name();

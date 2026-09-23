@@ -68,18 +68,20 @@
 
         function filter() {
             var q = input.value.trim().toLowerCase();
-            var links = nav.querySelectorAll('.nav-link');
+            // ⚠️ প্রতিটা লিংক এখন একটা .nav-row-এর ভেতরে (তারা/তীর বোতামসহ) — তাই পুরো সারিটাই
+            // লুকাতে হয়, শুধু <a> নয় (নাহলে খালি সারির ফাঁকা জায়গা থেকে যেত)
+            var rows = nav.querySelectorAll('.nav-row');
             var anyVisible = false;
-            links.forEach(function (a) {
-                var match = !q || a.textContent.toLowerCase().indexOf(q) !== -1;
-                a.style.display = match ? '' : 'none';
+            rows.forEach(function (r) {
+                var match = !q || r.textContent.toLowerCase().indexOf(q) !== -1;
+                r.style.display = match ? '' : 'none';
                 if (match && q) anyVisible = true;
             });
             // যে সেকশন-হেডারের নিচে দৃশ্যমান লিংক নেই সেটাও লুকানো (সার্চ চলাকালীন)
             nav.querySelectorAll('.nav-section').forEach(function (h) {
                 var vis = false, el = h.nextElementSibling;
                 while (el && !el.classList.contains('nav-section')) {
-                    if (el.classList.contains('nav-link') && el.style.display !== 'none') { vis = true; break; }
+                    if (el.classList.contains('nav-row') && el.style.display !== 'none') { vis = true; break; }
                     el = el.nextElementSibling;
                 }
                 h.style.display = (!q || vis) ? '' : 'none';
@@ -88,6 +90,23 @@
         }
         input.addEventListener('input', filter);
         input.addEventListener('keydown', function (e) { if (e.key === 'Escape') { input.value = ''; filter(); } });
+    })();
+
+    // ── ⭐ "সাজান" মোড: চালু থাকলে সাইডবারের তারা/তীর বোতাম দেখা যায়, বন্ধ থাকলে লক।
+    // অবস্থা localStorage-এ (থিমের মতো) — কারণ ★ চাপলে পেজ রিলোড হয়, নাহলে প্রতিবার মোড বন্ধ হয়ে যেত।
+    (function () {
+        var nav = document.getElementById('admin-nav');
+        var btn = document.getElementById('nav-arrange-btn');
+        if (!nav || !btn) return;
+        var on = false;
+        try { on = localStorage.getItem('admin_nav_arrange') === '1'; } catch (e) {}
+        function paint() { nav.classList.toggle('nav-arrange', on); btn.textContent = on ? '✓ সাজানো শেষ' : '⭐ সাজান'; }
+        paint();
+        btn.addEventListener('click', function () {
+            on = !on;
+            try { localStorage.setItem('admin_nav_arrange', on ? '1' : '0'); } catch (e) {}
+            paint();
+        });
     })();
 
     // টোস্ট নোটিফিকেশন — ৪.৫ সেকেন্ড পর নিজে নিজে মিলিয়ে যায় (ফ্ল্যাশ মেসেজ এখন টোস্ট হিসেবে দেখায়)

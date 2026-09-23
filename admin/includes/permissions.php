@@ -79,6 +79,9 @@ function admin_always_allowed_pages(): array
     return [
         'index.php', 'guide.php', 'change-password.php', 'security.php',
         'webauthn-register-options.php', 'webauthn-register.php', 'logout.php',
+        // ⭐ সাইডবারের প্রিয়-লিংক সাজানো: নিজের পছন্দ, কোনো ডেটা দেখায় না —
+        // তাই "শুধু দেখার" মডারেটরও নিজের সাইডবার গুছিয়ে নিতে পারেন
+        'nav-pins.php',
     ];
 }
 
