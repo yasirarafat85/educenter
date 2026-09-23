@@ -700,8 +700,15 @@ function reg_person_cell(array $row): void
 // ── 📦 আইটেম-সেল (আইটেমের নাম + নিচে ছোট করে ব্যাচ/পরিমাণ) — আলাদা "ব্যাচ"/"পরিমাণ" কলাম আর লাগে না
 function reg_item_cell(array $row): void
 {
+    global $typeLabels;                       // reg_url()-এর `global $activeFilters`-এর মতোই
     $title = trim((string) ($row['item_title'] ?? ''));
+    // 🔴 টাইপ এখন এই ঘরেই (২০২৬-০৯-২৩, ইউজার: "টাইপ + আইটেম/ব্যাচ এক ঘরে থাকবে") —
+    // আলাদা "টাইপ" কলাম তুলে দিয়ে সেই জায়গাটা "ফেসবুক আইডি নাম"-কে দেওয়া হয়েছে।
+    // আইটেম/ব্যাচ না থাকলেও মেটা-লাইনে অন্তত টাইপটা দেখা যায়।
     $meta  = [];
+    if (isset($typeLabels[$row['type'] ?? ''])) {
+        $meta[] = $typeLabels[$row['type']];
+    }
     if (trim((string) ($row['batch'] ?? '')) !== '') {
         $meta[] = trim((string) $row['batch']);
     }
@@ -713,6 +720,20 @@ function reg_item_cell(array $row): void
     <?php if ($meta): ?>
         <div class="text-[10px] text-gray-400"><?= e(implode(' · ', $meta)) ?></div>
     <?php endif;
+}
+
+// ── 👍 ফেসবুক আইডি নাম — ইউজার কাজ করার সময় এটা তালিকাতেই দেখতে চান (২০২৬-০৯-২৩)।
+// ফর্মে শুধু কোর্সেই নেওয়া হয়, তাই worksheet/product লেআউটে এই কলামটা নেই।
+function reg_fb_cell(array $row): void
+{
+    $fb = trim((string) ($row['facebook_id'] ?? ''));
+    if ($fb === '') {
+        echo '<span class="text-gray-300 text-xs">—</span>';
+        return;
+    }
+    ?>
+    <div class="text-xs text-gray-700 max-w-[200px] truncate" title="<?= e($fb) ?>"><?= e($fb) ?></div>
+    <?php
 }
 
 // ── 📅 তারিখ-সেল — সংক্ষিপ্ত তারিখ + "৩ দিন আগে"; পুরো টাইমস্ট্যাম্প title-এ (হোভারে দেখা যায়)
@@ -750,7 +771,6 @@ function reg_more_panel(array $row, int $colspan): void
     if (($row['type'] ?? '') === 'course') {
         $fields = [
             'জন্ম তারিখ'            => !empty($row['date_of_birth']) ? format_date_bn((string) $row['date_of_birth']) : '',
-            'ফেসবুক আইডি নাম'       => (string) ($row['facebook_id'] ?? ''),
             'মোবাইল নাম্বার (বাবা)' => (string) ($row['father_mobile'] ?? ''),
             'রিসিভার নাম'           => (string) ($row['receiver_name'] ?? ''),
             'রিসিভার নাম্বার'       => (string) ($row['receiver_phone'] ?? ''),
@@ -1066,12 +1086,13 @@ require __DIR__ . '/includes/layout-top.php';
     <div class="bg-white rounded-2xl shadow overflow-x-auto">
         <table class="w-full text-sm">
             <?php if ($filterType === 'course'): ?>
-            <!-- কোর্স: ৯ কলাম (আগে ১৬ ছিল) — নাম/ফোন/ঠিকানা এক ঘরে, আইটেম+ব্যাচ এক ঘরে,
+            <!-- কোর্স: ১০ কলাম (আগে ১৬ ছিল) — নাম/ফোন/ঠিকানা এক ঘরে, আইটেম+ব্যাচ এক ঘরে,
                  আর জন্ম তারিখ/ফেসবুক/বাবার মোবাইল/রিসিভার তথ্য "ℹ️ তথ্য" ড্রয়ারে (২০২৬-০৯-২৩) -->
             <thead>
                 <tr class="text-left text-gray-500 border-b bg-gray-50">
                     <th class="py-3 px-4">শিক্ষার্থী</th>
                     <th class="py-3 px-4">আইটেম / ব্যাচ</th>
+                    <th class="py-3 px-4">ফেসবুক আইডি নাম</th>
                     <th class="py-3 px-4">স্ট্যাটাস</th>
                     <th class="py-3 px-4">গ্রুপ</th>
                     <th class="py-3 px-4">টাকা</th>
@@ -1083,12 +1104,13 @@ require __DIR__ . '/includes/layout-top.php';
             </thead>
             <tbody>
             <?php if (!$rows): ?>
-                <tr><td colspan="9" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
+                <tr><td colspan="10" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
             <?php endif; ?>
             <?php foreach ($rows as $row): ?>
                 <tr class="border-b last:border-0" style="<?= e(reg_row_style($row)) ?>">
                     <td class="py-2.5 px-4"><?php reg_person_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_item_cell($row); ?></td>
+                    <td class="py-2.5 px-4"><?php reg_fb_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_status_cell($row, $statusLabels, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_group_cell($row, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_pay_cell($row, pay_summary($ledgerByReg[$row['id']] ?? [])); ?></td>
@@ -1097,8 +1119,8 @@ require __DIR__ . '/includes/layout-top.php';
                     <td class="py-2.5 px-4"><?php reg_more_cell($row); ?></td>
                     <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
                 </tr>
-                <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 9); ?>
-                <?php reg_more_panel($row, 9); ?>
+                <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 10); ?>
+                <?php reg_more_panel($row, 10); ?>
             <?php endforeach; ?>
             </tbody>
             <?php elseif ($filterType === 'worksheet' || $filterType === 'product'): ?>
@@ -1139,8 +1161,8 @@ require __DIR__ . '/includes/layout-top.php';
             <thead>
                 <tr class="text-left text-gray-500 border-b bg-gray-50">
                     <th class="py-3 px-4">নাম</th>
-                    <th class="py-3 px-4">টাইপ</th>
                     <th class="py-3 px-4">আইটেম / ব্যাচ</th>
+                    <th class="py-3 px-4">ফেসবুক আইডি নাম</th>
                     <th class="py-3 px-4">স্ট্যাটাস</th>
                     <th class="py-3 px-4">গ্রুপ</th>
                     <th class="py-3 px-4">টাকা</th>
@@ -1157,8 +1179,8 @@ require __DIR__ . '/includes/layout-top.php';
             <?php foreach ($rows as $row): ?>
                 <tr class="border-b last:border-0" style="<?= e(reg_row_style($row)) ?>">
                     <td class="py-2.5 px-4"><?php reg_person_cell($row); ?></td>
-                    <td class="py-2.5 px-4"><?= e($typeLabels[$row['type']] ?? $row['type']) ?></td>
                     <td class="py-2.5 px-4"><?php reg_item_cell($row); ?></td>
+                    <td class="py-2.5 px-4"><?php reg_fb_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_status_cell($row, $statusLabels, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_group_cell($row, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_pay_cell($row, pay_summary($ledgerByReg[$row['id']] ?? [])); ?></td>
