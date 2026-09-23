@@ -522,6 +522,7 @@ $page = max(1, (int) ($_GET['page'] ?? 1));
 $perPage = 25;
 
 $rows = [];
+$listSummary = [];
 $totalRows = 0;
 $totalPages = 1;
 $distinctItems = [];
@@ -564,6 +565,28 @@ if ($action === 'list') {
     }
 
     $whereSql = $where ? (' WHERE ' . implode(' AND ', $where)) : '';
+
+    // ── উপরের সারাংশ কার্ড: স্ট্যাটাস **বাদে** বাকি সব ফিল্টার মেনে গণনা
+    // (তাই "পেন্ডিং ৯ / কনফার্ম ২" কার্ডে ক্লিক করে স্ট্যাটাস বদলালেও সংখ্যাগুলো একই থাকে)
+    $sumWhere  = array_values(array_filter($where, fn($w) => $w !== 'status = :status'));
+    $sumParams = $params;
+    unset($sumParams['status']);
+    $sumSql = $sumWhere ? (' WHERE ' . implode(' AND ', $sumWhere)) : '';
+    try {
+        $summaryStmt = $db->prepare(
+            "SELECT
+                SUM(status = 'pending')   AS pending,
+                SUM(status = 'confirmed') AS confirmed,
+                SUM(COALESCE(due_amount, 0))                                              AS due_total,
+                SUM(CASE WHEN income_approved = 1 THEN COALESCE(income_amount, 0) ELSE 0 END) AS income_total,
+                COUNT(*) AS all_rows
+             FROM registrations" . $sumSql
+        );
+        $summaryStmt->execute($sumParams);
+        $listSummary = $summaryStmt->fetch() ?: [];
+    } catch (PDOException $ex) {
+        $listSummary = []; // due_amount কলাম না থাকলেও (মাইগ্রেশনের আগে) পেজ ভাঙবে না
+    }
 
     $countStmt = $db->prepare('SELECT COUNT(*) c FROM registrations' . $whereSql);
     $countStmt->execute($params);
@@ -657,6 +680,132 @@ function reg_income_cell(array $row): void
     <?php endif;
 }
 
+// ── 👤 ব্যক্তি-সেল (নাম + ফোন + ঠিকানার ইঙ্গিত) — ২০২৬-০৯-২৩ রিডিজাইন।
+// আগে নাম/ফোন/ঠিকানা তিনটা আলাদা কলাম ছিল; এক ঘরে তিন স্তরে বসানোয় তালিকা অনেক সরু হয়েছে।
+function reg_person_cell(array $row): void
+{
+    $name  = trim((string) ($row['customer_name'] ?? ''));
+    $phone = trim((string) ($row['phone'] ?? ''));
+    $addr  = trim((string) ($row['address'] ?? ''));
+    ?>
+    <div class="font-semibold text-gray-800 leading-tight"><?= e($name !== '' ? $name : '—') ?></div>
+    <?php if ($phone !== ''): ?>
+        <a href="tel:<?= e($phone) ?>" class="text-[11px] text-indigo-600 font-semibold" title="ফোন করুন"><?= e($phone) ?></a>
+    <?php endif; ?>
+    <?php if ($addr !== ''): ?>
+        <div class="text-[10px] text-gray-400 max-w-[200px] truncate" title="<?= e($addr) ?>">📍 <?= e($addr) ?></div>
+    <?php endif;
+}
+
+// ── 📦 আইটেম-সেল (আইটেমের নাম + নিচে ছোট করে ব্যাচ/পরিমাণ) — আলাদা "ব্যাচ"/"পরিমাণ" কলাম আর লাগে না
+function reg_item_cell(array $row): void
+{
+    $title = trim((string) ($row['item_title'] ?? ''));
+    $meta  = [];
+    if (trim((string) ($row['batch'] ?? '')) !== '') {
+        $meta[] = trim((string) $row['batch']);
+    }
+    if (($row['type'] ?? '') !== 'course' && (int) ($row['quantity'] ?? 0) > 1) {
+        $meta[] = 'পরিমাণ ' . (int) $row['quantity'];
+    }
+    ?>
+    <div class="text-gray-800 max-w-[200px] truncate" title="<?= e($title) ?>"><?= e($title !== '' ? $title : '—') ?></div>
+    <?php if ($meta): ?>
+        <div class="text-[10px] text-gray-400"><?= e(implode(' · ', $meta)) ?></div>
+    <?php endif;
+}
+
+// ── 📅 তারিখ-সেল — সংক্ষিপ্ত তারিখ + "৩ দিন আগে"; পুরো টাইমস্ট্যাম্প title-এ (হোভারে দেখা যায়)
+function reg_date_cell(array $row): void
+{
+    $raw = (string) ($row['created_at'] ?? '');
+    $ts  = $raw !== '' ? strtotime($raw) : false;
+    if (!$ts) {
+        echo '<span class="text-gray-300 text-xs">—</span>';
+        return;
+    }
+    $days = (int) floor((time() - $ts) / 86400);
+    $rel  = $days <= 0 ? 'আজ' : ($days === 1 ? 'গতকাল' : $days . ' দিন আগে');
+    ?>
+    <div class="text-xs text-gray-600 whitespace-nowrap" title="<?= e($raw) ?>"><?= e(date('d M', $ts)) ?></div>
+    <div class="text-[10px] text-gray-400 whitespace-nowrap"><?= e($rel) ?></div>
+    <?php
+}
+
+// ── ℹ️ "তথ্য" বোতাম — বাকি (কম দরকারি) ফিল্ডগুলো সারির নিচে ড্রয়ারে খোলে।
+// খাতার প্যানেলের মতোই কলাম না বাড়িয়ে নিচে খোলার নীতি (১৬ কলামে টেবিল কেটে যাচ্ছিল)।
+function reg_more_cell(array $row): void
+{
+    ?>
+    <button type="button" onclick="toggleInfoPanel(<?= (int) $row['id'] ?>)" title="বাকি তথ্য দেখুন/লুকান"
+            class="px-2 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">ℹ️ তথ্য</button>
+    <?php
+}
+
+// ── তথ্য-ড্রয়ার। 🔴 ভেতরে নেস্টেড <table> দেবেন না — মোবাইল কার্ড-CSS
+// (main .overflow-x-auto > table td) ভেঙে দেবে; grid/flex ব্যবহার করুন (খাতার প্যানেলের মতোই)।
+function reg_more_panel(array $row, int $colspan): void
+{
+    $rid = (int) $row['id'];
+    if (($row['type'] ?? '') === 'course') {
+        $fields = [
+            'জন্ম তারিখ'            => !empty($row['date_of_birth']) ? format_date_bn((string) $row['date_of_birth']) : '',
+            'ফেসবুক আইডি নাম'       => (string) ($row['facebook_id'] ?? ''),
+            'মোবাইল নাম্বার (বাবা)' => (string) ($row['father_mobile'] ?? ''),
+            'রিসিভার নাম'           => (string) ($row['receiver_name'] ?? ''),
+            'রিসিভার নাম্বার'       => (string) ($row['receiver_phone'] ?? ''),
+        ];
+    } else {
+        $fields = [
+            'ইমেইল'  => (string) ($row['email'] ?? ''),
+            'পরিমাণ' => (string) ((int) ($row['quantity'] ?? 0)),
+            'জেলা'   => (string) ($row['district'] ?? ''),
+            'থানা'   => (string) ($row['thana'] ?? ''),
+        ];
+    }
+    $fields['ঠিকানা']            = (string) ($row['address'] ?? '');
+    $fields['অভিভাবকের মন্তব্য'] = (string) ($row['notes'] ?? '');
+    $fields['খাতার নোট']         = (string) ($row['admin_note'] ?? '');
+    ?>
+    <tr class="reg-info-row" id="info-<?= $rid ?>" hidden>
+        <td colspan="<?= $colspan ?>" style="text-align:left;padding:0">
+            <div class="p-4" style="background:#F9FAFB;border-top:2px solid #E5E7EB">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <?php foreach ($fields as $label => $val): $val = trim((string) $val); ?>
+                        <div>
+                            <div class="text-[10px] text-gray-400 font-semibold"><?= e($label) ?></div>
+                            <?php if ($val !== ''): ?>
+                                <div class="text-sm text-gray-800 break-words"><?= e($val) ?></div>
+                            <?php else: ?>
+                                <div class="text-sm text-gray-300">—</div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <div class="mt-3">
+                    <a href="registrations.php?action=view&id=<?= $rid ?>" class="text-indigo-600 font-semibold text-sm">সম্পূর্ণ বিস্তারিত পাতায় যান →</a>
+                </div>
+            </div>
+        </td>
+    </tr>
+    <?php
+}
+
+// ── সারির বাঁ পাশে স্ট্যাটাসের রঙিন দাগ (inline style — কম্পাইলড Tailwind-এ border-l-4 রঙের
+// ক্লাসগুলো নেই, আর রিবিল্ড ছাড়া নতুন ক্লাস নীরবে কাজ করে না)
+function reg_row_style(array $row): string
+{
+    $colors = [
+        'pending'   => '#F59E0B',
+        'confirmed' => '#3B82F6',
+        'shipped'   => '#8B5CF6',
+        'delivered' => '#22C55E',
+        'cancelled' => '#EF4444',
+    ];
+    $c = $colors[$row['status'] ?? ''] ?? '#E5E7EB';
+    return 'box-shadow: inset 3px 0 0 ' . $c;
+}
+
 // ── গ্রুপে যোগ হয়েছে? (ফেসবুক / মেসেঞ্জার) — তালিকা থেকেই এক ট্যাপে টিক।
 // একই কলাম course-parcel.php-ও ব্যবহার করে (fb_group_added / messenger_group_added), তাই
 // দুই পেজে অবস্থা সবসময় এক থাকে। টিক তোলার সময় ওয়ার্নিং, টিক দেওয়ার সময় না (প্রথমবার-ছাড়া-পরে নিয়ম)।
@@ -667,10 +816,10 @@ function reg_group_cell(array $row, string $currentListUrl): void
         return;
     }
     $toggles = [
-        ['field' => 'fb',        'label' => 'ফেসবুক',    'column' => 'fb_group_added'],
-        ['field' => 'messenger', 'label' => 'মেসেঞ্জার', 'column' => 'messenger_group_added'],
+        ['field' => 'fb',        'label' => 'ফেসবুক',    'short' => 'F', 'column' => 'fb_group_added'],
+        ['field' => 'messenger', 'label' => 'মেসেঞ্জার', 'short' => 'M', 'column' => 'messenger_group_added'],
     ];
-    echo '<div class="flex flex-wrap gap-1.5">';
+    echo '<div class="flex gap-1">';
     foreach ($toggles as $t) {
         $on = !empty($row[$t['column']]);
         $onsubmit = $on
@@ -683,7 +832,7 @@ function reg_group_cell(array $row, string $currentListUrl): void
             <input type="hidden" name="field" value="<?= e($t['field']) ?>">
             <input type="hidden" name="value" value="<?= $on ? 0 : 1 ?>">
             <input type="hidden" name="return_url" value="<?= e($currentListUrl) ?>">
-            <button type="submit" title="<?= e($t['label']) ?> গ্রুপে যোগ হয়েছে?" class="px-2 py-1 rounded-lg text-xs font-semibold <?= $on ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-500 border border-gray-200' ?>"><?= $on ? '✓ ' : '' ?><?= e($t['label']) ?></button>
+            <button type="submit" title="<?= e($t['label']) ?> গ্রুপে যোগ হয়েছে?<?= $on ? ' (টিক দেওয়া আছে)' : '' ?>" class="w-7 h-7 rounded-full text-xs font-bold <?= $on ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400 border border-gray-200' ?>"><?= e($t['short']) ?></button>
         </form>
         <?php
     }
@@ -696,9 +845,8 @@ function reg_group_cell(array $row, string $currentListUrl): void
 function reg_pay_cell(array $row, array $summary): void
 {
     ?>
-    <button type="button" class="text-left" onclick="togglePayPanel(<?= (int) $row['id'] ?>)" title="টাকার খাতা খুলুন/বন্ধ করুন">
-        <?= pay_status_chip($summary) ?>
-        <div class="text-[11px] text-indigo-600 font-semibold mt-1">খাতা ▾</div>
+    <button type="button" class="text-left whitespace-nowrap" onclick="togglePayPanel(<?= (int) $row['id'] ?>)" title="টাকার খাতা খুলুন/বন্ধ করুন">
+        <?= pay_status_chip($summary) ?><span class="text-[10px] text-indigo-600 font-semibold"> ▾</span>
     </button>
     <?php
 }
@@ -885,134 +1033,142 @@ require __DIR__ . '/includes/layout-top.php';
         <?php endif; ?>
     </form>
 
-    <p class="text-sm text-gray-500 mb-4">মোট <strong><?= $totalRows ?></strong> টি ফলাফল<?= $totalPages > 1 ? " — পৃষ্ঠা {$page}/{$totalPages}" : '' ?></p>
+    <?php
+    // ── উপরের সারাংশ কার্ড (২০২৬-০৯-২৩): শুধু "মোট N টি ফলাফল" লাইনের বদলে এক নজরে
+    // কয়টা পেন্ডিং/কনফার্ম, কত টাকা বাকি, কত আয় অনুমোদিত। প্রথম তিনটা কার্ড ক্লিকযোগ্য
+    // (স্ট্যাটাস ফিল্টার বসায়); সংখ্যাগুলো স্ট্যাটাস **বাদে** বাকি ফিল্টার মেনে গণনা করা।
+    $sumCards = [
+        ['key' => '',          'label' => 'সব অর্ডার', 'value' => (int) ($listSummary['all_rows'] ?? $totalRows), 'color' => 'text-gray-800'],
+        ['key' => 'pending',   'label' => 'পেন্ডিং',   'value' => (int) ($listSummary['pending'] ?? 0),           'color' => 'text-amber-600'],
+        ['key' => 'confirmed', 'label' => 'কনফার্ম',   'value' => (int) ($listSummary['confirmed'] ?? 0),         'color' => 'text-green-600'],
+    ];
+    ?>
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+        <?php foreach ($sumCards as $card): $isOn = ($filterStatus === $card['key']); ?>
+            <a href="<?= e(reg_url(['status' => $card['key'] !== '' ? $card['key'] : null])) ?>"
+               class="block bg-white rounded-2xl shadow p-3 <?= $isOn ? 'border border-indigo-400' : '' ?>">
+                <div class="text-[11px] text-gray-500 font-semibold"><?= e($card['label']) ?></div>
+                <div class="text-2xl font-bold <?= $card['color'] ?>"><?= $card['value'] ?></div>
+            </a>
+        <?php endforeach; ?>
+        <div class="bg-white rounded-2xl shadow p-3">
+            <div class="text-[11px] text-gray-500 font-semibold">মোট বাকি</div>
+            <div class="text-xl font-bold text-red-600">৳<?= number_format((float) ($listSummary['due_total'] ?? 0), 0) ?></div>
+        </div>
+        <div class="bg-white rounded-2xl shadow p-3">
+            <div class="text-[11px] text-gray-500 font-semibold">অনুমোদিত আয়</div>
+            <div class="text-xl font-bold text-green-700">৳<?= number_format((float) ($listSummary['income_total'] ?? 0), 0) ?></div>
+        </div>
+    </div>
+
+    <p class="text-sm text-gray-500 mb-4">এই ফিল্টারে <strong><?= $totalRows ?></strong> টি ফলাফল<?= $totalPages > 1 ? " — পৃষ্ঠা {$page}/{$totalPages}" : '' ?></p>
 
     <div class="bg-white rounded-2xl shadow overflow-x-auto">
         <table class="w-full text-sm">
             <?php if ($filterType === 'course'): ?>
-            <!-- কোর্স রেজিস্ট্রেশন ফর্মে যে ফিল্ডগুলো নেওয়া হয় (course-register.php) হুবহু সেই ক্রমে -->
+            <!-- কোর্স: ৯ কলাম (আগে ১৬ ছিল) — নাম/ফোন/ঠিকানা এক ঘরে, আইটেম+ব্যাচ এক ঘরে,
+                 আর জন্ম তারিখ/ফেসবুক/বাবার মোবাইল/রিসিভার তথ্য "ℹ️ তথ্য" ড্রয়ারে (২০২৬-০৯-২৩) -->
             <thead>
                 <tr class="text-left text-gray-500 border-b bg-gray-50">
-                    <th class="py-3 px-4">আইটেম</th>
-                    <th class="py-3 px-4">ব্যাচ</th>
-                    <th class="py-3 px-4">শিশুর নাম</th>
-                    <th class="py-3 px-4">মোবাইল নাম্বার (মা)</th>
-                    <th class="py-3 px-4">জন্ম তারিখ</th>
-                    <th class="py-3 px-4">ফেসবুক আইডি নাম</th>
-                    <th class="py-3 px-4">মোবাইল নাম্বার (বাবা)</th>
-                    <th class="py-3 px-4">রিসিভার নাম</th>
-                    <th class="py-3 px-4">রিসিভার নাম্বার</th>
-                    <th class="py-3 px-4">ঠিকানা</th>
+                    <th class="py-3 px-4">শিক্ষার্থী</th>
+                    <th class="py-3 px-4">আইটেম / ব্যাচ</th>
                     <th class="py-3 px-4">স্ট্যাটাস</th>
-                    <th class="py-3 px-4">গ্রুপে যোগ</th>
+                    <th class="py-3 px-4">গ্রুপ</th>
                     <th class="py-3 px-4">টাকা</th>
                     <th class="py-3 px-4">আয়</th>
                     <th class="py-3 px-4">তারিখ</th>
+                    <th class="py-3 px-4">তথ্য</th>
                     <th class="py-3 px-4">অ্যাকশন</th>
                 </tr>
             </thead>
             <tbody>
             <?php if (!$rows): ?>
-                <tr><td colspan="16" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
+                <tr><td colspan="9" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
             <?php endif; ?>
             <?php foreach ($rows as $row): ?>
-                <tr class="border-b last:border-0 hover:bg-gray-50">
-                    <td class="py-2.5 px-4"><?= e($row['item_title']) ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['batch'] ?: '-') ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['customer_name']) ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['phone']) ?></td>
-                    <td class="py-2.5 px-4"><?= $row['date_of_birth'] ? e(format_date_bn($row['date_of_birth'])) : '-' ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['facebook_id'] ?: '-') ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['father_mobile'] ?: '-') ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['receiver_name'] ?: '-') ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['receiver_phone'] ?: '-') ?></td>
-                    <td class="py-2.5 px-4 max-w-[200px] truncate" title="<?= e($row['address'] ?? '') ?>"><?= e($row['address'] ?: '-') ?></td>
+                <tr class="border-b last:border-0" style="<?= e(reg_row_style($row)) ?>">
+                    <td class="py-2.5 px-4"><?php reg_person_cell($row); ?></td>
+                    <td class="py-2.5 px-4"><?php reg_item_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_status_cell($row, $statusLabels, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_group_cell($row, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_pay_cell($row, pay_summary($ledgerByReg[$row['id']] ?? [])); ?></td>
                     <td class="py-2.5 px-4"><?php reg_income_cell($row); ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['created_at']) ?></td>
+                    <td class="py-2.5 px-4"><?php reg_date_cell($row); ?></td>
+                    <td class="py-2.5 px-4"><?php reg_more_cell($row); ?></td>
                     <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
                 </tr>
-                <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 16); ?>
+                <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 9); ?>
+                <?php reg_more_panel($row, 9); ?>
             <?php endforeach; ?>
             </tbody>
             <?php elseif ($filterType === 'worksheet' || $filterType === 'product'): ?>
-            <!-- ওয়ার্কশিট/প্রোডাক্ট অর্ডার ফর্মে যে ফিল্ডগুলো নেওয়া হয় (register.php, দুটোই একই ফর্ম শেয়ার করে) হুবহু সেই ক্রমে -->
+            <!-- ওয়ার্কশিট/প্রোডাক্ট: ৮ কলাম (আগে ১১) — ইমেইল/জেলা/থানা/পরিমাণ তথ্য-ড্রয়ারে -->
             <thead>
                 <tr class="text-left text-gray-500 border-b bg-gray-50">
-                    <th class="py-3 px-4">মোবাইল নম্বর</th>
-                    <th class="py-3 px-4">নাম</th>
-                    <th class="py-3 px-4">ইমেইল</th>
-                    <th class="py-3 px-4">ঠিকানা</th>
+                    <th class="py-3 px-4">ক্রেতা</th>
                     <th class="py-3 px-4">আইটেম</th>
-                    <th class="py-3 px-4">পরিমাণ</th>
                     <th class="py-3 px-4">স্ট্যাটাস</th>
                     <th class="py-3 px-4">টাকা</th>
                     <th class="py-3 px-4">আয়</th>
                     <th class="py-3 px-4">তারিখ</th>
+                    <th class="py-3 px-4">তথ্য</th>
                     <th class="py-3 px-4">অ্যাকশন</th>
                 </tr>
             </thead>
             <tbody>
             <?php if (!$rows): ?>
-                <tr><td colspan="11" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
+                <tr><td colspan="8" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
             <?php endif; ?>
             <?php foreach ($rows as $row): ?>
-                <tr class="border-b last:border-0 hover:bg-gray-50">
-                    <td class="py-2.5 px-4"><?= e($row['phone']) ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['customer_name']) ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['email'] ?: '-') ?></td>
-                    <td class="py-2.5 px-4 max-w-[200px] truncate" title="<?= e($row['address'] ?? '') ?>"><?= e($row['address'] ?: '-') ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['item_title']) ?></td>
-                    <td class="py-2.5 px-4"><?= (int) $row['quantity'] ?></td>
+                <tr class="border-b last:border-0" style="<?= e(reg_row_style($row)) ?>">
+                    <td class="py-2.5 px-4"><?php reg_person_cell($row); ?></td>
+                    <td class="py-2.5 px-4"><?php reg_item_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_status_cell($row, $statusLabels, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_pay_cell($row, pay_summary($ledgerByReg[$row['id']] ?? [])); ?></td>
                     <td class="py-2.5 px-4"><?php reg_income_cell($row); ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['created_at']) ?></td>
+                    <td class="py-2.5 px-4"><?php reg_date_cell($row); ?></td>
+                    <td class="py-2.5 px-4"><?php reg_more_cell($row); ?></td>
                     <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
                 </tr>
-                <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 11); ?>
+                <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 8); ?>
+                <?php reg_more_panel($row, 8); ?>
             <?php endforeach; ?>
             </tbody>
             <?php else: ?>
-            <!-- "সব টাইপ" — কোর্স ও ওয়ার্কশিট/প্রোডাক্ট মিশ্রিত থাকে বলে দুই ফর্মেই কমন এমন ফিল্ড দেখানো হয়; নির্দিষ্ট টাইপ ফিল্টার করলে উপরের বিস্তারিত ভিউ পাওয়া যায় -->
+            <!-- "সব টাইপ" — মিশ্র টাইপ, তাই দুই ফর্মেই কমন ফিল্ড; নির্দিষ্ট টাইপ ফিল্টার করলে উপরের ভিউ -->
             <thead>
                 <tr class="text-left text-gray-500 border-b bg-gray-50">
                     <th class="py-3 px-4">নাম</th>
-                    <th class="py-3 px-4">ফোন</th>
                     <th class="py-3 px-4">টাইপ</th>
-                    <th class="py-3 px-4">আইটেম</th>
-                    <th class="py-3 px-4">ব্যাচ</th>
-                    <th class="py-3 px-4">ঠিকানা</th>
+                    <th class="py-3 px-4">আইটেম / ব্যাচ</th>
                     <th class="py-3 px-4">স্ট্যাটাস</th>
-                    <th class="py-3 px-4">গ্রুপে যোগ</th>
+                    <th class="py-3 px-4">গ্রুপ</th>
                     <th class="py-3 px-4">টাকা</th>
                     <th class="py-3 px-4">আয়</th>
                     <th class="py-3 px-4">তারিখ</th>
+                    <th class="py-3 px-4">তথ্য</th>
                     <th class="py-3 px-4">অ্যাকশন</th>
                 </tr>
             </thead>
             <tbody>
             <?php if (!$rows): ?>
-                <tr><td colspan="12" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
+                <tr><td colspan="10" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
             <?php endif; ?>
             <?php foreach ($rows as $row): ?>
-                <tr class="border-b last:border-0 hover:bg-gray-50">
-                    <td class="py-2.5 px-4"><?= e($row['customer_name']) ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['phone']) ?></td>
+                <tr class="border-b last:border-0" style="<?= e(reg_row_style($row)) ?>">
+                    <td class="py-2.5 px-4"><?php reg_person_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?= e($typeLabels[$row['type']] ?? $row['type']) ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['item_title']) ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['batch'] ?: '-') ?></td>
-                    <td class="py-2.5 px-4 max-w-[200px] truncate" title="<?= e($row['address'] ?? '') ?>"><?= e($row['address'] ?: '-') ?></td>
+                    <td class="py-2.5 px-4"><?php reg_item_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_status_cell($row, $statusLabels, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_group_cell($row, $currentListUrl); ?></td>
                     <td class="py-2.5 px-4"><?php reg_pay_cell($row, pay_summary($ledgerByReg[$row['id']] ?? [])); ?></td>
                     <td class="py-2.5 px-4"><?php reg_income_cell($row); ?></td>
-                    <td class="py-2.5 px-4"><?= e($row['created_at']) ?></td>
+                    <td class="py-2.5 px-4"><?php reg_date_cell($row); ?></td>
+                    <td class="py-2.5 px-4"><?php reg_more_cell($row); ?></td>
                     <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
                 </tr>
-                <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 12); ?>
+                <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 10); ?>
+                <?php reg_more_panel($row, 10); ?>
             <?php endforeach; ?>
             </tbody>
             <?php endif; ?>
@@ -1387,6 +1543,13 @@ require __DIR__ . '/includes/layout-top.php';
     // ── টাকার খাতা: প্যানেল টগল + লাইভ হিসাব (সার্ভারেও একই হিসাব হয়, এটা শুধু চোখের জন্য)
     function togglePayPanel(id) {
         var el = document.getElementById('pay-' + id);
+        if (el) { el.hidden = !el.hidden; }
+    }
+
+    // ── ℹ️ তথ্য-ড্রয়ার (খাতার প্যানেলের হুবহু একই কায়দায়) — কম দরকারি ফিল্ডগুলো
+    // কলাম না বাড়িয়ে সারির নিচে দেখায়
+    function toggleInfoPanel(id) {
+        var el = document.getElementById('info-' + id);
         if (el) { el.hidden = !el.hidden; }
     }
 
