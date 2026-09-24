@@ -232,6 +232,13 @@ function pay_collect_slots(array $batch, int $months): int
     return $n > 0 ? min(60, $n) : max(1, $months);
 }
 
+// সংখ্যাটা পড়ার মতো করে (1.5 → "1.5", 2.00 → "2", 1.666 → "1.67") — লেবেলে বসাতে।
+// সংখ্যা ইংরেজিতেই (প্রজেক্ট কনভেনশন — বাংলা অঙ্ক পড়া কঠিন)।
+function pay_trim_number(float $v): string
+{
+    return rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.');
+}
+
 // মোট টাকা কয়েক কিস্তিতে ভাগ — যোগফল সবসময় হুবহু মোটের সমান থাকে
 // (পয়সার অবশিষ্ট আগের কিস্তিগুলোতে বসে; যেমন ৫০০ ÷ ৩ = 166.67 + 166.67 + 166.66)।
 function pay_split_amount(float $total, int $parts): array
@@ -337,13 +344,15 @@ function pay_build_plan(PDO $db, array $reg): array
 
     // লেবেল: মাস-ভিত্তিক ভাগে (বা টাকা সমান ভাগ যখন মাসের সীমার সাথে হুবহু মেলে) আগের
     // "১ম–২য় মাস" লেখাই থাকে — পুরনো খাতা/কুরিয়ারের লেবেলের সাথে এক থাকে। মাসের সীমা না
-    // মিললে (৩ মাস ২ কিস্তিতে = দেড় মাস করে) মাসের নামে লেখা যায় না, তাই কিস্তির নম্বর।
+    // মিললে (৩ মাস ২ কিস্তিতে = দেড় মাস করে) মাসের নামে লেখা যায় না, তাই কিস্তির নম্বর
+    // **আর কত মাসের টাকা সেটাও** — "বেতন (কিস্তি 1/2 — 1.5 মাস)"।
     $useMonthLabels = ($splitMode === 'months') || ($months % $tuitionParts === 0);
+    $perPart        = pay_trim_number($months / $tuitionParts);
 
     foreach ($monthGroups as $i => $group) {
         $label = $useMonthLabels
             ? pay_month_span_label($group[0], $group[1])
-            : 'বেতন (কিস্তি ' . ($i + 1) . '/' . $tuitionParts . ')';
+            : 'বেতন (কিস্তি ' . ($i + 1) . '/' . $tuitionParts . ' — ' . $perPart . ' মাস)';
         $slot  = $slotGroups[min($i, count($slotGroups) - 1)];
         $rows[] = pay_blank_row($seq++, 'monthly', $label, (float) ($amounts[$i] ?? 0), $slot[0], $slot[1]);
     }

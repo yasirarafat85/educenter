@@ -908,11 +908,20 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                     <?php if ($isNew): ?>
                         <span class="text-xs text-indigo-700 font-semibold">কোর্সের সেটিংস দেখে কিস্তিগুলো বসানো হয়েছে — মিলিয়ে নিয়ে সেভ করুন<?php if ($prefill > 0): ?> (আগে অনুমোদিত আয় ৳<?= $money($prefill) ?> জমা হিসেবে বসানো)<?php endif; ?></span>
                     <?php else: ?>
-                        <?php // পুরনো (মাইগ্রেশনে বসানো) খাতা — কোর্সের সেটিংস দেখে কিস্তিতে ভাগ করে দেওয়া যায় ?>
-                        <button type="button" class="pay-rebuild text-xs font-bold px-3 py-1 rounded-lg <?= $isLegacy ? 'bg-amber-100 text-amber-800' : 'text-gray-500' ?>"
-                                title="কোর্সের রেজিস্ট্রেশন ফি ও মাস দেখে কিস্তিগুলো নতুন করে বসাবে (মোট জমা অপরিবর্তিত থাকবে)">🧩 কিস্তির ছকে সাজান</button>
+                        <?php // 🔑 সেভ করা খাতা নিজে থেকে কখনো বদলায় না (টাকার হিসাব নীরবে নড়তে পারে না) —
+                              // ব্যাচের ফি/কিস্তির সেটিংস বদলালে অ্যাডমিন নিজে এই বোতামে নতুন করে বসান। ?>
+                        <button type="button" class="pay-rebuild text-xs font-bold px-3 py-1 rounded-lg bg-amber-100 text-amber-800"
+                                title="কোর্সের বর্তমান ফি, মাস ও কিস্তি-সংখ্যা দেখে কিস্তিগুলো নতুন করে বসাবে (মোট জমা অপরিবর্তিত থাকবে)">🧩 কিস্তির ছকে সাজান</button>
                     <?php endif; ?>
                 </div>
+
+                <?php if (!$isNew && !$isLegacy): ?>
+                    <p class="text-xs bg-amber-50 text-amber-800 rounded-xl px-3 py-2 mb-2">
+                        এই খাতা <strong>আগেই সেভ করা</strong> — কোর্সের ফি বা কিস্তির সেটিংস পরে বদলালে এখানে নিজে থেকে বসে না।
+                        উপরের <strong>“🧩 কিস্তির ছকে সাজান”</strong> চাপলে বর্তমান সেটিংস অনুযায়ী কিস্তিগুলো নতুন করে বসবে।
+                        <strong>মোট জমা ও আয় বদলাবে না।</strong>
+                    </p>
+                <?php endif; ?>
 
                 <?php if ($isLegacy): ?>
                     <p class="text-xs bg-amber-50 text-amber-800 rounded-xl px-3 py-2 mb-2">
