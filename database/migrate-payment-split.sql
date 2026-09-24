@@ -18,8 +18,8 @@
 -- ─────────────────────────────────────────────────────────────
 
 ALTER TABLE course_batches
-    ADD COLUMN tuition_split_mode VARCHAR(10) NOT NULL DEFAULT '' AFTER tuition_installments;
+    ADD COLUMN IF NOT EXISTS tuition_split_mode VARCHAR(10) NOT NULL DEFAULT '' AFTER tuition_installments;
 
 ALTER TABLE registration_payments
-    ADD COLUMN month_from SMALLINT UNSIGNED NULL DEFAULT NULL AFTER label,
-    ADD COLUMN month_to   SMALLINT UNSIGNED NULL DEFAULT NULL AFTER month_from;
+    ADD COLUMN IF NOT EXISTS month_from SMALLINT UNSIGNED NULL DEFAULT NULL AFTER label,
+    ADD COLUMN IF NOT EXISTS month_to   SMALLINT UNSIGNED NULL DEFAULT NULL AFTER month_from;
