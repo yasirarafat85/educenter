@@ -7,6 +7,12 @@ if (session_status() === PHP_SESSION_NONE) {
     $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
 
+    // ⏳ সেশনের আয়ু (২০২৬-০৯-২৪): ডিফল্ট মাত্র ২৪ মিনিট (gc_maxlifetime=1440) — কোর্স ফর্ম
+    // পূরণ করতে অনেক অভিভাবকের এর চেয়ে বেশি সময় লাগে (জন্ম তারিখ/বাবার নম্বর খুঁজতে হয়),
+    // তখন সেশন মুছে গিয়ে "ফর্ম টোকেন মিলছে না" এরর আসত।
+    @ini_set('session.gc_maxlifetime', '86400');   // ২৪ ঘণ্টা
+    @ini_set('session.use_strict_mode', '1');      // session fixation গার্ড
+
     // সেশন কুকি হার্ডেনিং — HttpOnly (JS দিয়ে কুকি পড়া যাবে না), SameSite (CSRF ঠেকাতে সাহায্য করে),
     // Secure (HTTPS এ থাকলে শুধু HTTPS এই কুকি পাঠানো হবে)
     session_set_cookie_params([
@@ -72,13 +78,51 @@ function get_flash(): ?array
     return null;
 }
 
-// CSRF টোকেন
+// ============================================================================
+//  CSRF টোকেন — সেশন + দীর্ঘমেয়াদি কুকি (double-submit, ২০২৬-০৯-২৪)
+// ============================================================================
+//  🔴 কেন কুকিও লাগে: টোকেন আগে **শুধু সেশনে** থাকত। শেয়ার্ড হোস্টে সেশন ফাইল অল্প সময়েই
+//  (ডিফল্ট gc_maxlifetime=২৪ মিনিট, আর /tmp শেয়ার্ড বলে আরও আগেও) মুছে যেতে পারে — ফর্ম
+//  খোলা রেখে ধীরে পূরণ করা অভিভাবক সাবমিট করলে "ফর্ম টোকেন মিলছে না" পেয়ে আটকে যেতেন
+//  (২০২৬-০৯-২৪-এ একজন আসল কাস্টমারের কোর্স রেজিস্ট্রেশন ঠিক এভাবে আটকেছিল)। এখন একই
+//  টোকেন ৭ দিনের কুকিতেও থাকে, তাই সেশন মুছে গেলেও সাবমিট কাজ করে।
+//  🔴 নিরাপত্তা অটুট: কুকিটা **HttpOnly** (JS পড়তে পারে না) **ও SameSite=Lax** — অন্য সাইট
+//  থেকে POST করলে ব্রাউজার কুকিটা পাঠায়ই না, আর আক্রমণকারী টোকেনটা পড়তেও পারে না। তাই
+//  ফর্ম-ফিল্ড ও কুকিতে একই মান থাকা এখনো "একই ব্রাউজার, আমাদের সাইট" প্রমাণ করে।
+
+const CSRF_COOKIE_NAME = 'edu_csrf';
+const CSRF_COOKIE_DAYS = 7;
+
+function csrf_cookie_params(): array
+{
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    return [
+        'expires'  => time() + CSRF_COOKIE_DAYS * 86400,
+        'path'     => '/',
+        'secure'   => $isHttps,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ];
+}
+
 function csrf_token(): string
 {
+    $cookie = (string) ($_COOKIE[CSRF_COOKIE_NAME] ?? '');
+    $valid  = (bool) preg_match('/^[a-f0-9]{64}$/', $cookie);
+
     if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        // সেশন নতুন/হারানো — কুকির টোকেনটাই ফিরিয়ে আনি, নাহলে আগে খোলা ট্যাবের ফর্মটা অচল হয়ে যেত
+        $_SESSION['csrf_token'] = $valid ? $cookie : bin2hex(random_bytes(32));
     }
-    return $_SESSION['csrf_token'];
+    $token = $_SESSION['csrf_token'];
+
+    // কুকিতে না থাকলে বা আলাদা হলে বসিয়ে দিই (প্রতিবার মেয়াদও রিফ্রেশ হয়)
+    if ($cookie !== $token && !headers_sent()) {
+        setcookie(CSRF_COOKIE_NAME, $token, csrf_cookie_params());
+        $_COOKIE[CSRF_COOKIE_NAME] = $token;
+    }
+    return $token;
 }
 
 function csrf_field(): string
@@ -88,8 +132,21 @@ function csrf_field(): string
 
 function csrf_verify(): bool
 {
-    return isset($_POST['csrf_token'], $_SESSION['csrf_token'])
-        && hash_equals($_SESSION['csrf_token'], $_POST['csrf_token']);
+    $posted = (string) ($_POST['csrf_token'] ?? '');
+    if ($posted === '') {
+        return false;
+    }
+    $session = (string) ($_SESSION['csrf_token'] ?? '');
+    if ($session !== '' && hash_equals($session, $posted)) {
+        return true;
+    }
+    // সেশন হারিয়ে গেছে কিন্তু কুকি মিলছে — গ্রহণ করি এবং সেশনটা মেরামত করে দিই
+    $cookie = (string) ($_COOKIE[CSRF_COOKIE_NAME] ?? '');
+    if ($cookie !== '' && hash_equals($cookie, $posted)) {
+        $_SESSION['csrf_token'] = $cookie;
+        return true;
+    }
+    return false;
 }
 
 // সব সেটিংস key-value আকারে লোড করা (ক্যাশ করা হয় একই রিকোয়েস্টে বারবার কোয়েরি এড়াতে)

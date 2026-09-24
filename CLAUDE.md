@@ -250,6 +250,16 @@ PHP `require`/`include` একই global scope শেয়ার করে। �
 - `registrations.due_amount` — এখন **পেমেন্ট খাতা থেকে অটো হিসাব** হয়ে ডিনরমালাইজড বসে (আসল উৎস `registration_payments`)। `admin_note` অ্যাডমিনের সাধারণ মন্তব্য। 🔴 **আয়ের হিসাবের সাথে কোনো সম্পর্ক নেই**; `admin_note` গ্রাহকের নিজের `notes` ও কুরিয়ার-নোট (`registration_courier_notes`) দুটো থেকেই আলাদা
 - `registrations` এ course-specific কলাম: `date_of_birth`, `facebook_id`, `father_mobile`, `receiver_name`, `receiver_phone` (worksheet/product এর জন্য NULL থাকে, generic `district`/`thana` ব্যবহার হয় না কোর্সে)
 
+## ⚠️ CSRF টোকেন + সেশনের আয়ু (২০২৬-০৯-২৪, আসল বাগ থেকে শেখা)
+
+**লক্ষণ**: পাবলিক ফর্মে "ফর্ম টোকেন মিলছে না" — একজন আসল কাস্টমারের কোর্স রেজিস্ট্রেশন আটকে গিয়েছিল (`admin/registration-errors.php`-এ ধরা পড়ে)। **কারণ**: টোকেন থাকত শুধু সেশনে, আর PHP ডিফল্ট `session.gc_maxlifetime` = **২৪ মিনিট**; ফর্ম পূরণে তার বেশি সময় লাগলেই সেশন (ও টোকেন) মুছে যেত।
+
+- **double-submit কুকি** (`includes/functions.php`): `CSRF_COOKIE_NAME='edu_csrf'`, ৭ দিন। `csrf_token()` সেশন **ও** কুকি দুটোতেই একই মান রাখে (সেশন খালি হলে কুকির মানটাই ফিরিয়ে আনে, তাই আগে খোলা ট্যাবের ফর্ম অচল হয় না); `csrf_verify()` **সেশন অথবা কুকি** মিললে পাস + সেশন মেরামত করে।
+- **🔴 কুকির তিনটা শর্ত শিথিল করবেন না**: `httponly` (JS পড়তে পারবে না), `samesite=Lax` (**এটাই আসল CSRF গার্ড** — অন্য সাইট থেকে POST-এ কুকি যায় না), `secure` HTTPS-এ। এগুলোর একটাও বাদ দিলে double-submit আর নিরাপদ থাকে না।
+- **সেশন**: `@ini_set('session.gc_maxlifetime', 86400)` + `use_strict_mode=1`, `session_start()`-এর **আগে** (functions.php-এর শুরুতেই)।
+- **নিয়ম**: নতুন পাবলিক ফর্ম বানালে `csrf_field()`+`csrf_verify()`-ই ব্যবহার করুন (নিজের টোকেন-লজিক লিখবেন না), আর ব্যর্থ হলে **POST ডেটা সেশনে রেখে ফর্মে ফেরত পাঠান** (`$_SESSION['<form>_old']` প্যাটার্ন — course-register/register/course-interest তিনটাতেই আছে), যাতে কাস্টমারের লেখা কখনো না হারায়।
+- ⏭️ **এখনো বাকি (ঐচ্ছিক)**: সেশন ফাইল নিজের ফোল্ডারে (`session_save_path`) সরানো — শেয়ার্ড `/tmp`-এ অন্য অ্যাকাউন্টের GC যেন আমাদের সেশন না মোছে। ⚠️ করলে একবার সবাই লগআউট হবে ও নিজস্ব ক্লিনআপ (cron) লাগবে, তাই এখনো করা হয়নি।
+
 ## নিরাপত্তা (ইতিমধ্যে ইমপ্লিমেন্টেড)
 Brute-force protection (login_attempts, ৫/১৫মিন), CSRF সব ফর্মে, session hardening (HttpOnly/SameSite/Secure), **অ্যাডমিন নিষ্ক্রিয়তা-টাইমআউট (`ADMIN_IDLE_TIMEOUT_MINUTES=30`, `admin/includes/auth.php` — `admin_require_login()` এ sliding idle timeout, এক্সপায়ারে `login.php?expired=1`)**, security headers, `includes/` ফোল্ডার ব্লক (.htaccess), HTTPS enforcement (DEV_MODE=false এ), ফোন-লুকআপ রেট-লিমিট, ফাইল আপলোড MIME-check + random filename। **পাবলিক ফর্ম স্প্যাম-প্রোটেকশন** (২০২৬-০৭-১৫): রেজিস্ট্রেশন/অর্ডার ফর্মে honeypot (`website` হিডেন ফিল্ড) + টাইমিং (`form_ts`, ৩s এর কমে বট) + IP রেট-লিমিট (`form_submit_attempts` টেবিল, ৮/১০মিন) — হেল্পার `spam_protection_fields()`/`is_spam_submission()`/`form_submit_rate_limited()`/`form_record_submit()`/`client_ip()` (functions.php); ফর্মে `csrf_field()` এর পাশে `spam_protection_fields()`, submit স্ক্রিপ্টে CSRF-এর পর চেক।
 

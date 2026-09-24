@@ -19,7 +19,7 @@ function course_interest_fail(string $msg, string $backUrl): void
 }
 
 if (!csrf_verify()) {
-    course_interest_fail('ফর্ম টোকেন মিলছে না, আবার চেষ্টা করুন।', $backUrl);
+    course_interest_fail('নিরাপত্তা যাচাই মেয়াদোত্তীর্ণ হয়েছিল। আপনার তথ্য ঠিক আছেই — নিচের ফর্মে আর একবার সাবমিট করুন।', $backUrl);
 }
 
 // স্প্যাম-প্রোটেকশন: honeypot ভরা বা খুব দ্রুত সাবমিট হলে নীরবে বাতিল

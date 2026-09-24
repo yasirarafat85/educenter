@@ -74,7 +74,11 @@ require __DIR__ . '/includes/layout-top.php';
                     <td class="py-2.5 px-4"><span class="text-xs font-semibold px-2 py-0.5 rounded-lg <?= $typeClass[$r['form_type']] ?? 'bg-gray-100 text-gray-600' ?>"><?= e($typeLabel[$r['form_type']] ?? $r['form_type']) ?></span></td>
                     <td class="py-2.5 px-4 font-semibold text-red-700 break-words"><?= e($r['error_message']) ?></td>
                     <td class="py-2.5 px-4"><?= e($r['entered_name'] ?: '—') ?></td>
-                    <td class="py-2.5 px-4 font-mono whitespace-nowrap"><?= e($r['entered_phone'] ?: '—') ?></td>
+                    <td class="py-2.5 px-4 font-mono whitespace-nowrap">
+                        <?php if ($r['entered_phone']): ?>
+                            <a href="tel:<?= e($r['entered_phone']) ?>" class="text-indigo-600 font-semibold">📞 <?= e($r['entered_phone']) ?></a>
+                        <?php else: ?>—<?php endif; ?>
+                    </td>
                     <td class="py-2.5 px-4 text-xs text-gray-400 whitespace-nowrap"><?= e(function_exists('format_ip_display') ? format_ip_display($r['ip_address']) : $r['ip_address']) ?></td>
                 </tr>
             <?php endforeach; ?>
