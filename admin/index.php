@@ -144,6 +144,10 @@ $taskDefs = [
      'label' => 'নতুন অভিভাবক অ্যাকাউন্ট', 'hint' => 'approve করা বাকি', 'cls' => 'bg-blue-100 text-blue-600', 'num' => 'text-blue-600',
      'sql' => "SELECT COUNT(*) c FROM users WHERE status = 'pending'"],
 
+    ['page' => 'user-requests.php', 'url' => 'user-requests.php?status=new', 'icon' => 'message-square',
+     'label' => 'অভিভাবকের বার্তা', 'hint' => 'অনুরোধ/মন্তব্য দেখা বাকি', 'cls' => 'bg-blue-100 text-blue-600', 'num' => 'text-blue-600',
+     'sql' => "SELECT COUNT(*) c FROM user_requests WHERE status = 'new'"],
+
     ['page' => 'course-interests.php', 'url' => 'course-interests.php?status=new', 'icon' => 'heart-handshake',
      'label' => 'নতুন আগ্রহ', 'hint' => 'এখনো যোগাযোগ হয়নি', 'cls' => 'bg-pink-100 text-pink-600', 'num' => 'text-pink-600',
      'sql' => "SELECT COUNT(*) c FROM course_interests WHERE status = 'new'"],

@@ -46,12 +46,18 @@ function user_attempt_login(string $phone, string $password, ?string &$reason = 
         return false;
     }
 
+    user_establish_session($u);
+    $reason = null;
+    return true;
+}
+
+// সেশন বসানো — পাসওয়ার্ড লগইন, গুগল লগইন ও "মনে রাখো" তিন পথেই এটাই ব্যবহার হয় (DRY)
+function user_establish_session(array $u): void
+{
     session_regenerate_id(true);
     $_SESSION['user_id'] = $u['id'];
     $_SESSION['user_phone'] = $u['phone'];
     $_SESSION['user_name'] = $u['full_name'];
-    $reason = null;
-    return true;
 }
 
 function user_logged_in(): bool
@@ -96,6 +102,101 @@ function user_current(): ?array
 
 function user_logout(): void
 {
+    // "মনে রাখো" টোকেনও বাতিল — নাহলে লগআউটের পরেও কুকি দিয়ে আবার ঢুকে যেত
+    user_remember_clear();
     // শুধু ইউজার-সংক্রান্ত সেশন কী মুছি (অ্যাডমিন একই ব্রাউজারে লগইন থাকলে সেটা যেন না ভাঙে)
     unset($_SESSION['user_id'], $_SESSION['user_phone'], $_SESSION['user_name']);
 }
+
+// ============================================================================
+//  "মনে রাখো" — দীর্ঘমেয়াদি লগইন (২০২৬-০৯-২৪)
+// ============================================================================
+//  🔴 নিরাপত্তার নিয়ম: কুকিতে থাকে **কাঁচা র‍্যান্ডম মান**, ডাটাবেসে থাকে শুধু তার
+//  sha256 হ্যাশ — DB ফাঁস হলেও ঐ হ্যাশ দিয়ে কেউ লগইন করতে পারবে না। প্রতিবার ব্যবহারে
+//  টোকেন **ঘুরিয়ে** দেওয়া হয় (পুরনো কুকি চুরি হলে আর কাজ করে না), আর লগআউটে মুছে যায়।
+//  সেশন-কুকির বদলে আলাদা কুকি — সেশন ছোট থাকে, শেয়ার্ড হোস্টের session GC ছোঁয় না।
+
+const USER_REMEMBER_COOKIE = 'edu_remember';
+const USER_REMEMBER_DAYS = 30;
+
+function user_remember_cookie_params(int $expires): array
+{
+    return [
+        'expires'  => $expires,
+        'path'     => '/',
+        'secure'   => !(defined('DEV_MODE') && DEV_MODE),   // লাইভে HTTPS-only
+        'httponly' => true,                                  // JS পড়তে পারবে না
+        'samesite' => 'Lax',
+    ];
+}
+
+// লগইনের সময় "মনে রাখুন" টিক দিলে — নতুন টোকেন তৈরি + কুকি বসানো
+function user_remember_issue(int $userId): void
+{
+    try {
+        $raw  = bin2hex(random_bytes(32));
+        $db   = get_db();
+        $db->prepare('INSERT INTO user_remember_tokens (user_id, token_hash, expires_at)
+                      VALUES (:u, :h, DATE_ADD(NOW(), INTERVAL ' . (int) USER_REMEMBER_DAYS . ' DAY))')
+           ->execute(['u' => $userId, 'h' => hash('sha256', $raw)]);
+        setcookie(USER_REMEMBER_COOKIE, $raw, user_remember_cookie_params(time() + USER_REMEMBER_DAYS * 86400));
+        $db->exec('DELETE FROM user_remember_tokens WHERE expires_at < NOW()');   // পুরনো পরিষ্কার
+    } catch (Throwable $e) {
+        // টেবিল না থাকলে (মাইগ্রেশন চালানো হয়নি) — সাধারণ লগইন তবু কাজ করবে
+    }
+}
+
+// কুকি + DB টোকেন মুছে ফেলা (লগআউট / অবৈধ টোকেন)
+function user_remember_clear(): void
+{
+    $raw = (string) ($_COOKIE[USER_REMEMBER_COOKIE] ?? '');
+    if ($raw !== '') {
+        try {
+            get_db()->prepare('DELETE FROM user_remember_tokens WHERE token_hash = :h')
+                    ->execute(['h' => hash('sha256', $raw)]);
+        } catch (Throwable $e) {
+            // উপেক্ষা
+        }
+    }
+    if (isset($_COOKIE[USER_REMEMBER_COOKIE])) {
+        setcookie(USER_REMEMBER_COOKIE, '', user_remember_cookie_params(time() - 3600));
+        unset($_COOKIE[USER_REMEMBER_COOKIE]);
+    }
+}
+
+// পেজ লোডে — সেশন নেই কিন্তু বৈধ কুকি আছে? তাহলে নিজে থেকেই লগইন করিয়ে দাও।
+// 🔴 status='approved' না হলে কখনো নয় (ব্লক করা অ্যাকাউন্ট কুকি দিয়ে ফিরতে পারবে না)।
+function user_try_remember_login(): void
+{
+    if (user_logged_in()) {
+        return;
+    }
+    $raw = (string) ($_COOKIE[USER_REMEMBER_COOKIE] ?? '');
+    if ($raw === '' || !preg_match('/^[a-f0-9]{64}$/', $raw)) {
+        return;
+    }
+    try {
+        $db = get_db();
+        $stmt = $db->prepare(
+            'SELECT t.id AS token_id, u.* FROM user_remember_tokens t
+             JOIN users u ON u.id = t.user_id
+             WHERE t.token_hash = :h AND t.expires_at > NOW() LIMIT 1'
+        );
+        $stmt->execute(['h' => hash('sha256', $raw)]);
+        $row = $stmt->fetch();
+        if (!$row || $row['status'] !== 'approved') {
+            user_remember_clear();
+            return;
+        }
+        // ব্যবহৃত টোকেন মুছে নতুন একটা বসাই (rotation) — পুরনো কুকি আর কাজ করবে না
+        $db->prepare('DELETE FROM user_remember_tokens WHERE id = :id')->execute(['id' => (int) $row['token_id']]);
+        user_establish_session($row);
+        user_remember_issue((int) $row['id']);
+    } catch (Throwable $e) {
+        // টেবিল না থাকলে/কোয়েরি ব্যর্থ — চুপচাপ সাধারণ লগইন পেজে
+    }
+}
+
+// ফাইল লোড হওয়া মানেই অভিভাবক-এলাকার কোনো পেজ — সেশন না থাকলে "মনে রাখো" কুকি দিয়ে
+// একবার অটো-লগইনের চেষ্টা (setcookie আউটপুটের আগে চলতে হয় বলে এখানেই, পেজের শুরুতে)
+user_try_remember_login();

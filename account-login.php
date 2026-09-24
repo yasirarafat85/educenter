@@ -39,6 +39,11 @@ require __DIR__ . '/includes/site-header.php';
                     <input type="password" name="password" required placeholder="আপনার পাসওয়ার্ড"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none">
                 </div>
+                <label class="flex items-center gap-2.5 text-white text-sm font-semibold cursor-pointer">
+                    <input type="checkbox" name="remember" value="1" checked class="w-4 h-4 rounded">
+                    <span>এই ডিভাইসে আমাকে মনে রাখুন (৩০ দিন)</span>
+                </label>
+
                 <button type="submit" class="w-full py-3.5 rounded-xl font-bold text-base text-white shadow-lg active:scale-[0.98] transition-transform" style="background: linear-gradient(135deg, rgb(var(--c-primary-2)) 0%, rgb(var(--c-primary)) 100%);">
                     লগইন করুন
                 </button>

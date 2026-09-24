@@ -108,6 +108,7 @@ function admin_nav_groups(): array
     }
     if (admin_can('users')) {
         $orders[] = ['key' => 'users', 'href' => 'users.php', 'file' => 'users.php', 'icon' => 'users', 'label' => 'অভিভাবক অ্যাকাউন্ট'];
+        $orders[] = ['key' => 'user-requests', 'href' => 'user-requests.php', 'file' => 'user-requests.php', 'icon' => 'message-square', 'label' => 'অনুরোধ / মন্তব্য'];
     }
     if (admin_can('courier')) {
         $orders[] = ['key' => 'courier',          'href' => 'courier.php',          'file' => 'courier.php',          'icon' => 'truck',          'label' => 'কুরিয়ার'];

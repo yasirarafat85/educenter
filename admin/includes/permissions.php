@@ -60,6 +60,7 @@ function admin_page_sections(): array
         'send-to-courier.php'       => ['courier'],
         'courier-note-assign.php'   => ['courier', 'parcel'],
         'users.php'                 => ['users'],
+        'user-requests.php'         => ['users'],
         'registration-errors.php'   => ['logs'],
         'download-logs.php'         => ['logs'],
         'visitor-logs.php'          => ['logs'],

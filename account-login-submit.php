@@ -30,6 +30,9 @@ if (user_login_rate_limited($phone)) {
 $reason = null;
 if (user_attempt_login($phone, $password, $reason)) {
     user_record_login_attempt($phone, true);
+    if (!empty($_POST['remember'])) {
+        user_remember_issue(user_id());   // ৩০ দিনের কুকি (টেবিল না থাকলে চুপচাপ বাদ)
+    }
     redirect('account');
 }
 
