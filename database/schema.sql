@@ -636,8 +636,11 @@ CREATE TABLE course_interests (
     contact_phone VARCHAR(20)  NOT NULL,               -- যোগাযোগ নাম্বার
     phone_owner   VARCHAR(10)  NOT NULL DEFAULT 'mother', -- 'mother' / 'father'
     child_name    VARCHAR(150) DEFAULT NULL,           -- শিশুর নাম
+    child_dob     DATE         DEFAULT NULL,           -- শিশুর জন্ম তারিখ (বয়স অটো হিসাব, "বয়স কম" লিড পরে ডাকতে)
     facebook_name VARCHAR(150) DEFAULT NULL,           -- ফেসবুক আইডির নাম
     remarks       VARCHAR(500) DEFAULT NULL,           -- মন্তব্য
+    reason        VARCHAR(20)  NOT NULL DEFAULT '',    -- কেন এখন পারছেন না: age/busy/money/just_looking/other
+    start_when    VARCHAR(20)  NOT NULL DEFAULT '',    -- কবে শুরু করতে চান: now/1_3m/6m/unsure
     status        VARCHAR(20)  NOT NULL DEFAULT 'new', -- new / contacted
     ip_address    VARCHAR(45)  DEFAULT NULL,
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

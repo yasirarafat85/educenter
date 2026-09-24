@@ -11,7 +11,7 @@ $urls = [];
 
 // ক্লিন URL (.htaccess রিরাইট) — index → রুট, বাকি পেজ extensionless, detail → detail?type=..&id=..
 $urls[] = [$base . '/', '1.0'];
-foreach (['courses', 'worksheets', 'products', 'notice', 'teachers', 'reviews', 'about', 'gallery', 'faqs'] as $p) {
+foreach (['courses', 'worksheets', 'products', 'notice', 'teachers', 'reviews', 'about', 'gallery', 'faqs', 'course-interest'] as $p) {
     $urls[] = [$base . '/' . $p, '0.8'];
 }
 

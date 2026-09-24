@@ -51,6 +51,22 @@ $childName    = trim($_POST['child_name'] ?? '');
 $facebookName = trim($_POST['facebook_name'] ?? '');
 $remarks      = trim($_POST['remarks'] ?? '');
 
+// ── নতুন তিন ঘর (২০২৬-০৯-২৪)। তিনটাই ঐচ্ছিক — বাধ্যতামূলক করলে ফর্ম ছেড়ে চলে যেতেন অনেকে।
+// 🔴 ড্রপডাউনের মান সবসময় হোয়াইটলিস্ট করে নেওয়া হয় (POST-এ যা এসেছে তা বিশ্বাস করা হয় না)।
+$reason    = (string) ($_POST['reason'] ?? '');
+$reason    = isset(interest_reasons()[$reason]) ? $reason : '';
+$startWhen = (string) ($_POST['start_when'] ?? '');
+$startWhen = isset(interest_timeframes()[$startWhen]) ? $startWhen : '';
+
+$childDob = trim($_POST['child_dob'] ?? '');
+if ($childDob !== '') {
+    $d = DateTime::createFromFormat('Y-m-d', $childDob);
+    $okFormat = $d && $d->format('Y-m-d') === $childDob;      // 2026-02-31 জাতীয় তারিখ ধরা পড়ে
+    if (!$okFormat || $childDob > date('Y-m-d') || $childDob < date('Y-m-d', strtotime('-30 years'))) {
+        course_interest_fail('জন্ম তারিখটি ঠিক মনে হচ্ছে না — আবার দেখে দিন (অথবা খালি রাখুন)।', $backUrl);
+    }
+}
+
 if (!is_valid_bd_phone($contactPhone)) {
     course_interest_fail('সঠিক যোগাযোগ নাম্বার দিন (যেমন: 017xxxxxxxx)।', $backUrl);
 }
@@ -58,13 +74,7 @@ if ($childName === '') {
     course_interest_fail('শিশুর নাম দিন।', $backUrl);
 }
 
-$stmt = $db->prepare(
-    'INSERT INTO course_interests
-        (batch_id, item_title, batch_name, contact_phone, phone_owner, child_name, facebook_name, remarks, ip_address)
-     VALUES
-        (:batch_id, :item_title, :batch_name, :contact_phone, :phone_owner, :child_name, :facebook_name, :remarks, :ip)'
-);
-$stmt->execute([
+$baseParams = [
     'batch_id'      => $courseId,
     'item_title'    => $course['title'],
     'batch_name'    => $course['batch_name'] ?: null,
@@ -74,7 +84,35 @@ $stmt->execute([
     'facebook_name' => $facebookName ?: null,
     'remarks'       => $remarks ?: null,
     'ip'            => $spamIp,
-]);
+];
+
+// ⚠️ নতুন তিন কলামের মাইগ্রেশন (migrate-course-interest-fields.sql) না চালিয়ে ফাইল ডিপ্লয় হলে
+// INSERT ভাঙত — তাই আগে নতুন কলামসহ চেষ্টা, ব্যর্থ হলে পুরনো কলাম-সেটে ফলব্যাক।
+// ফলে অভিভাবকের আগ্রহ কখনোই হারায় না, শুধু নতুন তথ্য তিনটা সেভ হয় না।
+// 🔴 মাইগ্রেশন চালানোর পর এই ফলব্যাক আর কখনো চলবে না — তবু রেখে দেওয়া নিরাপদ।
+try {
+    $stmt = $db->prepare(
+        'INSERT INTO course_interests
+            (batch_id, item_title, batch_name, contact_phone, phone_owner, child_name, child_dob,
+             facebook_name, remarks, reason, start_when, ip_address)
+         VALUES
+            (:batch_id, :item_title, :batch_name, :contact_phone, :phone_owner, :child_name, :child_dob,
+             :facebook_name, :remarks, :reason, :start_when, :ip)'
+    );
+    $stmt->execute($baseParams + [
+        'child_dob'  => $childDob !== '' ? $childDob : null,
+        'reason'     => $reason,
+        'start_when' => $startWhen,
+    ]);
+} catch (PDOException $ex) {
+    $stmt = $db->prepare(
+        'INSERT INTO course_interests
+            (batch_id, item_title, batch_name, contact_phone, phone_owner, child_name, facebook_name, remarks, ip_address)
+         VALUES
+            (:batch_id, :item_title, :batch_name, :contact_phone, :phone_owner, :child_name, :facebook_name, :remarks, :ip)'
+    );
+    $stmt->execute($baseParams);
+}
 
 form_record_submit($db, $spamIp); // রেট-লিমিটের হিসাবে যোগ
 unset($_SESSION['course_interest_form_old']);

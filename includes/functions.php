@@ -153,6 +153,55 @@ function is_valid_bd_phone(string $phone): bool
     return (bool) preg_match('/^01[3-9][0-9]{8}$/', $phone);
 }
 
+// ── আগ্রহ ফর্মের (course-interest.php) ড্রপডাউন লেবেল ও বয়স-হিসাব (২০২৬-০৯-২৪)
+// 🔴 বাংলা লেবেল ইচ্ছাকৃতভাবে এখানে (SQL-এ নয়) — মাইগ্রেশনে বাংলা লিখলে কিছু টুলে mojibake হয়।
+// DB-তে শুধু key ('age'/'busy'/...) যায়; লেবেল বদলাতে চাইলে শুধু এই দুটো অ্যারে বদলান।
+// পাবলিক ফর্ম ও admin/course-interests.php দুটোই এখান থেকেই পড়ে (DRY)।
+function interest_reasons(): array
+{
+    return [
+        'age'          => 'শিশুর বয়স এখনো কম',
+        'busy'         => 'এখন ব্যস্ত / সময় হচ্ছে না',
+        'money'        => 'টাকার ব্যবস্থা পরে হবে',
+        'just_looking' => 'শুধু জেনে রাখলাম',
+        'other'        => 'অন্য কারণ',
+    ];
+}
+
+function interest_timeframes(): array
+{
+    return [
+        'now'    => 'এখনই শুরু করতে চাই',
+        '1_3m'   => '১–৩ মাসের মধ্যে',
+        '6m'     => '৬ মাস বা তার পরে',
+        'unsure' => 'এখনো ঠিক করিনি',
+    ];
+}
+
+// জন্ম তারিখ → "5 বছর 3 মাস" (সংখ্যা English — প্রজেক্টের কনভেনশন, বাংলা অঙ্ক পড়া কঠিন)।
+// খালি/ভুল/ভবিষ্যতের তারিখে খালি স্ট্রিং ফেরে (কোথাও "0 বছর" দেখাবে না)।
+function interest_age_label(?string $dob): string
+{
+    $dob = trim((string) $dob);
+    if ($dob === '' || $dob === '0000-00-00') {
+        return '';
+    }
+    try {
+        $birth = new DateTimeImmutable($dob);
+    } catch (Exception $e) {
+        return '';
+    }
+    $now = new DateTimeImmutable('today');
+    if ($birth > $now) {
+        return '';
+    }
+    $diff = $birth->diff($now);
+    if ($diff->y < 1) {
+        return $diff->m . ' মাস';
+    }
+    return $diff->y . ' বছর' . ($diff->m > 0 ? ' ' . $diff->m . ' মাস' : '');
+}
+
 // ফোন নম্বর মেলানোর "চাবি" — শুধু ডিজিট রেখে শেষ ১০ অঙ্ক (স্পেস/ড্যাশ/+৮৮০/লিডিং-জিরো বাদ পড়া সব সামলায়)।
 // পুরনো Excel/Google-Form ডেটার নম্বর হুবহু না মিললেও এই চাবিতে মেলে।
 function phone_last10(?string $phone): string

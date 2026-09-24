@@ -38,9 +38,11 @@ if (!is_valid_bd_phone($phone)) {
 // সবচেয়ে সাম্প্রতিক আগ্রহ-এন্ট্রি থেকে তথ্য (একই পরিবার সাধারণত একই নাম/ফেসবুক ব্যবহার করে)
 // remarks ইচ্ছাকৃতভাবে আনা হয় না — মন্তব্য প্রতিবার নতুন করে লেখা হয় (ইউজারের স্পষ্ট চাওয়া,
 // প্রতিটা আগ্রহের মন্তব্য আলাদা হতে পারে বলে আগেরটা টেনে আনা ঠিক না)। নাম/ফেসবুক/মা-বাবা আসে।
+// `SELECT *` ইচ্ছাকৃত — child_dob কলামের মাইগ্রেশন না চালিয়ে ফাইল ডিপ্লয় হলেও কোয়েরি ভাঙে না
+// (তখন `?? null` দিয়ে চুপচাপ বাদ পড়ে)। reason/start_when ইচ্ছাকৃতভাবে আনা হয় না —
+// remarks-এর মতোই ওগুলো প্রতিবার আলাদা (এবার কেন পারছেন না, সেটা আগেরবারের মতো নাও হতে পারে)।
 $stmt = $db->prepare(
-    'SELECT child_name, facebook_name, phone_owner
-     FROM course_interests WHERE contact_phone = :phone ORDER BY created_at DESC LIMIT 1'
+    'SELECT * FROM course_interests WHERE contact_phone = :phone ORDER BY created_at DESC LIMIT 1'
 );
 $stmt->execute(['phone' => $phone]);
 $row = $stmt->fetch();
@@ -53,6 +55,7 @@ if (!$row) {
 echo json_encode([
     'found'         => true,
     'child_name'    => $row['child_name'],
+    'child_dob'     => $row['child_dob'] ?? null,
     'facebook_name' => $row['facebook_name'],
     'phone_owner'   => $row['phone_owner'],
 ]);

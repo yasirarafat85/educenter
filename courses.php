@@ -49,6 +49,16 @@ require __DIR__ . '/includes/site-header.php';
         </div>
         <?php endif; ?>
 
+        <?php // 🔴 চলমান কোর্সে আগ্রহী কিন্তু এখন পারছেন না — তাঁদের জন্য প্রধান দরজা (২০২৬-০৯-২৪)।
+              // আগে আগ্রহ ফর্মে ঢোকার একমাত্র পথ ছিল একটা **বন্ধ** কোর্সের কার্ড, তাই চলমান কোর্সের
+              // আগ্রহীরা পেজটার অস্তিত্বই জানতেন না। ?>
+        <div class="mt-12 sm:mt-16 rounded-3xl p-6 sm:p-8 text-center shadow-lg" style="background:linear-gradient(135deg, rgb(var(--c-tint)) 0%, #ffffff 100%); border:1px solid rgb(var(--c-border));">
+            <span class="text-4xl sm:text-5xl">💚</span>
+            <h2 class="text-xl sm:text-2xl font-black mt-2 mb-2" style="color: rgb(var(--c-deep));">আগ্রহী, কিন্তু এখন ভর্তি হতে পারছেন না?</h2>
+            <p class="text-gray-600 text-sm sm:text-base mb-5 max-w-xl mx-auto">শিশুর বয়স এখনো কম, কিংবা এই মুহূর্তে ব্যস্ত — কোনো সমস্যা নেই। একবার আগ্রহ জানিয়ে রাখুন, সময় হলে <strong>আমরাই আপনাকে মনে করিয়ে দেব</strong>।</p>
+            <a href="course-interest" class="inline-block px-6 py-3.5 rounded-xl font-bold text-white shadow-lg btn-primary">আগ্রহ জানিয়ে রাখুন →</a>
+        </div>
+
     <?php endif; ?>
 </div>
 

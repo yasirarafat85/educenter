@@ -100,6 +100,14 @@ require __DIR__ . '/includes/site-header.php';
             <a href="<?= e($actionUrl) ?>" class="block w-full text-center py-4 px-6 rounded-xl font-bold text-lg shadow-lg btn-primary text-white">
                 <?= e($actionLabel) ?>
             </a>
+            <?php if ($type === 'course'): ?>
+                <?php // ⚠️ ইচ্ছাকৃতভাবে ছোট টেক্সট লিংক, বোতাম নয় — ভর্তির বোতামের পাশে সমান বড়
+                      // "জানিয়ে রাখুন" বোতাম দিলে যিনি আজই ভর্তি হতেন তিনিও ওয়েটিং লিস্টে চলে যেতে পারেন ?>
+                <p class="text-center text-sm mt-3 text-gray-500">
+                    এখন ভর্তি হতে পারছেন না?
+                    <a href="course-interest?course_id=<?= (int) $item['id'] ?>" class="font-semibold underline" style="color: rgb(var(--c-deep));">আগ্রহ জানিয়ে রাখুন</a>
+                </p>
+            <?php endif; ?>
             <?php endif; ?>
         </div>
     </div>

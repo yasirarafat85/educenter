@@ -22,6 +22,7 @@
                         <li><a href="courses" class="inline-block py-1 hover:text-white transition-colors">📚 কোর্স সমূহ</a></li>
                         <li><a href="worksheets" class="inline-block py-1 hover:text-white transition-colors">📝 ওয়ার্কশিট</a></li>
                         <li><a href="products" class="inline-block py-1 hover:text-white transition-colors">🛍️ প্রোডাক্ট</a></li>
+                        <li><a href="course-interest" class="inline-block py-1 hover:text-white transition-colors">💚 আগ্রহ জানিয়ে রাখুন</a></li>
                         <li><a href="about" class="inline-block py-1 hover:text-white transition-colors">ℹ️ আমাদের সম্পর্কে</a></li>
                     </ul>
                 </div>
