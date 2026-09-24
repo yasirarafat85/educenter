@@ -81,11 +81,23 @@ $prevWeekReg = (int) $prevWeekStmt->fetch()['c'];
 $todayVisits = $yesterdayVisits = $weekVisits = $todayUniqueIps = 0;
 $dailyVisits = array_fill_keys($last7Dates, 0);
 $hasVisitorStats = false;
+
+// 🤖 বট/ক্রলার বাদ (visitor_human_sql, ভিজিটর লগ পেজের সাথে একই নিয়ম)। পুরনো MySQL/MariaDB-তে
+// REGEXP না চললে শর্তটা বাদ দিয়ে আগের মতোই সব গোনা হয় — সংখ্যা দেখানো বন্ধ হয় না।
+$humanSql  = visitor_human_sql();
+$visitCond = '';
 try {
-    $todayVisits     = (int) $db->query('SELECT COUNT(*) c FROM visitor_logs WHERE DATE(visited_at) = CURDATE()')->fetch()['c'];
-    $yesterdayVisits = (int) $db->query('SELECT COUNT(*) c FROM visitor_logs WHERE DATE(visited_at) = DATE(CURDATE() - INTERVAL 1 DAY)')->fetch()['c'];
-    $todayUniqueIps  = (int) $db->query('SELECT COUNT(DISTINCT ip_address) c FROM visitor_logs WHERE DATE(visited_at) = CURDATE()')->fetch()['c'];
-    $visitStmt = $db->prepare('SELECT DATE(visited_at) d, COUNT(*) c FROM visitor_logs WHERE visited_at >= :start GROUP BY DATE(visited_at)');
+    $db->query("SELECT COUNT(*) c FROM visitor_logs WHERE $humanSql");
+    $visitCond = " AND $humanSql";
+} catch (PDOException $ex) {
+    $visitCond = '';
+}
+
+try {
+    $todayVisits     = (int) $db->query("SELECT COUNT(*) c FROM visitor_logs WHERE DATE(visited_at) = CURDATE()$visitCond")->fetch()['c'];
+    $yesterdayVisits = (int) $db->query("SELECT COUNT(*) c FROM visitor_logs WHERE DATE(visited_at) = DATE(CURDATE() - INTERVAL 1 DAY)$visitCond")->fetch()['c'];
+    $todayUniqueIps  = (int) $db->query("SELECT COUNT(DISTINCT ip_address) c FROM visitor_logs WHERE DATE(visited_at) = CURDATE()$visitCond")->fetch()['c'];
+    $visitStmt = $db->prepare("SELECT DATE(visited_at) d, COUNT(*) c FROM visitor_logs WHERE visited_at >= :start$visitCond GROUP BY DATE(visited_at)");
     $visitStmt->execute(['start' => $weekStart]);
     foreach ($visitStmt->fetchAll() as $row) {
         if (isset($dailyVisits[$row['d']])) {
@@ -105,6 +117,155 @@ function trend_chip(int $now, int $prev): string
     if ($diff > 0) return '<span class="inline-flex items-center gap-0.5 text-green-600 font-semibold"><i data-lucide="trending-up" class="w-3.5 h-3.5"></i> +' . $diff . '</span>';
     if ($diff < 0) return '<span class="inline-flex items-center gap-0.5 text-red-600 font-semibold"><i data-lucide="trending-down" class="w-3.5 h-3.5"></i> ' . $diff . '</span>';
     return '<span class="inline-flex items-center gap-0.5 text-gray-400 font-semibold"><i data-lucide="minus" class="w-3.5 h-3.5"></i> অপরিবর্তিত</span>';
+}
+
+// ============================================================================
+//  "আজ কী করতে হবে" — ছড়িয়ে থাকা কাজগুলো এক জায়গায় (২০২৬-০৯-২৪)
+// ============================================================================
+//  🔴 প্রতিটা গণনা আলাদা try/catch-এ (নিচের $taskCount ক্লোজার) — কোনো টেবিল না থাকলে বা
+//  কোয়েরি ব্যর্থ হলে সেই কাজটা চুপচাপ বাদ যায়, ড্যাশবোর্ড ভাঙে না।
+//  🔴 প্রতিটা কাজ admin_can_page() দিয়ে গার্ডেড — যে মডারেটরের ঐ পেজে অনুমতি নেই,
+//  তিনি সংখ্যাটাও দেখেন না।
+//  শূন্য হলে কাজটা দেখানো হয় না — সব শূন্য হলে পুরো সেকশনই আসে না (খালি তালিকা = স্বস্তি)।
+$taskCount = function (string $sql) use ($db): ?int {
+    try {
+        return (int) $db->query($sql)->fetch()['c'];
+    } catch (Throwable $e) {
+        return null;
+    }
+};
+
+$taskDefs = [
+    ['page' => 'registrations.php', 'url' => 'registrations.php?status=pending', 'icon' => 'clock',
+     'label' => 'পেন্ডিং অর্ডার', 'hint' => 'কনফার্ম করা বাকি', 'cls' => 'bg-orange-100 text-orange-500', 'num' => 'text-orange-500',
+     'sql' => "SELECT COUNT(*) c FROM registrations WHERE status = 'pending'"],
+
+    ['page' => 'users.php', 'url' => 'users.php?status=pending', 'icon' => 'user-plus',
+     'label' => 'নতুন অভিভাবক অ্যাকাউন্ট', 'hint' => 'approve করা বাকি', 'cls' => 'bg-blue-100 text-blue-600', 'num' => 'text-blue-600',
+     'sql' => "SELECT COUNT(*) c FROM users WHERE status = 'pending'"],
+
+    ['page' => 'course-interests.php', 'url' => 'course-interests.php?status=new', 'icon' => 'heart-handshake',
+     'label' => 'নতুন আগ্রহ', 'hint' => 'এখনো যোগাযোগ হয়নি', 'cls' => 'bg-pink-100 text-pink-600', 'num' => 'text-pink-600',
+     'sql' => "SELECT COUNT(*) c FROM course_interests WHERE status = 'new'"],
+
+    ['page' => 'course-parcel.php', 'url' => 'course-parcel.php', 'icon' => 'users',
+     'label' => 'গ্রুপে যোগ করা বাকি', 'hint' => 'কনফার্ম হয়েছে, গ্রুপে নেই', 'cls' => 'bg-indigo-100 text-indigo-600', 'num' => 'text-indigo-600',
+     'sql' => "SELECT COUNT(*) c FROM registrations WHERE type = 'course' AND status = 'confirmed'
+                 AND courier_active = 1 AND fb_group_added = 0 AND messenger_group_added = 0"],
+
+    ['page' => 'course-parcel.php', 'url' => 'course-parcel.php', 'icon' => 'user-minus',
+     'label' => 'নিষ্ক্রিয় অথচ গ্রুপে', 'hint' => 'গ্রুপ থেকে বাদ দিতে হবে', 'cls' => 'bg-red-100 text-red-600', 'num' => 'text-red-600',
+     'sql' => "SELECT COUNT(*) c FROM registrations WHERE courier_active = 0
+                 AND (fb_group_added = 1 OR messenger_group_added = 1)"],
+
+    ['page' => 'courier.php', 'url' => 'courier.php?batch_status=failed', 'icon' => 'truck',
+     'label' => 'ব্যর্থ কুরিয়ার চালান', 'hint' => 'আবার পাঠাতে হবে', 'cls' => 'bg-red-100 text-red-600', 'num' => 'text-red-600',
+     'sql' => "SELECT COUNT(*) c FROM courier_batches WHERE send_status = 'failed'"],
+];
+
+$tasks = [];
+foreach ($taskDefs as $td) {
+    if (!admin_can_page($td['page'])) {
+        continue;
+    }
+    $n = $taskCount($td['sql']);
+    if ($n === null || $n < 1) {
+        continue;
+    }
+    $td['count'] = $n;
+    $tasks[] = $td;
+}
+
+// ============================================================================
+//  এই কোর্স-ব্যাচগুলোর পার্সেল কতদূর (২০২৬-০৯-২৪)
+// ============================================================================
+//  🔴 মাসের লেবেল pay_month_label() থেকেই নেওয়া হয় — course-parcel.php-এর cp_month_label()
+//  ও courier_batches.period_label-এর সাথে হুবহু মিলতে হবে, নাহলে "কোন মাস চলছে" ভুল দেখাবে।
+$parcelProgress = [];
+if (admin_can_page('course-parcel.php')) {
+    try {
+        require_once __DIR__ . '/includes/payments.php';
+        $pBatches = $db->query(
+            "SELECT r.item_id, r.item_title, r.batch, cb.total_parcels, COUNT(DISTINCT r.id) students
+             FROM registrations r
+             JOIN course_batches cb ON cb.id = r.item_id AND cb.hide_parcel = 0 AND cb.is_active = 1
+             WHERE r.type = 'course' AND r.status = 'confirmed' AND r.courier_active = 1 AND cb.total_parcels > 0
+             GROUP BY r.item_id, r.item_title, r.batch, cb.total_parcels
+             ORDER BY r.item_title, r.batch"
+        )->fetchAll();
+
+        // প্রতি ব্যাচের প্রতি মাসে কতজনকে পাঠানো হয়েছে (এক কোয়েরিতেই, N+1 এড়াতে)
+        $sentMap = [];
+        foreach ($db->query(
+            "SELECT r.item_id, b.period_label, COUNT(DISTINCT b.registration_id) c
+             FROM courier_batches b JOIN registrations r ON r.id = b.registration_id
+             WHERE b.send_status = 'sent' AND r.type = 'course'
+             GROUP BY r.item_id, b.period_label"
+        )->fetchAll() as $row) {
+            $sentMap[(int) $row['item_id']][$row['period_label']] = (int) $row['c'];
+        }
+
+        foreach ($pBatches as $b) {
+            $bid      = (int) $b['item_id'];
+            $students = (int) $b['students'];
+            $months   = (int) $b['total_parcels'];
+            $sentTotal = 0;
+            $curMonth  = 0;      // যে মাসের পাঠানো এখনো শেষ হয়নি
+            $curSent   = 0;
+            for ($i = 1; $i <= $months; $i++) {
+                $c = (int) ($sentMap[$bid][pay_month_label($i)] ?? 0);
+                $sentTotal += min($c, $students);
+                if ($curMonth === 0 && $c < $students) {
+                    $curMonth = $i;
+                    $curSent  = $c;
+                }
+            }
+            $need = $students * $months;
+            $parcelProgress[] = [
+                'id' => $bid, 'title' => $b['item_title'], 'batch' => $b['batch'],
+                'students' => $students, 'months' => $months,
+                'sent' => $sentTotal, 'need' => $need,
+                'pct' => $need > 0 ? (int) round($sentTotal / $need * 100) : 0,
+                'cur_month' => $curMonth, 'cur_sent' => $curSent,
+            ];
+        }
+        // যেগুলোর কাজ বাকি সেগুলো আগে, তারপর অগ্রগতি অনুযায়ী
+        usort($parcelProgress, fn($a, $b) => [$a['cur_month'] === 0 ? 1 : 0, -$a['pct']] <=> [$b['cur_month'] === 0 ? 1 : 0, -$b['pct']]);
+    } catch (Throwable $e) {
+        $parcelProgress = [];
+    }
+}
+
+// ============================================================================
+//  আগ্রহ তালিকার সারাংশ — কোন কোর্সে কতজন অপেক্ষায় (২০২৬-০৯-২৪)
+// ============================================================================
+//  ⚠️ start_when কলামটা migrate-course-interest-fields.sql-এ যোগ হয়েছে — না চালানো থাকলে
+//  ঐ অংশটুকু নিজের try/catch-এ চুপচাপ বাদ যায় (বাকি সারাংশ তবু দেখায়)।
+$interestTop = [];
+$interestWhen = [];
+$interestNewTotal = 0;
+if (admin_can_page('course-interests.php')) {
+    try {
+        $interestTop = $db->query(
+            "SELECT item_title, COUNT(*) total, SUM(status = 'new') new_cnt
+             FROM course_interests
+             WHERE item_title IS NOT NULL AND item_title <> ''
+             GROUP BY item_title ORDER BY total DESC LIMIT 5"
+        )->fetchAll();
+        $interestNewTotal = (int) $db->query("SELECT COUNT(*) c FROM course_interests WHERE status = 'new'")->fetch()['c'];
+    } catch (Throwable $e) {
+        $interestTop = [];
+    }
+    try {
+        foreach ($db->query(
+            "SELECT start_when, COUNT(*) c FROM course_interests
+             WHERE start_when <> '' AND status = 'new' GROUP BY start_when"
+        )->fetchAll() as $row) {
+            $interestWhen[$row['start_when']] = (int) $row['c'];
+        }
+    } catch (Throwable $e) {
+        $interestWhen = [];   // মাইগ্রেশন চালানো হয়নি
+    }
 }
 
 $greetHour = (int) date('G');
@@ -145,6 +306,25 @@ require __DIR__ . '/includes/layout-top.php';
         </div>
     </div>
 </div>
+
+<!-- 📋 আজ কী করতে হবে — ছড়িয়ে থাকা কাজগুলো এক জায়গায়; শূন্য হলে কাজটা (সব শূন্য হলে পুরো সেকশন) দেখায় না -->
+<?php if ($tasks): ?>
+<div class="bg-white rounded-2xl shadow p-5 mb-6">
+    <h3 class="text-sm font-bold text-gray-500 mb-3 flex items-center gap-2"><i data-lucide="list-checks" class="w-4 h-4"></i> আজ কী করতে হবে</h3>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <?php foreach ($tasks as $t): ?>
+        <a href="<?= e($t['url']) ?>" class="flex items-center gap-3 rounded-xl border border-gray-100 p-3 hover:shadow-md transition-all">
+            <span class="inline-flex w-9 h-9 items-center justify-center rounded-xl flex-shrink-0 <?= $t['cls'] ?>"><i data-lucide="<?= e($t['icon']) ?>" class="w-4 h-4"></i></span>
+            <span class="min-w-0 flex-1">
+                <span class="block font-bold text-gray-800 text-sm leading-tight"><?= e($t['label']) ?></span>
+                <span class="block text-gray-400 text-xs mt-0.5"><?= e($t['hint']) ?></span>
+            </span>
+            <span class="text-xl font-black flex-shrink-0 <?= $t['num'] ?>"><?= (int) $t['count'] ?></span>
+        </a>
+        <?php endforeach; ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- কাজের লঞ্চার — দরকারি কাজ এক ট্যাপে (সাইডবার হাতড়াতে হয় না)। রঙ-ক্লাস পূর্ণ লিটারাল (ডাইনামিক না) যাতে Tailwind স্ক্যানার ধরে -->
 <?php
@@ -246,6 +426,64 @@ $quickTasks = [
         </div>
     </div>
 </div>
+
+<?php if ($parcelProgress || $interestTop): ?>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <?php if ($parcelProgress): ?>
+    <!-- 📦 পার্সেল কতদূর — চলমান কোর্স-ব্যাচে কত পার্সেল যাওয়ার কথা, কতটা গেছে -->
+    <div class="bg-white rounded-2xl shadow p-5">
+        <div class="flex items-center justify-between mb-1">
+            <h3 class="font-bold text-gray-800">পার্সেল কতদূর</h3>
+            <a href="course-parcel.php" class="text-indigo-600 text-xs font-semibold">সব দেখুন →</a>
+        </div>
+        <p class="text-gray-400 text-xs mb-4">সক্রিয় শিক্ষার্থী × মোট মাস হিসাবে কতটা পাঠানো হয়েছে</p>
+        <div class="space-y-3">
+        <?php foreach (array_slice($parcelProgress, 0, 5) as $pp): ?>
+            <a href="course-parcel.php?item_id=<?= (int) $pp['id'] ?><?= $pp['cur_month'] ? '&amp;month=' . (int) $pp['cur_month'] : '' ?>" class="block">
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <span class="font-semibold text-gray-800 text-sm truncate"><?= e($pp['title']) ?> <span class="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold"><?= e($pp['batch'] ?: '—') ?></span></span>
+                    <span class="text-xs font-bold text-gray-500 flex-shrink-0"><?= (int) $pp['sent'] ?>/<?= (int) $pp['need'] ?></span>
+                </div>
+                <div class="h-2 rounded-full bg-gray-100 overflow-hidden"><div class="h-2 rounded-full bg-indigo-600" style="width: <?= (int) $pp['pct'] ?>%"></div></div>
+                <p class="text-xs text-gray-400 mt-1"><?= (int) $pp['students'] ?> জন · <?= (int) $pp['months'] ?> মাস · <?= $pp['cur_month']
+                    ? 'এখন ' . e(pay_month_label((int) $pp['cur_month'])) . ' — ' . (int) $pp['cur_sent'] . '/' . (int) $pp['students'] . ' পাঠানো'
+                    : '<span class="text-green-700 font-semibold">সব পাঠানো হয়ে গেছে ✓</span>' ?></p>
+            </a>
+        <?php endforeach; ?>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($interestTop): ?>
+    <!-- 💚 আগ্রহ তালিকার সারাংশ — কোন কোর্সে কতজন অপেক্ষায় -->
+    <div class="bg-white rounded-2xl shadow p-5">
+        <div class="flex items-center justify-between mb-1">
+            <h3 class="font-bold text-gray-800">আগ্রহ তালিকা</h3>
+            <a href="course-interests.php" class="text-indigo-600 text-xs font-semibold">সব দেখুন →</a>
+        </div>
+        <p class="text-gray-400 text-xs mb-4">কোন কোর্সে কতজন জানিয়ে রেখেছেন — নতুন ব্যাচ কবে খুলবেন সেই সিদ্ধান্তে কাজে লাগে<?= $interestNewTotal ? ' · ' . $interestNewTotal . ' জনের সাথে এখনো যোগাযোগ হয়নি' : '' ?></p>
+        <?php if ($interestWhen): ?>
+        <div class="flex flex-wrap gap-1.5 mb-4">
+            <?php foreach (interest_timeframes() as $wKey => $wLabel): if (empty($interestWhen[$wKey])) { continue; } ?>
+            <a href="course-interests.php?status=new&amp;when=<?= e($wKey) ?>" class="px-2 py-0.5 rounded-lg bg-pink-100 text-pink-700 text-xs font-semibold"><?= e($wLabel) ?> <?= (int) $interestWhen[$wKey] ?></a>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+        <div class="space-y-2">
+        <?php foreach ($interestTop as $it): ?>
+            <a href="course-interests.php?item=<?= urlencode($it['item_title']) ?>" class="flex items-center justify-between gap-2 text-sm">
+                <span class="text-gray-700 truncate"><?= e($it['item_title']) ?></span>
+                <span class="flex-shrink-0 flex items-center gap-1.5">
+                    <?php if ((int) $it['new_cnt']): ?><span class="px-2 py-0.5 rounded-lg bg-pink-100 text-pink-700 text-xs font-bold"><?= (int) $it['new_cnt'] ?> নতুন</span><?php endif; ?>
+                    <span class="text-gray-400 text-xs">মোট <?= (int) $it['total'] ?></span>
+                </span>
+            </a>
+        <?php endforeach; ?>
+        </div>
+    </div>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <div class="bg-white rounded-2xl shadow p-5">
     <h3 class="font-bold text-gray-800 mb-4">সাম্প্রতিক রেজিস্ট্রেশন/অর্ডার</h3>

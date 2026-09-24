@@ -911,8 +911,42 @@ function format_ip_display(?string $ip): string
 
 // প্রতিটা পাবলিক পেজ লোডে একটা ভিজিটর লগ এন্ট্রি সেভ করে (includes/site-header.php থেকে কল হয়) —
 // ব্যর্থ হলেও (DB সমস্যা ইত্যাদি) নীরবে উপেক্ষা করে, পেজ লোড কখনো আটকাবে না
+// ── বট/ক্রলার শনাক্তকরণ (২০২৬-০৯-২৪) ──────────────────────────────────────
+// গুগল/ফেসবুক/বিং-এর ক্রলার, আপটাইম-মনিটর, curl/wget স্ক্রিপ্ট ইত্যাদি user-agent দেখে চেনা যায়।
+// 🔴 প্যাটার্নে কোনো ব্যাকস্ল্যাশ/কোট রাখবেন না — একই স্ট্রিং PHP preg_match() আর MySQL REGEXP
+// দুই জায়গাতেই বসে, ব্যাকস্ল্যাশ দিলে দুই ইঞ্জিনে দুই অর্থ হয়ে যায়।
+function visitor_bot_pattern(): string
+{
+    return 'bot|crawl|spider|slurp|facebookexternalhit|preview|monitor|uptime|pingdom|curl|wget'
+         . '|python|scrapy|headless|phantom|lighthouse|semrush|ahrefs|mj12|dotbot|yandex|baidu'
+         . '|duckduck|archiver|feedfetch|okhttp|postman|http-client|go-http|java/|libwww|apache-httpclient';
+}
+
+// একটা user-agent বট কিনা (খালি/অনুপস্থিত UA-ও বট ধরা হয় — আসল ব্রাউজার সবসময় UA পাঠায়)
+function is_bot_user_agent(?string $ua): bool
+{
+    $ua = trim((string) $ua);
+    if ($ua === '') {
+        return true;
+    }
+    return (bool) preg_match('~' . visitor_bot_pattern() . '~i', $ua);
+}
+
+// "আসল মানুষের ভিজিট" গোনার SQL শর্ত — ড্যাশবোর্ড ও ভিজিটর লগ দুই জায়গাতেই এটাই ব্যবহার হয়
+// (গণনার নিয়ম এক জায়গায় থাকে, দুই পেজে দুই সংখ্যা দেখানোর ঝুঁকি নেই)।
+// ⚠️ REGEXP কিছু পুরনো MySQL/MariaDB-তে না চললে কলার try/catch-এ সাধারণ গণনায় ফিরে যায়।
+function visitor_human_sql(string $col = 'user_agent'): string
+{
+    return "($col IS NOT NULL AND $col <> '' AND LOWER($col) NOT REGEXP '" . visitor_bot_pattern() . "')";
+}
+
 function log_visitor(): void
 {
+    // 🔴 অ্যাডমিন প্যানেলে লগইন থাকা অবস্থায় নিজের সাইট ঘুরে দেখলে সেটা আর ভিজিট হিসেবে গোনা হয় না
+    // (নাহলে কাজ করতে গিয়ে নিজের ভিজিটেই আজকের সংখ্যা ফুলে যেত)
+    if (!empty($_SESSION['admin_id'])) {
+        return;
+    }
     try {
         $ip = $_SERVER['REMOTE_ADDR'] ?? '';
         $page = $_SERVER['REQUEST_URI'] ?? '';
