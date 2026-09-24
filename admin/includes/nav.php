@@ -117,6 +117,8 @@ function admin_nav_groups(): array
 
     $logs = [];
     if (admin_can('logs')) {
+        $logs[] = ['key' => 'login-logs',          'href' => 'login-logs.php',          'file' => 'login-logs.php',          'icon' => 'log-in',         'label' => 'লগইন লগ'];
+        $logs[] = ['key' => 'activity-log',        'href' => 'activity-log.php',        'file' => 'activity-log.php',        'icon' => 'list-checks',    'label' => 'কার্যকলাপ লগ'];
         $logs[] = ['key' => 'registration-errors', 'href' => 'registration-errors.php', 'file' => 'registration-errors.php', 'icon' => 'alert-triangle', 'label' => 'রেজিস্ট্রেশন এরর'];
         $logs[] = ['key' => 'download-logs',       'href' => 'download-logs.php',       'file' => 'download-logs.php',       'icon' => 'download',       'label' => 'ডাউনলোড লগ'];
         $logs[] = ['key' => 'visitor-logs',        'href' => 'visitor-logs.php',        'file' => 'visitor-logs.php',        'icon' => 'footprints',     'label' => 'ভিজিটর লগ'];

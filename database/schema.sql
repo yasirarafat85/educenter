@@ -48,6 +48,9 @@ CREATE TABLE admin_users (
     role VARCHAR(20) NOT NULL DEFAULT 'admin',   -- 'admin' (সব অ্যাক্সেস) / 'moderator' (সীমিত)
     permissions TEXT NULL,                        -- JSON array of section keys (শুধু moderator)
     is_active TINYINT(1) NOT NULL DEFAULT 1,       -- 0 হলে লগইন বন্ধ
+    last_login_at DATETIME NULL DEFAULT NULL,      -- শেষ সফল লগইন (2026-09-24)
+    last_login_ip VARCHAR(45) DEFAULT NULL,
+    last_seen_at  DATETIME NULL DEFAULT NULL,      -- "এখন অনলাইনে" বিন্দুর ভিত্তি
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -80,6 +83,8 @@ CREATE TABLE login_attempts (
     ip_address VARCHAR(45) NOT NULL,
     username VARCHAR(50) NOT NULL,
     success TINYINT(1) NOT NULL DEFAULT 0,
+    method VARCHAR(20) NOT NULL DEFAULT 'password',  -- password / webauthn (2026-09-24)
+    admin_id INT UNSIGNED DEFAULT NULL,
     attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_ip_time (ip_address, attempted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -748,6 +753,27 @@ CREATE TABLE user_remember_tokens (
     INDEX idx_user (user_id),
     INDEX idx_expires (expires_at),
     CONSTRAINT fk_urem_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- admin_activity_log : who did what, when (2026-09-24)
+-- Written from the central guard admin_require_login() on every POST.
+-- See admin/includes/activity.php + migrate-admin-visibility.sql
+-- ------------------------------------------------------------
+CREATE TABLE admin_activity_log (
+    id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    admin_id   INT UNSIGNED DEFAULT NULL,
+    username   VARCHAR(50)  NOT NULL DEFAULT '',
+    role       VARCHAR(20)  NOT NULL DEFAULT '',
+    page       VARCHAR(60)  NOT NULL DEFAULT '',
+    action     VARCHAR(40)  NOT NULL DEFAULT '',
+    target_id  INT UNSIGNED DEFAULT NULL,
+    context    VARCHAR(255) NOT NULL DEFAULT '',
+    ip_address VARCHAR(45)  NOT NULL DEFAULT '',
+    created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_created (created_at),
+    INDEX idx_admin (admin_id),
+    INDEX idx_page (page)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

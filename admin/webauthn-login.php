@@ -31,19 +31,19 @@ $stmt = $db->prepare('SELECT * FROM admin_webauthn_credentials WHERE credential_
 $stmt->execute(['c' => $credIdB64]);
 $cred = $stmt->fetch();
 if (!$cred) {
-    admin_record_login_attempt($ip, 'webauthn', false);
+    admin_record_login_attempt($ip, 'webauthn', false, 'webauthn');
     wa_out(['error' => 'এই ডিভাইস চেনা গেল না'], 401);
 }
 
 $res = wa_verify_assertion($cred['public_key'], $authData, $clientDataJSON, $signature, $challenge);
 if (!$res['ok']) {
-    admin_record_login_attempt($ip, 'webauthn', false);
+    admin_record_login_attempt($ip, 'webauthn', false, 'webauthn');
     wa_out(['error' => 'যাচাই ব্যর্থ: ' . $res['error']], 401);
 }
 
 // signCount ক্লোন-ডিটেকশন: প্রত্যাবর্তিত count আগেরটার চেয়ে ছোট হলে সন্দেহজনক (উভয় 0 হলে বাদ)
 if ($res['signCount'] > 0 && $cred['sign_count'] > 0 && $res['signCount'] <= (int) $cred['sign_count']) {
-    admin_record_login_attempt($ip, 'webauthn', false);
+    admin_record_login_attempt($ip, 'webauthn', false, 'webauthn');
     wa_out(['error' => 'নিরাপত্তা যাচাইয়ে সমস্যা (signature counter)'], 401);
 }
 
@@ -51,12 +51,12 @@ $admin = $db->prepare('SELECT * FROM admin_users WHERE id = :id LIMIT 1');
 $admin->execute(['id' => $cred['admin_id']]);
 $admin = $admin->fetch();
 if (!$admin) {
-    admin_record_login_attempt($ip, 'webauthn', false);
+    admin_record_login_attempt($ip, 'webauthn', false, 'webauthn');
     wa_out(['error' => 'অ্যাডমিন অ্যাকাউন্ট পাওয়া যায়নি'], 401);
 }
 // নিষ্ক্রিয় করা অ্যাকাউন্ট ফিঙ্গারপ্রিন্টেও ঢুকতে পারবে না
 if ((int) ($admin['is_active'] ?? 1) !== 1) {
-    admin_record_login_attempt($ip, $admin['username'], false);
+    admin_record_login_attempt($ip, $admin['username'], false, 'webauthn', (int) $admin['id']);
     wa_out(['error' => 'এই অ্যাকাউন্টটি নিষ্ক্রিয় করা হয়েছে'], 403);
 }
 
@@ -66,5 +66,5 @@ admin_establish_session($admin);
 $db->prepare('UPDATE admin_webauthn_credentials SET last_used_at = NOW(), sign_count = :s WHERE id = :id')
     ->execute(['s' => $res['signCount'], 'id' => $cred['id']]);
 
-admin_record_login_attempt($ip, $admin['username'], true);
+admin_record_login_attempt($ip, $admin['username'], true, 'webauthn', (int) $admin['id']);
 wa_out(['ok' => true, 'redirect' => 'index.php']);

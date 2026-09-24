@@ -70,6 +70,30 @@ $stmt = $db->prepare(
 $stmt->execute($params);
 $rows = $stmt->fetchAll();
 
+// ---------------- লগইন-অবস্থা (user_login_attempts থেকে, ফোন মিলিয়ে) ----------------
+// 🔴 "ঢুকতে পারছি না" ফোন এলে অ্যাডমিন যেন দেখেই বুঝতে পারেন — পাসওয়ার্ড ভুল, নাকি
+// approve করা হয়নি, নাকি বারবার ভুল দিয়ে সাময়িক লক হয়ে আছে।
+$lastLogin = $failCount = $lockedPhones = [];
+try {
+    foreach ($db->query("SELECT phone, MAX(attempted_at) t FROM user_login_attempts WHERE success = 1 GROUP BY phone")->fetchAll() as $r) {
+        $lastLogin[$r['phone']] = $r['t'];
+    }
+    foreach ($db->query("SELECT phone, COUNT(*) c FROM user_login_attempts
+                         WHERE success = 0 AND attempted_at > (NOW() - INTERVAL 1 DAY) GROUP BY phone")->fetchAll() as $r) {
+        $failCount[$r['phone']] = (int) $r['c'];
+    }
+    // রেট-লিমিটের নিয়ম হুবহু user_login_rate_limited()-এর মতোই — ৫ ভুল / ১৫ মিনিট।
+    // ⚠️ সংখ্যা দুটো includes/user-auth.php-এর কনস্ট্যান্ট থেকে কপি করা (ঐ ফাইল অ্যাডমিন পেজে
+    // ইচ্ছাকৃতভাবে লোড করা হয় না); ওখানে বদলালে এখানেও বদলান।
+    foreach ($db->query("SELECT phone, COUNT(*) c FROM user_login_attempts
+                         WHERE success = 0 AND attempted_at > (NOW() - INTERVAL 15 MINUTE)
+                         GROUP BY phone HAVING c >= 5")->fetchAll() as $r) {
+        $lockedPhones[$r['phone']] = true;
+    }
+} catch (Throwable $e) {
+    $lastLogin = $failCount = $lockedPhones = [];
+}
+
 $curReturn = users_url();
 $statusMeta = [
     'pending'  => ['অপেক্ষমাণ', 'bg-amber-100 text-amber-700'],
@@ -97,11 +121,11 @@ require __DIR__ . '/includes/layout-top.php';
     <table class="w-full text-sm">
         <thead><tr class="text-left text-gray-500 border-b bg-gray-50">
             <th class="py-3 px-4">নাম</th><th class="py-3 px-4">মোবাইল</th><th class="py-3 px-4">রেজিস্ট্রেশন</th>
-            <th class="py-3 px-4">স্ট্যাটাস</th><th class="py-3 px-4">তারিখ</th><th class="py-3 px-4">অ্যাকশন</th>
+            <th class="py-3 px-4">স্ট্যাটাস</th><th class="py-3 px-4">শেষ লগইন</th><th class="py-3 px-4">তারিখ</th><th class="py-3 px-4">অ্যাকশন</th>
         </tr></thead>
         <tbody>
         <?php if (!$rows): ?>
-            <tr><td colspan="6" class="py-8 px-4 text-center text-gray-400">কোনো অ্যাকাউন্ট নেই।</td></tr>
+            <tr><td colspan="7" class="py-8 px-4 text-center text-gray-400">কোনো অ্যাকাউন্ট নেই।</td></tr>
         <?php endif; ?>
         <?php foreach ($rows as $u): [$sl, $sc] = $statusMeta[$u['status']] ?? [$u['status'], 'bg-gray-100 text-gray-600']; ?>
             <tr class="border-b last:border-0 hover:bg-gray-50 <?= $u['status'] === 'approved' ? '' : 'opacity-80' ?>">
@@ -109,6 +133,19 @@ require __DIR__ . '/includes/layout-top.php';
                 <td class="py-2.5 px-4 font-mono whitespace-nowrap"><?= e($u['phone']) ?></td>
                 <td class="py-2.5 px-4"><?= (int) $u['reg_count'] ?> টি</td>
                 <td class="py-2.5 px-4"><span class="text-xs font-bold px-2.5 py-1 rounded-lg <?= $sc ?>"><?= e($sl) ?></span></td>
+                <td class="py-2.5 px-4 text-xs whitespace-nowrap">
+                    <?php $lg = $lastLogin[$u['phone']] ?? null; $fc = $failCount[$u['phone']] ?? 0; ?>
+                    <?php if ($lg): ?>
+                        <span class="text-gray-600" title="<?= e($lg) ?>"><?= e(date('d M, H:i', strtotime($lg))) ?></span>
+                    <?php else: ?>
+                        <span class="text-gray-300">কখনো ঢোকেননি</span>
+                    <?php endif; ?>
+                    <?php if (!empty($lockedPhones[$u['phone']])): ?>
+                        <span class="block text-red-600 font-bold">🔒 সাময়িক লক (১৫ মিনিট)</span>
+                    <?php elseif ($fc): ?>
+                        <span class="block text-amber-600 font-semibold"><?= (int) $fc ?> বার ভুল (২৪ ঘণ্টায়)</span>
+                    <?php endif; ?>
+                </td>
                 <td class="py-2.5 px-4 text-gray-500 text-xs whitespace-nowrap"><?= e(date('Y-m-d', strtotime($u['created_at']))) ?></td>
                 <td class="py-2.5 px-4 space-x-2 whitespace-nowrap">
                     <?php if ($u['status'] !== 'approved'): ?>
@@ -127,6 +164,10 @@ require __DIR__ . '/includes/layout-top.php';
                     <?php if ($u['status'] === 'blocked'): ?>
                         <?= status_btn($u['id'], 'approved', 'আনব্লক', 'text-green-600', $curReturn) ?>
                     <?php endif; ?>
+                    <form method="post" action="account-preview.php" class="inline" target="_blank">
+                        <?= csrf_field() ?><input type="hidden" name="user_id" value="<?= $u['id'] ?>">
+                        <button type="submit" class="text-indigo-600 font-semibold" title="এই অভিভাবক লগইন করলে কী দেখেন — নতুন ট্যাবে">👁 যেমন দেখাচ্ছে</button>
+                    </form>
                     <form method="post" action="users.php?action=delete" class="inline" onsubmit="return confirmSubmit(this, 'এই অ্যাকাউন্টটি ডিলিট করতে চান?', 'ডিলিট নিশ্চিতকরণ');">
                         <?= csrf_field() ?><input type="hidden" name="id" value="<?= $u['id'] ?>"><input type="hidden" name="return" value="<?= e($curReturn) ?>">
                         <button type="submit" class="text-red-600 font-semibold">ডিলিট</button>

@@ -117,6 +117,7 @@ $activePage = 'account';
 require __DIR__ . '/includes/site-header.php';
 ?>
 <div class="max-w-3xl mx-auto pb-10 space-y-6">
+    <?= user_preview_banner() ?>
     <!-- হেডার -->
     <div class="flex items-center justify-between flex-wrap gap-3">
         <div>

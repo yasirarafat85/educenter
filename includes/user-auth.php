@@ -26,7 +26,8 @@ function user_record_login_attempt(string $phone, bool $success): void
     $db = get_db();
     $db->prepare('INSERT INTO user_login_attempts (ip_address, phone, success) VALUES (:ip, :p, :s)')
         ->execute(['ip' => client_ip(), 'p' => $phone, 's' => $success ? 1 : 0]);
-    $db->exec('DELETE FROM user_login_attempts WHERE attempted_at < (NOW() - INTERVAL 1 DAY)');
+    // ৯০ দিন রাখা হয় — admin/users.php-এ "শেষ লগইন / ব্যর্থ চেষ্টা" দেখাতে লাগে
+    $db->exec('DELETE FROM user_login_attempts WHERE attempted_at < (NOW() - INTERVAL 90 DAY)');
 }
 
 // লগইন চেষ্টা — সফল হলে true। শুধু status='approved' ইউজার লগইন করতে পারে।
@@ -60,6 +61,50 @@ function user_establish_session(array $u): void
     $_SESSION['user_name'] = $u['full_name'];
 }
 
+// ============================================================================
+//  👁 প্রিভিউ মোড — অ্যাডমিন দেখছেন "অভিভাবক কী দেখেন" (২০২৬-০৯-২৪)
+// ============================================================================
+//  🔴 এটা **লগইন নয়** — অভিভাবকের সেশন-কী ($_SESSION['user_id']) কখনো বসে না; আলাদা
+//  কী (account_preview_user_id) ব্যবহার হয়। ফলে অ্যাডমিন কখনো অভিভাবক "হয়ে" যান না।
+//  🔴 প্রিভিউতে **সব লেখা বন্ধ** — পাসওয়ার্ড বদল, বার্তা পাঠানো কিছুই কাজ করে না
+//  (প্রতিটা সাবমিট হ্যান্ডলারে user_preview_block() ডাকা হয়)।
+//  🔴 প্রিভিউ চলে **শুধু অ্যাডমিন সেশন থাকলে** — অ্যাডমিন লগআউট/টাইমআউট হলেই শেষ।
+//  অনুমতির যাচাই হয় প্রিভিউ **শুরু করার সময়** (admin/account-preview.php, গার্ডেড পেজ)।
+
+function user_preview_active(): bool
+{
+    return !empty($_SESSION['account_preview_user_id']) && !empty($_SESSION['admin_id']);
+}
+
+function user_preview_stop(): void
+{
+    unset($_SESSION['account_preview_user_id'], $_SESSION['account_preview_admin']);
+}
+
+// প্রিভিউতে কোনো পরিবর্তন করার চেষ্টা হলে এখানেই আটকে যায়
+function user_preview_block(): void
+{
+    if (user_preview_active()) {
+        set_flash('error', '👁 প্রিভিউ মোডে কিছু সেভ করা যায় না — এটা শুধু দেখার জন্য।');
+        redirect('account');
+    }
+}
+
+// পেজের উপরে লাল পট্টি (account*.php-এ site-header-এর পরেই ছাপা হয়)
+function user_preview_banner(): string
+{
+    if (!user_preview_active()) {
+        return '';
+    }
+    $u = user_current();
+    $who = $u ? (($u['full_name'] ?: 'অভিভাবক') . ' · ' . $u['phone']) : '';
+    return '<div class="rounded-2xl p-4 mb-5 border bg-red-50 flex items-center justify-between gap-3 flex-wrap" style="border-color:#fecaca">'
+        . '<div><p class="font-bold text-red-700">👁 প্রিভিউ মোড — আপনি অন্য কারও ড্যাশবোর্ড দেখছেন</p>'
+        . '<p class="text-red-600 text-xs mt-0.5">' . e($who) . ' · এখানে কিছু সেভ হবে না, তিনি জানতেও পারবেন না।</p></div>'
+        . '<a href="admin/account-preview.php?exit=1" class="text-sm font-bold text-white bg-red-600 px-4 py-2 rounded-xl">✕ প্রিভিউ বন্ধ করুন</a>'
+        . '</div>';
+}
+
 function user_logged_in(): bool
 {
     return !empty($_SESSION['user_id']);
@@ -72,7 +117,7 @@ function user_id(): int
 
 function user_require_login(): void
 {
-    if (!user_logged_in()) {
+    if (!user_logged_in() && !user_preview_active()) {
         redirect('account-login');
     }
 }
@@ -86,6 +131,20 @@ function user_current(): ?array
         return $cached;
     }
     $loaded = true;
+
+    // 👁 প্রিভিউ: অ্যাডমিন যে অভিভাবককে দেখছেন তাঁর রো (status যাই হোক — pending/blocked
+    // অ্যাকাউন্ট কেমন দেখায় সেটাও অ্যাডমিনের দেখা দরকার)
+    if (user_preview_active()) {
+        $ps = get_db()->prepare('SELECT * FROM users WHERE id = :id LIMIT 1');
+        $ps->execute(['id' => (int) $_SESSION['account_preview_user_id']]);
+        $pu = $ps->fetch();
+        if (!$pu) {
+            user_preview_stop();
+            return $cached = null;
+        }
+        return $cached = $pu;
+    }
+
     if (!user_logged_in()) {
         return $cached = null;
     }
@@ -168,7 +227,9 @@ function user_remember_clear(): void
 // 🔴 status='approved' না হলে কখনো নয় (ব্লক করা অ্যাকাউন্ট কুকি দিয়ে ফিরতে পারবে না)।
 function user_try_remember_login(): void
 {
-    if (user_logged_in()) {
+    // প্রিভিউ চলাকালে কুকি দিয়ে অটো-লগইন নয় — অ্যাডমিনের নিজের পুরনো কুকি প্রিভিউয়ের
+    // সাথে মিশে যেন বিভ্রান্তি না করে
+    if (user_logged_in() || user_preview_active()) {
         return;
     }
     $raw = (string) ($_COOKIE[USER_REMEMBER_COOKIE] ?? '');

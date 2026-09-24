@@ -3,6 +3,7 @@
 
 require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/permissions.php';
+require_once __DIR__ . '/activity.php';
 
 const ADMIN_MAX_LOGIN_ATTEMPTS = 5;
 const ADMIN_LOGIN_WINDOW_MINUTES = 15;
@@ -27,14 +28,24 @@ function admin_is_rate_limited(string $ip): bool
     return (int) $stmt->fetch()['c'] >= ADMIN_MAX_LOGIN_ATTEMPTS;
 }
 
-function admin_record_login_attempt(string $ip, string $username, bool $success): void
+// কত দিনের লগইন-ইতিহাস রাখা হবে (আগে ১ দিন ছিল — শুধু brute-force ঠেকাতে; এখন
+// admin/login-logs.php-এ দেখা যায় বলে ৯০ দিন)
+const ADMIN_LOGIN_LOG_KEEP_DAYS = 90;
+
+function admin_record_login_attempt(string $ip, string $username, bool $success, string $method = 'password', ?int $adminId = null): void
 {
     $db = get_db();
-    $db->prepare('INSERT INTO login_attempts (ip_address, username, success) VALUES (:ip, :u, :s)')
-        ->execute(['ip' => $ip, 'u' => $username, 's' => $success ? 1 : 0]);
+    try {
+        $db->prepare('INSERT INTO login_attempts (ip_address, username, success, method, admin_id) VALUES (:ip, :u, :s, :m, :aid)')
+            ->execute(['ip' => $ip, 'u' => $username, 's' => $success ? 1 : 0, 'm' => $method, 'aid' => $adminId]);
+    } catch (PDOException $ex) {
+        // 🔴 মাইগ্রেশন (migrate-admin-visibility.sql) চালানো না থাকলেও লগইন যেন কখনো না ভাঙে
+        $db->prepare('INSERT INTO login_attempts (ip_address, username, success) VALUES (:ip, :u, :s)')
+            ->execute(['ip' => $ip, 'u' => $username, 's' => $success ? 1 : 0]);
+    }
 
-    // পুরনো লগ (১ দিনের বেশি) মুছে ফেলা — টেবিল যেন অযথা বড় না হয়
-    $db->exec('DELETE FROM login_attempts WHERE attempted_at < (NOW() - INTERVAL 1 DAY)');
+    // পুরনো লগ ছাঁটাই — রেট-লিমিট শুধু শেষ ১৫ মিনিট দেখে, তাই মেয়াদ বাড়ালে কিছু ভাঙে না
+    $db->exec('DELETE FROM login_attempts WHERE attempted_at < (NOW() - INTERVAL ' . (int) ADMIN_LOGIN_LOG_KEEP_DAYS . ' DAY)');
 }
 
 function admin_attempt_login(string $username, string $password): bool
@@ -63,6 +74,15 @@ function admin_establish_session(array $admin): void
     $decoded = json_decode($admin['permissions'] ?? '[]', true);
     $_SESSION['admin_permissions'] = admin_normalize_permissions($decoded); // সেকশন=>caps[] ম্যাপ
     $_SESSION['admin_last_activity'] = time(); // নিষ্ক্রিয়তা টাইমআউটের ভিত্তি
+    unset($_SESSION['admin_seen_written']);    // নতুন সেশনে last_seen থ্রটল রিসেট
+
+    // শেষ সফল লগইন কবে ও কোন IP থেকে (team.php ও লগইন লগে দেখানো হয়)
+    try {
+        get_db()->prepare('UPDATE admin_users SET last_login_at = NOW(), last_login_ip = :ip, last_seen_at = NOW() WHERE id = :id')
+                ->execute(['ip' => admin_client_ip(), 'id' => (int) $admin['id']]);
+    } catch (Throwable $e) {
+        // কলাম নেই (মাইগ্রেশন বাকি) — লগইন তবু হবে
+    }
 }
 
 function admin_logged_in(): bool
@@ -85,6 +105,14 @@ function admin_require_login(): void
         redirect('login.php?expired=1');
     }
     $_SESSION['admin_last_activity'] = $now;
+    admin_touch_last_seen();   // "এখন অনলাইনে" (৬০ সেকেন্ডে একবার লেখে)
+
+    // 🔑 কার্যকলাপ লগ — প্রতিটা পরিবর্তন (POST) এখানেই ধরা পড়ে, তাই আলাদা পেজে কোড লাগে না।
+    // অনুমতি-চেকের **আগে** লগ করা হয় ইচ্ছাকৃতভাবে: অনুমতি ছাড়া কেউ কিছু করার চেষ্টা করলেও
+    // সেটা রেকর্ড থাকে (নিরাপত্তার দিক থেকে ঐ চেষ্টাটা জানা বেশি জরুরি)।
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        admin_log_activity(basename($_SERVER['SCRIPT_NAME'] ?? ''));
+    }
 
     // রোল-ভিত্তিক অ্যাক্সেস: এই পেজে মডারেটরের অনুমতি আছে কিনা (মূল অ্যাডমিন সবসময় পায়)
     $script = basename($_SERVER['SCRIPT_NAME'] ?? $_SERVER['PHP_SELF'] ?? '');

@@ -23,7 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'ইউজারনেম ও পাসওয়ার্ড দিন।';
         } else {
             $ok = admin_attempt_login($username, $password);
-            admin_record_login_attempt($ip, $username, $ok);
+            // সফল হলে সেশনে admin_id বসে গেছে — লগে ঐ id-টাও রাখি (কে ঢুকল স্পষ্ট হয়)
+            admin_record_login_attempt($ip, $username, $ok, 'password', $ok ? (int) ($_SESSION['admin_id'] ?? 0) : null);
 
             if ($ok) {
                 redirect('index.php');

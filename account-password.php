@@ -9,6 +9,7 @@ if (!$user) {
 
 // ------------------ POST: পাসওয়ার্ড আপডেট ------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    user_preview_block();   // 👁 প্রিভিউতে পাসওয়ার্ড বদলানো যাবে না
     if (!csrf_verify()) {
         set_flash('error', 'ফর্ম টোকেন মিলছে না।');
         redirect('account-password');
@@ -40,6 +41,7 @@ $activePage = '';
 require __DIR__ . '/includes/site-header.php';
 ?>
 <div class="max-w-md mx-auto px-1 sm:px-0">
+    <?= user_preview_banner() ?>
     <div class="mb-4"><a href="account" class="text-indigo-600 text-sm font-semibold">← আমার অ্যাকাউন্ট</a></div>
     <div class="bg-white rounded-2xl shadow p-6">
         <h1 class="text-xl font-black text-gray-900 mb-5">পাসওয়ার্ড পরিবর্তন</h1>

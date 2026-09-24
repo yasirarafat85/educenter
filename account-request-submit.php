@@ -14,6 +14,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect('account');
 }
 
+// 👁 প্রিভিউ মোডে অ্যাডমিন দেখছেন — কখনোই অভিভাবকের নামে বার্তা পাঠানো যাবে না
+user_preview_block();
+
 function acc_req_fail(string $msg): void
 {
     set_flash('error', $msg);
