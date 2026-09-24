@@ -194,6 +194,14 @@ if (!$selectedCourse):
         <?php endif; ?>
         </div>
     </div>
+
+    <?php // 🔴 ফর্ম পর্যন্ত এসেও যিনি বুঝলেন "এখন হবে না" (বয়স/সময় মিলছে না) — তাঁর শেষ সুযোগ
+          // (২০২৬-০৯-২৪)। কার্ডের বাইরে, হালকা ব্যাকগ্রাউন্ডে — তাই সাধারণ ধূসর টেক্সটই চলে। ?>
+    <p class="text-center text-sm text-gray-500 mt-5">
+        এখন ভর্তি হতে পারছেন না?
+        <a href="course-interest?course_id=<?= (int) $selectedCourse['id'] ?>" class="font-semibold underline" style="color: rgb(var(--c-deep));">আগ্রহ জানিয়ে রাখুন</a>
+        — সময় হলে আমরাই যোগাযোগ করব
+    </p>
 </div>
 
 <script>

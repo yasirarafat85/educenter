@@ -592,7 +592,15 @@ function render_item_card(array $item, string $type): string
     $ctaBtn = $registrationClosed
         ? '<a href="course-interest?course_id=' . $id . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">জানিয়ে রাখুন</a>'
             . '<p class="text-center text-xs text-gray-500 mt-1.5">নতুন ব্যাচ খুললে আপনাকে জানাবো</p>'
-        : '<a href="' . $actionUrl . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">' . $actionLabel . '</a>';
+        : '<a href="' . $actionUrl . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">' . $actionLabel . '</a>'
+            // 🔴 চলমান কোর্সের কার্ডেই "আগ্রহ জানিয়ে রাখুন" (২০২৬-০৯-২৪, ইউজার: "সবাই তো বিস্তারিততে
+            // নাও যেতে পারে")। কার্ড একটাই ফাংশন থেকে রেন্ডার হয় বলে **কোর্স পেজ ও হোমপেজ দুটোতেই**
+            // একসাথে আসে। ⚠️ শুধু কোর্সে — ওয়ার্কশিট/প্রোডাক্টে আগ্রহ-ফর্ম নেই।
+            // ⚠️ ইচ্ছাকৃতভাবে ছোট ধূসর টেক্সট, বোতাম নয় — সমান বড় করলে যিনি আজই ভর্তি হতেন
+            // তিনিও ওয়েটিং লিস্টে চলে যেতে পারেন (ডিটেইল পেজেও একই নীতি)।
+            . ($type === 'course'
+                ? '<p class="text-center text-xs text-gray-500 mt-2">এখন পারছেন না? <a href="course-interest?course_id=' . $id . '" class="font-semibold underline" style="color:' . $deep . '">আগ্রহ জানিয়ে রাখুন</a></p>'
+                : '');
 
     return '
     <div class="pricing-card bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col h-full" style="border:2px solid ' . $border . ';">
