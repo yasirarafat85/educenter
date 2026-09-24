@@ -76,6 +76,28 @@ $prevWeekStmt = $db->prepare('SELECT COUNT(*) c FROM registrations WHERE created
 $prevWeekStmt->execute(['s' => date('Y-m-d', strtotime('-13 days')), 'e' => $weekStart]);
 $prevWeekReg = (int) $prevWeekStmt->fetch()['c'];
 
+// ভিজিটর পরিসংখ্যান (পাবলিক সাইটের পেজ-লোড, visitor_logs — site-header.php থেকে লগ হয়)
+// 🔴 পুরো ব্লক try/catch-এ: ড্যাশবোর্ড প্যানেলের ল্যান্ডিং পেজ, লগ-কোয়েরি ব্যর্থ হলেও যেন না ভাঙে
+$todayVisits = $yesterdayVisits = $weekVisits = $todayUniqueIps = 0;
+$dailyVisits = array_fill_keys($last7Dates, 0);
+$hasVisitorStats = false;
+try {
+    $todayVisits     = (int) $db->query('SELECT COUNT(*) c FROM visitor_logs WHERE DATE(visited_at) = CURDATE()')->fetch()['c'];
+    $yesterdayVisits = (int) $db->query('SELECT COUNT(*) c FROM visitor_logs WHERE DATE(visited_at) = DATE(CURDATE() - INTERVAL 1 DAY)')->fetch()['c'];
+    $todayUniqueIps  = (int) $db->query('SELECT COUNT(DISTINCT ip_address) c FROM visitor_logs WHERE DATE(visited_at) = CURDATE()')->fetch()['c'];
+    $visitStmt = $db->prepare('SELECT DATE(visited_at) d, COUNT(*) c FROM visitor_logs WHERE visited_at >= :start GROUP BY DATE(visited_at)');
+    $visitStmt->execute(['start' => $weekStart]);
+    foreach ($visitStmt->fetchAll() as $row) {
+        if (isset($dailyVisits[$row['d']])) {
+            $dailyVisits[$row['d']] = (int) $row['c'];
+        }
+    }
+    $weekVisits = array_sum($dailyVisits);
+    $hasVisitorStats = true;
+} catch (PDOException $ex) {
+    $hasVisitorStats = false;
+}
+
 // স্ট্যাট কার্ডের নিচে ছোট ট্রেন্ড-চিপ (বেড়েছে/কমেছে/অপরিবর্তিত)
 function trend_chip(int $now, int $prev): string
 {
@@ -115,7 +137,7 @@ require __DIR__ . '/includes/layout-top.php';
     <div class="relative">
         <p class="text-white/80 text-sm font-semibold mb-1"><?= $greeting ?>, স্বাগতম 👋</p>
         <h2 class="text-2xl sm:text-3xl font-black mb-1.5" style="font-family: var(--font-head);"><?= e(current_admin_name()) ?></h2>
-        <p class="text-white/85 text-sm mb-5">আজকে <?= $todayRegistrations ?> টি নতুন রেজিস্ট্রেশন · <?= $pendingRegistrations ?> টি অপেক্ষমাণ অর্ডার</p>
+        <p class="text-white/85 text-sm mb-5">আজকে <?= $todayRegistrations ?> টি নতুন রেজিস্ট্রেশন · <?= $pendingRegistrations ?> টি অপেক্ষমাণ অর্ডার<?= $hasVisitorStats ? ' · ' . $todayVisits . ' টি ভিজিট' : '' ?></p>
         <div class="flex flex-wrap gap-2.5">
             <a href="manage.php?entity=courses&action=form" class="inline-flex items-center gap-2 bg-white text-gray-800 font-bold px-4 py-2.5 rounded-xl text-sm shadow-sm hover:shadow-md"><i data-lucide="plus" class="w-4 h-4"></i> নতুন কোর্স</a>
             <a href="registrations.php" class="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 border border-white/30 text-white font-bold px-4 py-2.5 rounded-xl text-sm"><i data-lucide="clipboard-list" class="w-4 h-4"></i> রেজিস্ট্রেশন</a>
@@ -152,7 +174,7 @@ $quickTasks = [
     </div>
 </div>
 
-<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
     <div class="bg-white rounded-2xl shadow p-5 flex items-center gap-4">
         <span class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-100 text-indigo-600"><i data-lucide="calendar-check" class="w-6 h-6"></i></span>
         <div>
@@ -161,6 +183,16 @@ $quickTasks = [
             <p class="text-xs mt-1.5"><?= trend_chip($todayRegistrations, $yesterdayReg) ?> <span class="text-gray-400">গতকালের তুলনায়</span></p>
         </div>
     </div>
+    <?php if ($hasVisitorStats && admin_can('logs')): ?>
+    <a href="visitor-logs.php" class="bg-white rounded-2xl shadow p-5 flex items-center gap-4 hover:shadow-lg hover:-translate-y-0.5 transition-all">
+        <span class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-purple-100 text-purple-600"><i data-lucide="eye" class="w-6 h-6"></i></span>
+        <div>
+            <div class="text-3xl font-black text-purple-600 leading-none"><?= $todayVisits ?></div>
+            <p class="text-gray-500 text-sm mt-1">আজকের ভিজিট</p>
+            <p class="text-xs mt-1.5"><?= trend_chip($todayVisits, $yesterdayVisits) ?> <span class="text-gray-400"><?= $todayUniqueIps ?> জন (ইউনিক IP)</span></p>
+        </div>
+    </a>
+    <?php endif; ?>
     <div class="bg-white rounded-2xl shadow p-5 flex items-center gap-4">
         <span class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-blue-100 text-blue-600"><i data-lucide="calendar-days" class="w-6 h-6"></i></span>
         <div>
@@ -189,8 +221,11 @@ $quickTasks = [
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     <div class="bg-white rounded-2xl shadow p-5">
-        <h3 class="font-bold text-gray-800 mb-1">গত ৭ দিনের রেজিস্ট্রেশন/অর্ডার</h3>
-        <p class="text-gray-400 text-xs mb-4">কোর্স, ওয়ার্কশিট ও প্রোডাক্ট — কোন দিনে কতগুলো</p>
+        <div class="flex items-center justify-between mb-1">
+            <h3 class="font-bold text-gray-800">গত ৭ দিনের রেজিস্ট্রেশন/অর্ডার</h3>
+            <?php if ($hasVisitorStats && admin_can('logs')): ?><a href="visitor-logs.php" class="text-indigo-600 text-xs font-semibold">ভিজিটর লগ →</a><?php endif; ?>
+        </div>
+        <p class="text-gray-400 text-xs mb-4">কোর্স, ওয়ার্কশিট ও প্রোডাক্ট — কোন দিনে কতগুলো<?= $hasVisitorStats ? ' · সাথে ঐ দিনের ভিজিট (ডান পাশের স্কেল), গত ৭ দিনে মোট ' . $weekVisits . ' টি' : '' ?></p>
         <div class="h-64">
             <canvas id="typeChart"></canvas>
         </div>
@@ -261,6 +296,10 @@ new Chart(document.getElementById('typeChart'), {
             { label: 'কোর্স', data: <?= json_encode(array_column($dailyTypeMatrix, 'course')) ?>, backgroundColor: '#4f46e5' },
             { label: 'ওয়ার্কশিট', data: <?= json_encode(array_column($dailyTypeMatrix, 'worksheet')) ?>, backgroundColor: '#16a34a' },
             { label: 'প্রোডাক্ট', data: <?= json_encode(array_column($dailyTypeMatrix, 'product')) ?>, backgroundColor: '#f59e0b' },
+<?php if ($hasVisitorStats): ?>
+            // ভিজিট আলাদা স্কেলে (y1, ডান পাশে) — রেজিস্ট্রেশনের চেয়ে সংখ্যা অনেক বড় হয় বলে একই স্কেলে দিলে বারগুলো চ্যাপ্টা দেখাত
+            { type: 'line', label: 'ভিজিট', data: <?= json_encode(array_values($dailyVisits)) ?>, yAxisID: 'y1', borderColor: '#7c3aed', backgroundColor: '#7c3aed', borderWidth: 2, tension: .35, pointRadius: 3, fill: false, order: 0 },
+<?php endif; ?>
         ]
     },
     options: {
@@ -270,6 +309,9 @@ new Chart(document.getElementById('typeChart'), {
         scales: {
             x: { stacked: true },
             y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
+<?php if ($hasVisitorStats): ?>
+            , y1: { position: 'right', beginAtZero: true, ticks: { precision: 0 }, grid: { drawOnChartArea: false } }
+<?php endif; ?>
         }
     }
 });
