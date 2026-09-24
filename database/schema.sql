@@ -142,6 +142,7 @@ CREATE TABLE course_batches (
     course_months INT NOT NULL DEFAULT 0,             -- 🔑 কোর্স কয় মাসের (খাতার কিস্তি-সংখ্যা)। ০ হলে total_parcels → duration থেকে আন্দাজ
     reg_installments INT NOT NULL DEFAULT 0,          -- রেজিস্ট্রেশন ফি কয় কিস্তিতে নেওয়া হয় (০/খালি = একবারে)
     tuition_installments INT NOT NULL DEFAULT 0,      -- বেতন কয় কিস্তিতে নেওয়া হয় (০/খালি = প্রতি মাসে একবার)
+    tuition_split_mode VARCHAR(10) NOT NULL DEFAULT '', -- বেতনের ভাগ: ''/'money' = টাকা সমান ভাগ (ডিফল্ট), 'months' = পূর্ণ মাস ধরে
     fee_mode VARCHAR(20) NOT NULL DEFAULT '', -- ফি'র গঠন (পেমেন্ট খাতার কিস্তি অটো তৈরির ভিত্তি): reg_monthly / monthly / onetime; খালি = কোড নিজে আন্দাজ করে (pay_guess_fee_mode)
     duration VARCHAR(100),
     instructor VARCHAR(100),
@@ -551,6 +552,8 @@ CREATE TABLE registration_payments (
     seq             INT          NOT NULL DEFAULT 0,          -- ক্রম (১, ২, ৩...)
     kind            VARCHAR(20)  NOT NULL DEFAULT 'monthly',  -- registration / monthly / onetime / other / legacy
     label           VARCHAR(100) NOT NULL DEFAULT '',         -- "রেজিস্ট্রেশন ফি" / "১ম মাস"
+    month_from      SMALLINT UNSIGNED DEFAULT NULL,          -- এই কিস্তি কোন কালেকশন-মাস (কুরিয়ারের ১ম..Nম পার্সেল) থেকে
+    month_to        SMALLINT UNSIGNED DEFAULT NULL,          -- ...কোন মাস পর্যন্ত ঢাকে (পুরনো সারিতে NULL — তখন লেবেল পড়ে আন্দাজ)
     amount_due      DECIMAL(10,2) NOT NULL DEFAULT 0,         -- প্রাপ্য (স্ন্যাপশট — ব্যাচের দাম পরে বদলালেও অক্ষত)
     discount_type   VARCHAR(10)  NOT NULL DEFAULT 'fixed',    -- fixed (৳) / percent (%)
     discount_value  DECIMAL(10,2) NOT NULL DEFAULT 0,         -- অ্যাডমিন যা টাইপ করেছেন

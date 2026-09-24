@@ -925,15 +925,25 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                 <?php foreach ($rows as $idx => $r):
                     $net = pay_net($r);
                     $st  = pay_row_status($r);
+                    // এই কিস্তি কোন কালেকশন-মাস ঢাকে — ঘর দুটো খালি থাকলে (মাইগ্রেশনের আগে সেভ
+                    // হওয়া সারি) লেবেল পড়ে বের করে hidden-এ বসানো হয়, যাতে লেবেল বদলালেও
+                    // কুরিয়ারের মাসের সাথে মিল হারিয়ে না যায়।
+                    $rMonths = pay_row_months($r);
+                    $mFrom   = $rMonths ? (int) $rMonths[0] : 0;
+                    $mTo     = $rMonths ? (int) end($rMonths) : 0;
                     ?>
                     <div class="pay-row bg-white rounded-xl p-3 mb-2<?= $st === 'skipped' ? ' opacity-60' : '' ?>">
                         <input type="hidden" name="p[<?= $idx ?>][id]" value="<?= (int) $r['id'] ?>">
                         <input type="hidden" class="pay-skip" name="p[<?= $idx ?>][is_skipped]" value="<?= $st === 'skipped' ? 1 : 0 ?>">
                         <input type="hidden" name="p[<?= $idx ?>][seq]" value="<?= (int) $r['seq'] ?>">
                         <input type="hidden" name="p[<?= $idx ?>][kind]" value="<?= e($r['kind']) ?>">
-                        <input type="hidden" name="p[<?= $idx ?>][label]" value="<?= e($r['label']) ?>">
+                        <input type="hidden" name="p[<?= $idx ?>][month_from]" value="<?= $mFrom ?>">
+                        <input type="hidden" name="p[<?= $idx ?>][month_to]" value="<?= $mTo ?>">
                         <div class="flex flex-wrap items-center" style="column-gap:.75rem;row-gap:.5rem">
-                            <span class="font-bold text-gray-800 text-sm" style="min-width:7.5rem"><?= e($r['label']) ?></span>
+                            <label class="text-xs text-gray-500">কিস্তির নাম
+                                <input type="text" name="p[<?= $idx ?>][label]" value="<?= e($r['label']) ?>" maxlength="100"
+                                       class="pay-label block border rounded-lg px-2 py-1 text-sm font-bold text-gray-800" style="width:9.5rem">
+                            </label>
 
                             <label class="text-xs text-gray-500">প্রাপ্য
                                 <input type="number" step="any" min="0" name="p[<?= $idx ?>][amount_due]" value="<?= e((string) round((float) $r['amount_due'], 2)) ?>"
@@ -965,9 +975,54 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                             <button type="button" class="pay-fill text-xs font-semibold text-indigo-600" title="নিট পরিমাণটা জমায় বসিয়ে দিন">পুরোটা জমা</button>
                             <?php // মাঝপথে কোর্স ছেড়ে দিলে বাকি মাসগুলো "বাদ" — তখন ঐ কিস্তি প্রাপ্য/বাকিতে গোনা হয় না ?>
                             <button type="button" class="pay-skip-btn text-xs font-semibold text-gray-500" title="এই মাসটা আর প্রযোজ্য নয় (কোর্স ছেড়ে দিয়েছে)"><?= $st === 'skipped' ? '↩ ফেরাও' : '⊘ বাদ' ?></button>
+                            <?php // 🔴 "বাদ" থেকে আলাদা: বাদ = সারিটা থাকে কিন্তু হিসাবে ধরা হয় না; মুছুন = সারিটাই আর থাকবে না ?>
+                            <button type="button" class="pay-del text-xs font-semibold text-red-600 ml-auto" title="এই কিস্তির সারিটাই মুছে ফেলুন (সংরক্ষণ করলে কার্যকর হবে)">✕</button>
                         </div>
                     </div>
                 <?php endforeach; ?>
+
+                <?php // একজন অভিভাবকের ব্যবস্থা আলাদা হলে তাঁর খাতায় বাড়তি কিস্তি যোগ করা যায় (শুধু এই একজনের) ?>
+                <template class="pay-tpl"><div class="pay-row bg-white rounded-xl p-3 mb-2">
+                        <input type="hidden" name="p[__IDX__][id]" value="0">
+                        <input type="hidden" class="pay-skip" name="p[__IDX__][is_skipped]" value="0">
+                        <input type="hidden" name="p[__IDX__][seq]" value="__SEQ__">
+                        <input type="hidden" name="p[__IDX__][kind]" value="other">
+                        <input type="hidden" name="p[__IDX__][month_from]" value="0">
+                        <input type="hidden" name="p[__IDX__][month_to]" value="0">
+                        <div class="flex flex-wrap items-center" style="column-gap:.75rem;row-gap:.5rem">
+                            <label class="text-xs text-gray-500">কিস্তির নাম
+                                <input type="text" name="p[__IDX__][label]" value="" maxlength="100" placeholder="যেমন: বাড়তি কিস্তি"
+                                       class="pay-label block border rounded-lg px-2 py-1 text-sm font-bold text-gray-800" style="width:9.5rem">
+                            </label>
+                            <label class="text-xs text-gray-500">প্রাপ্য
+                                <input type="number" step="any" min="0" name="p[__IDX__][amount_due]" value="0"
+                                       class="pay-due block border rounded-lg px-2 py-1 text-sm text-gray-800" style="width:6rem">
+                            </label>
+                            <label class="text-xs text-gray-500">ছাড়
+                                <span class="flex gap-1">
+                                    <input type="number" step="any" min="0" name="p[__IDX__][discount_value]" value="0"
+                                           class="pay-disc border rounded-lg px-2 py-1 text-sm" style="width:4.5rem">
+                                    <select name="p[__IDX__][discount_type]" class="pay-disc-type border rounded-lg px-1 py-1 text-sm">
+                                        <option value="fixed" selected>৳</option>
+                                        <option value="percent">%</option>
+                                    </select>
+                                </span>
+                            </label>
+                            <span class="text-xs text-gray-500">নিট<br><span class="pay-net font-bold text-gray-800 text-sm">৳0</span></span>
+                            <label class="text-xs text-gray-500">জমা
+                                <input type="number" step="any" min="0" name="p[__IDX__][amount_paid]" value="0"
+                                       class="pay-paid block border rounded-lg px-2 py-1 text-sm font-semibold" style="width:6rem">
+                            </label>
+                            <span class="pay-badge inline-block px-2 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500">○ বাকি</span>
+                            <button type="button" class="pay-fill text-xs font-semibold text-indigo-600" title="নিট পরিমাণটা জমায় বসিয়ে দিন">পুরোটা জমা</button>
+                            <button type="button" class="pay-skip-btn text-xs font-semibold text-gray-500" title="এই মাসটা আর প্রযোজ্য নয়">⊘ বাদ</button>
+                            <button type="button" class="pay-del text-xs font-semibold text-red-600 ml-auto" title="এই কিস্তির সারিটাই মুছে ফেলুন">✕</button>
+                        </div>
+                    </div></template>
+                <div class="pay-rows-end mb-2">
+                    <button type="button" class="pay-add text-xs font-bold text-indigo-600">+ কিস্তি যোগ করুন</button>
+                    <span class="text-xs text-gray-400">— শুধু এই একজনের খাতায় (অন্য কারো বদলাবে না)</span>
+                </div>
 
                 <div class="flex flex-wrap items-center gap-3 bg-white rounded-xl p-3 mb-3 text-sm">
                     <span class="text-gray-500">মোট প্রাপ্য <strong class="pay-t-due text-gray-800">৳<?= $money($summary['due']) ?></strong></span>
@@ -1656,6 +1711,45 @@ require __DIR__ . '/includes/layout-top.php';
                         },
                         'খাতা নতুন করে সাজাবেন?'
                     );
+                    return;
+                }
+                // "+ কিস্তি যোগ করুন" — এই একজনের খাতায় একটা বাড়তি খালি সারি
+                if (ev.target.closest('.pay-add')) {
+                    var tpl = form.querySelector('.pay-tpl');
+                    var end = form.querySelector('.pay-rows-end');
+                    if (!tpl || !end) { return; }
+                    // ইনডেক্স কখনো পুনরাবৃত্তি হবে না (মুছে ফেলার পরেও) — নাহলে PHP-তে একটা সারি
+                    // আরেকটাকে চাপা দিয়ে দিত
+                    form.dataset.payNext = String(parseInt(form.dataset.payNext || '0', 10) + 1);
+                    var idx = 'n' + form.dataset.payNext;
+                    var seq = form.querySelectorAll('.pay-row').length + 1;
+                    var html = tpl.innerHTML.split('__IDX__').join(idx).split('__SEQ__').join(String(seq));
+                    var box = document.createElement('div');
+                    box.innerHTML = html;
+                    var node = box.firstElementChild;
+                    end.parentNode.insertBefore(node, end);
+                    var nameEl = node.querySelector('.pay-label');
+                    if (nameEl) { nameEl.focus(); }
+                    refresh(form);
+                    return;
+                }
+                // "✕" — সারিটা ফর্ম থেকে সরানো; সংরক্ষণ করলে DB থেকেও মুছবে
+                var delBtn = ev.target.closest('.pay-del');
+                if (delBtn) {
+                    var drow = delBtn.closest('.pay-row');
+                    if (!drow) { return; }
+                    if (form.querySelectorAll('.pay-row').length < 2) { return; } // শেষ সারিটা রাখা হয়
+                    var paidOnRow = parseFloat((drow.querySelector('.pay-paid') || {}).value) || 0;
+                    var drop = function () { drow.remove(); refresh(form); };
+                    if (paidOnRow > 0) {
+                        // 🔴 জমা থাকা সারি মুছলে মোট জমা (= আয়) কমে যাবে — তাই আগে সতর্কতা
+                        showConfirmModal(
+                            'এই কিস্তিতে জমা ' + money(paidOnRow) + ' লেখা আছে। সারিটা মুছে সংরক্ষণ করলে মোট জমা ও আয় ঐ পরিমাণ কমে যাবে।',
+                            drop, 'জমা থাকা কিস্তি মুছবেন?'
+                        );
+                    } else {
+                        drop();
+                    }
                     return;
                 }
                 // "সব মাসে একই ছাড়" — প্রথম মাসের ছাড় বাকি সব মাসে কপি (রেজিস্ট্রেশন ফি অছোঁয়া থাকে)

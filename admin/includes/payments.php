@@ -92,12 +92,27 @@ function pay_label_months(string $label): array
     return ($a > 0 && $b >= $a) ? range($a, $b) : [];
 }
 
+// একটা কিস্তি কোন কোন কালেকশন-মাস ঢাকে — আগে `month_from`/`month_to` ঘর দুটো দেখা হয়
+// (নির্ভুল, লেবেলের লেখার উপর নির্ভর করে না), না থাকলে পুরনো সারির লেবেল পড়ে আন্দাজ।
+// 🔴 এই ফলব্যাকটা রাখতেই হবে — মাইগ্রেশনের আগে সেভ হওয়া খাতায় ঘর দুটো খালি।
+function pay_row_months(array $row): array
+{
+    $from = $row['month_from'] ?? null;
+    $to   = $row['month_to'] ?? null;
+    if ($from !== null && $from !== '' && (int) $from > 0) {
+        $a = (int) $from;
+        $b = ($to !== null && $to !== '' && (int) $to >= $a) ? (int) $to : $a;
+        return range($a, $b);
+    }
+    return pay_label_months((string) ($row['label'] ?? ''));
+}
+
 // 🔑 কুরিয়ারের N-তম মাসের পার্সেল খাতার কোন কিস্তির সাথে মেলে
 // (বেতন কম কিস্তিতে নেওয়া হলে এক কিস্তি একাধিক মাস ঢাকে — তখন সেই কিস্তিটাই ফেরে)
 function pay_row_for_month(array $rows, int $month): ?array
 {
     foreach ($rows as $r) {
-        if (in_array($month, pay_label_months((string) $r['label']), true)) {
+        if (in_array($month, pay_row_months($r), true)) {
             return $r;
         }
     }
@@ -192,6 +207,31 @@ function pay_batch_tuition_installments(array $batch, int $months): int
     return max(1, min($months, $n));
 }
 
+// বেতনের কিস্তি কীভাবে ভাগ হবে — 'money' (মোট বেতন কিস্তি-সংখ্যা দিয়ে সমান ভাগ, ডিফল্ট)
+// নাকি 'months' (প্রতি কিস্তিতে পূর্ণ মাস ধরে — আগের কিস্তিতে বেশি মাস)।
+// 🔑 মাস যখন কিস্তি দিয়ে সমানভাবে ভাগ যায় (৪÷২, ৬÷৩) তখন দুই নিয়মের ফল হুবহু এক;
+// পার্থক্য শুধু ভাগ না গেলে (৩ মাস ২ কিস্তিতে → money: ১০৩৫+১০৩৫, months: ১৩৮০+৬৯০)।
+function pay_tuition_split_modes(): array
+{
+    return [
+        'money'  => 'টাকা সমান ভাগ (ডিফল্ট)',
+        'months' => 'মাস ধরে ভাগ (আগের কিস্তিতে বেশি মাস)',
+    ];
+}
+
+function pay_batch_tuition_split_mode(array $batch): string
+{
+    return trim((string) ($batch['tuition_split_mode'] ?? '')) === 'months' ? 'months' : 'money';
+}
+
+// টাকা কয়বার তোলা হয় (কুরিয়ারের ১ম..Nম পার্সেলই কালেকশনের উপলক্ষ) — খাতার কিস্তি
+// এই স্লটগুলোর সাথেই মেলে। পার্সেল-সংখ্যা না থাকলে মাসের সংখ্যাই স্লট।
+function pay_collect_slots(array $batch, int $months): int
+{
+    $n = (int) ($batch['total_parcels'] ?? 0);
+    return $n > 0 ? min(60, $n) : max(1, $months);
+}
+
 // মোট টাকা কয়েক কিস্তিতে ভাগ — যোগফল সবসময় হুবহু মোটের সমান থাকে
 // (পয়সার অবশিষ্ট আগের কিস্তিগুলোতে বসে; যেমন ৫০০ ÷ ৩ = 166.67 + 166.67 + 166.66)।
 function pay_split_amount(float $total, int $parts): array
@@ -276,12 +316,36 @@ function pay_build_plan(PDO $db, array $reg): array
         }
     }
 
-    // বেতন — ডিফল্টে প্রতি মাসে একটা কিস্তি, কিন্তু tuition_installments দিলে কম কিস্তিতে
-    // (যেমন ৪ মাসের কোর্সের বেতন ২ বারে → "১ম–২য় মাস" ও "৩য়–৪র্থ মাস", প্রতিটায় ২ মাসের টাকা)
+    // বেতন — ডিফল্টে প্রতি মাসে একটা কিস্তি, কিন্তু tuition_installments দিলে কম কিস্তিতে।
+    //
+    // 🔑 টাকা ভাগ করার দুই নিয়ম (ব্যাচের tuition_split_mode):
+    //   • money  (ডিফল্ট) — মোট বেতন ÷ কিস্তি-সংখ্যা, প্রতিটা কিস্তি সমান
+    //     (৩ মাস × ৬৯০ = ২০৭০, ২ কিস্তিতে → ১০৩৫ + ১০৩৫ — ইউজারের বাস্তব নিয়ম, "দেড় মাস পরপর")
+    //   • months — প্রতি কিস্তিতে পূর্ণ মাস (৩ মাস ২ কিস্তিতে → ১৩৮০ + ৬৯০)
+    //   মাস কিস্তি দিয়ে সমানভাবে ভাগ গেলে (৪÷২, ৬÷৩) দুই নিয়মের ফল **হুবহু এক**।
+    //
+    // মাস-পরিসর (month_from/month_to) হিসাব হয় **কালেকশন-স্লট** ধরে (কুরিয়ারের ১ম..Nম
+    // পার্সেল), মাস ধরে নয় — তাই কিস্তি-সংখ্যা ও পার্সেল-সংখ্যা সমান হলে কিস্তি k ঠিক
+    // k-তম পার্সেলের সাথেই মেলে (ধাপ ৩-এর কালেকশন এখান থেকেই ভিত্তি নেয়)।
     $tuitionParts = pay_batch_tuition_installments($batch, $months);
-    foreach (pay_month_groups($months, $tuitionParts) as $group) {
-        [$from, $to] = $group;
-        $rows[] = pay_blank_row($seq++, 'monthly', pay_month_span_label($from, $to), $fee * ($to - $from + 1));
+    $splitMode    = pay_batch_tuition_split_mode($batch);
+    $monthGroups  = pay_month_groups($months, $tuitionParts);
+    $slotGroups   = pay_month_groups(pay_collect_slots($batch, $months), $tuitionParts);
+    $amounts      = $splitMode === 'months'
+        ? array_map(fn(array $g) => $fee * ($g[1] - $g[0] + 1), $monthGroups)
+        : pay_split_amount($fee * $months, $tuitionParts);
+
+    // লেবেল: মাস-ভিত্তিক ভাগে (বা টাকা সমান ভাগ যখন মাসের সীমার সাথে হুবহু মেলে) আগের
+    // "১ম–২য় মাস" লেখাই থাকে — পুরনো খাতা/কুরিয়ারের লেবেলের সাথে এক থাকে। মাসের সীমা না
+    // মিললে (৩ মাস ২ কিস্তিতে = দেড় মাস করে) মাসের নামে লেখা যায় না, তাই কিস্তির নম্বর।
+    $useMonthLabels = ($splitMode === 'months') || ($months % $tuitionParts === 0);
+
+    foreach ($monthGroups as $i => $group) {
+        $label = $useMonthLabels
+            ? pay_month_span_label($group[0], $group[1])
+            : 'বেতন (কিস্তি ' . ($i + 1) . '/' . $tuitionParts . ')';
+        $slot  = $slotGroups[min($i, count($slotGroups) - 1)];
+        $rows[] = pay_blank_row($seq++, 'monthly', $label, (float) ($amounts[$i] ?? 0), $slot[0], $slot[1]);
     }
     return $rows;
 }
@@ -347,10 +411,11 @@ function pay_rebuild_plan(PDO $db, array $reg): int
 }
 
 // খালি (এখনো সেভ না হওয়া) কিস্তির সারি
-function pay_blank_row(int $seq, string $kind, string $label, float $due): array
+function pay_blank_row(int $seq, string $kind, string $label, float $due, ?int $monthFrom = null, ?int $monthTo = null): array
 {
     return [
         'id' => 0, 'seq' => $seq, 'kind' => $kind, 'label' => $label,
+        'month_from' => $monthFrom, 'month_to' => $monthTo ?? $monthFrom,
         'amount_due' => round($due, 2), 'discount_type' => 'fixed', 'discount_value' => 0.0,
         'discount_amount' => 0.0, 'amount_paid' => 0.0, 'is_skipped' => 0, 'paid_at' => null, 'method' => '', 'note' => null,
     ];
@@ -451,23 +516,38 @@ function pay_status_chip(array $summary): string
 //             'discount_value'=>..,'amount_paid'=>..,'paid_at'=>..,'method'=>..,'note'=>..], ... ]
 function pay_save_rows(PDO $db, int $regId, array $input): int
 {
+    // month_from/month_to মাইগ্রেশন চালানো না থাকলে ঐ দুটো ঘর ছাড়াই সেভ হয় (খাতা ভাঙে না)।
+    $hasMonthCols = pay_has_month_columns($db);
+    $mCols = $hasMonthCols ? ', month_from, month_to' : '';
+    $mVals = $hasMonthCols ? ', :mfrom, :mto' : '';
+    $mSet  = $hasMonthCols ? ', month_from = :mfrom, month_to = :mto' : '';
+
     $ins = $db->prepare(
         'INSERT INTO registration_payments
-            (registration_id, seq, kind, label, amount_due, discount_type, discount_value, discount_amount, amount_paid, is_skipped, paid_at, method, note)
-         VALUES (:reg, :seq, :kind, :label, :due, :dtype, :dval, :damt, :paid, :skip, :pat, :method, :note)'
+            (registration_id, seq, kind, label, amount_due, discount_type, discount_value, discount_amount, amount_paid, is_skipped, paid_at, method, note' . $mCols . ')
+         VALUES (:reg, :seq, :kind, :label, :due, :dtype, :dval, :damt, :paid, :skip, :pat, :method, :note' . $mVals . ')'
     );
     $upd = $db->prepare(
         'UPDATE registration_payments SET seq = :seq, kind = :kind, label = :label, amount_due = :due,
             discount_type = :dtype, discount_value = :dval, discount_amount = :damt, amount_paid = :paid,
-            is_skipped = :skip, paid_at = :pat, method = :method, note = :note
+            is_skipped = :skip, paid_at = :pat, method = :method, note = :note' . $mSet . '
          WHERE id = :id AND registration_id = :reg'
     );
 
-    $saved = 0;
-    foreach ($input as $i => $raw) {
+    $saved   = 0;
+    $keepIds = [];
+    // ⚠️ কী দিয়ে গোনা হয় না — প্যানেল থেকে নতুন সারি "n1"/"n2" ধরনের কী নিয়ে আসে (সংখ্যা নয়)
+    $pos = 0;
+    foreach ($input as $raw) {
+        $pos++;
         $label = trim((string) ($raw['label'] ?? ''));
         if ($label === '') {
-            continue; // লেবেল ছাড়া সারি অর্থহীন — চুপচাপ বাদ
+            // 🔴 নাম খালি হলে নতুন সারিটা বাদ, কিন্তু **আগে থেকে থাকা সারি মোছা হয় না** —
+            // নাহলে নাম মুছে ফেলার মতো ছোট ভুলে ঐ কিস্তির জমা (মানে আয়) নীরবে হারাত।
+            if (($existingId = (int) ($raw['id'] ?? 0)) > 0) {
+                $keepIds[] = $existingId;
+            }
+            continue;
         }
         $due   = max(0.0, (float) str_replace(',', '', (string) ($raw['amount_due'] ?? 0)));
         $dtype = ($raw['discount_type'] ?? 'fixed') === 'percent' ? 'percent' : 'fixed';
@@ -478,7 +558,7 @@ function pay_save_rows(PDO $db, int $regId, array $input): int
         // 🔴 ছাড়ের টাকা সার্ভারেই হিসাব হয় — ব্রাউজার থেকে আসা মান বিশ্বাস করা হয় না
         $fields = [
             'reg'    => $regId,
-            'seq'    => (int) ($raw['seq'] ?? ($i + 1)),
+            'seq'    => ((int) ($raw['seq'] ?? 0)) ?: $pos,
             'kind'   => (string) ($raw['kind'] ?? 'other'),
             'label'  => mb_substr($label, 0, 100),
             'due'    => $due,
@@ -491,14 +571,47 @@ function pay_save_rows(PDO $db, int $regId, array $input): int
             'method' => mb_substr(trim((string) ($raw['method'] ?? '')), 0, 30),
             'note'   => ($n = mb_substr(trim((string) ($raw['note'] ?? '')), 0, 255)) !== '' ? $n : null,
         ];
+        if ($hasMonthCols) {
+            $mf = (int) ($raw['month_from'] ?? 0);
+            $mt = (int) ($raw['month_to'] ?? 0);
+            $fields['mfrom'] = $mf > 0 ? min(60, $mf) : null;
+            $fields['mto']   = $mf > 0 ? min(60, max($mf, $mt)) : null;
+        }
 
         $id = (int) ($raw['id'] ?? 0);
         if ($id > 0) {
             $upd->execute($fields + ['id' => $id]);
+            $keepIds[] = $id;
         } else {
             $ins->execute($fields);
+            $keepIds[] = (int) $db->lastInsertId(); // 🔴 নাহলে নিচের DELETE এইমাত্র বসানো সারিটাই মুছে ফেলত
         }
         $saved++;
     }
+
+    // 🔴 প্যানেল থেকে মুছে ফেলা সারি DB থেকেও যায় — প্যানেল সবসময় **সব** সারি সাবমিট করে,
+    // তাই যেটা এলো না সেটা অ্যাডমিন ইচ্ছে করে মুছেছেন। (খালি সাবমিটে কিছু মোছে না — নিরাপত্তা:
+    // ফর্ম আংশিক পৌঁছালে পুরো খাতা উবে যেত।)
+    if ($keepIds) {
+        $in = implode(',', array_fill(0, count($keepIds), '?'));
+        $del = $db->prepare("DELETE FROM registration_payments WHERE registration_id = ? AND id NOT IN ($in)");
+        $del->execute(array_merge([$regId], $keepIds));
+    }
     return $saved;
+}
+
+// registration_payments-এ month_from/month_to ঘর দুটো আছে কিনা (প্রতি রিকোয়েস্টে একবারই দেখে)
+function pay_has_month_columns(PDO $db): bool
+{
+    static $cache = [];
+    $key = spl_object_id($db);
+    if (!array_key_exists($key, $cache)) {
+        try {
+            $db->query('SELECT month_from, month_to FROM registration_payments LIMIT 0');
+            $cache[$key] = true;
+        } catch (PDOException $ex) {
+            $cache[$key] = false;
+        }
+    }
+    return $cache[$key];
 }
