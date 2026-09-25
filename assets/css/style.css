@@ -444,3 +444,18 @@ body { padding-bottom: 64px; }
     .cm-arw { width: 38px; height: 38px; font-size: 19px; }
     .cm-vthumb { width: 86px; height: 65px; }
 }
+
+/* কার্ডের নিচের সারির দুটো আউটলাইন বোতাম — "প্রিভিউ দেখুন" ও "বিস্তারিত দেখুন"
+   (২০২৬-০৯-২৫, ইউজারের নিজের মকআপ অনুযায়ী)। সাধারণ CSS-এ রাখা হয়েছে যাতে
+   Tailwind রিবিল্ড না লাগে; রঙ সাইট-থিমের ভ্যারিয়েবল থেকে। */
+.cc-btns { display: grid; gap: 8px; margin-top: 10px; }
+.cc-btn {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    text-align: center; line-height: 1.4; padding: 10px 8px; border-radius: 12px;
+    border: 1.5px solid rgb(var(--c-border)); background: #fff;
+    color: rgb(var(--c-deep)); font-weight: 700; font-size: .9rem;
+    text-decoration: none; min-width: 0;
+}
+.cc-btn:hover { background: rgb(var(--c-tint)); }
+.cc-btn-plain { border-color: #e5e7eb; color: #4b5563; }
+.cc-btn-plain:hover { background: #f9fafb; color: #1f2937; }

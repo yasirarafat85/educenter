@@ -649,39 +649,41 @@ function render_item_card(array $item, string $type): string
     $ctaBtn = $registrationClosed
         ? '<a href="course-interest?course_id=' . $id . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">জানিয়ে রাখুন</a>'
             . '<p class="text-center text-xs text-gray-500 mt-1.5">নতুন ব্যাচ খুললে আপনাকে জানাবো</p>'
-        : '<a href="' . $actionUrl . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">' . $actionLabel . '</a>'
-            // 🔴 চলমান কোর্সের কার্ডেই "আগ্রহ জানিয়ে রাখুন" (২০২৬-০৯-২৪, ইউজার: "সবাই তো বিস্তারিততে
-            // নাও যেতে পারে")। কার্ড একটাই ফাংশন থেকে রেন্ডার হয় বলে **কোর্স পেজ ও হোমপেজ দুটোতেই**
-            // একসাথে আসে। ⚠️ শুধু কোর্সে — ওয়ার্কশিট/প্রোডাক্টে আগ্রহ-ফর্ম নেই।
-            // ⚠️ ইচ্ছাকৃতভাবে ছোট ধূসর টেক্সট, বোতাম নয় — সমান বড় করলে যিনি আজই ভর্তি হতেন
-            // তিনিও ওয়েটিং লিস্টে চলে যেতে পারেন (ডিটেইল পেজেও একই নীতি)।
-            . ($type === 'course'
-                ? '<p class="text-center text-xs text-gray-500 mt-2">এখন পারছেন না? <a href="course-interest?course_id=' . $id . '" class="font-semibold underline" style="color:' . $deep . '">আগ্রহ জানিয়ে রাখুন</a></p>'
-                : '');
+        : '<a href="' . $actionUrl . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">' . $actionLabel . '</a>';
 
-    // 📸 ছবি/ভিডিও — কার্ডে **ছোট টেক্সট লিংক** (বোতাম নয়, "আগ্রহ জানিয়ে রাখুন"-এর মতোই
-    // ইচ্ছাকৃত: সমান বড় করলে আসল রেজিস্ট্রেশন বোতাম চাপা পড়ে যায়)। কার্ডে ওভারলে বসানো
-    // হয়নি — গ্রিডে ১০টা কার্ড মানে ১০টা লুকানো গ্যালারি, পেজ ভারী হতো; বদলে ডিটেইল পেজের
-    // `#cm-photos` হ্যাশে পাঠানো হয়, ওখানে পৌঁছেই গ্যালারি খুলে যায় (site-footer.php-এর JS)।
-    $mediaLink = '';
+    // 🔴 চলমান কোর্সের কার্ডেই "আগ্রহ জানিয়ে রাখুন" (২০২৬-০৯-২৪, ইউজার: "সবাই তো বিস্তারিততে
+    // নাও যেতে পারে")। কার্ড একটাই ফাংশন থেকে রেন্ডার হয় বলে **কোর্স পেজ ও হোমপেজ দুটোতেই**
+    // একসাথে আসে। ⚠️ শুধু কোর্সে — ওয়ার্কশিট/প্রোডাক্টে আগ্রহ-ফর্ম নেই।
+    // ⚠️ ইচ্ছাকৃতভাবে ছোট ধূসর টেক্সট, বোতাম নয় — সমান বড় করলে যিনি আজই ভর্তি হতেন
+    // তিনিও ওয়েটিং লিস্টে চলে যেতে পারেন (ডিটেইল পেজেও একই নীতি)।
+    // ২০২৬-০৯-২৫: এখন এটা দুই বোতামের **নিচে** বসে (আগে CTA-র ঠিক নিচে ছিল, ভিড় লাগত)।
+    $interestLine = (!$registrationClosed && $type === 'course')
+        ? '<p class="text-center text-xs text-gray-500 mt-2.5">এখন ভর্তি না হতে চাইলে? <a href="course-interest?course_id=' . $id . '" class="font-semibold underline" style="color:' . $deep . '">আগ্রহ জানিয়ে রাখুন</a></p>'
+        : '';
+
+    // 📸 ছবি/ভিডিও — কার্ডে **একটাই "প্রিভিউ দেখুন" আউটলাইন বোতাম**, "বিস্তারিত দেখুন"-এর
+    // পাশে (২০২৬-০৯-২৫, ইউজারের নিজের মকআপ)। 🔴 সংখ্যা দেখানো হয় না (ইউজারের স্পষ্ট চাওয়া —
+    // "৬টি ছবি" লিখলে কার্ডে ভিড় লাগে)। কার্ডে ওভারলে বসানো হয়নি — গ্রিডে ১০টা কার্ড মানে
+    // ১০টা লুকানো গ্যালারি, পেজ ভারী হতো; বদলে ডিটেইল পেজের `#cm-photos` হ্যাশে পাঠানো হয়,
+    // ওখানে পৌঁছেই গ্যালারি খুলে যায় (site-footer.php-এর JS)।
+    $previewBtn = '';
     if ($type === 'course') {
         $mc = course_media_all_counts()[$id] ?? [];
         $nPhoto = (int) ($mc['photos'] ?? 0);
         $nVideo = (int) ($mc['videos'] ?? 0);
-        $bits = [];
-        if ($nPhoto > 0) {
-            $bits[] = '<a href="detail?type=course&amp;id=' . $id . '#cm-photos" class="font-semibold underline" style="color:' . $deep . '">📸 '
-                . e(bn_digits($nPhoto)) . 'টি ছবি</a>';
-        }
-        if ($nVideo > 0) {
-            $bits[] = '<a href="detail?type=course&amp;id=' . $id . '#cm-videos" class="font-semibold underline" style="color:' . $deep . '">▶️ '
-                . e(bn_digits($nVideo)) . 'টি ভিডিও</a>';
-        }
-        if ($bits) {
-            $mediaLink = '<p class="text-center text-xs text-gray-500 mt-2">' . implode(' &nbsp;·&nbsp; ', $bits) . '</p>';
+        if ($nPhoto > 0 || $nVideo > 0) {
+            $hash = $nPhoto > 0 ? '#cm-photos' : '#cm-videos';
+            $previewBtn = '<a href="detail?type=course&amp;id=' . $id . $hash . '" class="cc-btn">'
+                . e(course_media_card_label()) . '</a>';
         }
     }
-    $ctaBtn .= $mediaLink;
+    // দুই বোতামের সারি — প্রিভিউ না থাকলে "বিস্তারিত" একাই পুরো চওড়া
+    // (`:has()` CSS-এ ভরসা না করে কলাম-সংখ্যা সার্ভারেই বসানো, render_course_media()-এর মতো)
+    $btnCount = ($previewBtn !== '' ? 1 : 0) + 1;
+    $cardBtns = '<div class="cc-btns" style="grid-template-columns:repeat(' . $btnCount . ',minmax(0,1fr))">'
+        . $previewBtn
+        . '<a href="detail?type=' . e($type) . '&id=' . $id . '" class="cc-btn cc-btn-plain">বিস্তারিত দেখুন →</a>'
+        . '</div>';
 
     return '
     <div class="pricing-card bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col h-full" style="border:2px solid ' . $border . ';">
@@ -700,7 +702,8 @@ function render_item_card(array $item, string $type): string
             <div class="mt-auto pt-2">
                 ' . $feeBox . '
                 ' . $ctaBtn . '
-                <a href="detail?type=' . e($type) . '&id=' . $id . '" class="block text-center mt-2.5 text-sm font-semibold text-gray-500 hover:text-gray-700">বিস্তারিত দেখুন →</a>
+                ' . $cardBtns . '
+                ' . $interestLine . '
             </div>
         </div>
     </div>';
@@ -1210,6 +1213,13 @@ function course_media_labels(): array
         'photo' => get_setting('course_media_photo_label') ?: '📸 কোর্সের ছবি',
         'video' => get_setting('course_media_video_label') ?: '▶️ কোর্স ভিডিও',
     ];
+}
+
+// কার্ডের "প্রিভিউ দেখুন" বোতামের লেখা — অ্যাডমিন সেটিংস থেকে বদলানো যায়
+// (`?:` ফলব্যাক, কারণ get_setting()-এর ডিফল্ট খালি স্ট্রিং কভার করে না)
+function course_media_card_label(): string
+{
+    return get_setting('course_media_card_label') ?: 'প্রিভিউ দেখুন';
 }
 
 // ভিডিও লিংক → [provider, id, embed, thumb]; চেনা না গেলে null।
