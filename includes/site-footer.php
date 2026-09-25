@@ -185,6 +185,14 @@
         var overlays = document.querySelectorAll('.cm-ov');
         if (!overlays.length) { return; }   // এই পেজে ছবি/ভিডিও নেই — কিছুই করার নেই
 
+        // 🔴 ওভারলে অবশ্যই <body>-র সরাসরি সন্তান হতে হবে। কার্ডের ভেতরে থাকলে
+        // `position: fixed` আর ভিউপোর্ট ধরে বসে না — কোনো পূর্বপুরুষে transform/animation
+        // (যেমন `.fade-in`) থাকলে সেটাই containing block হয়ে যায়, ফলে ওভারলে ঐ কার্ডের
+        // ভেতরেই আটকে ছোট হয়ে দেখায় (২০২৬-০৯-২৫, ইউজারের স্ক্রিনশটে ধরা)।
+        overlays.forEach(function (o) {
+            if (o.parentNode !== document.body) { document.body.appendChild(o); }
+        });
+
         function lock(on){ document.body.style.overflow = on ? 'hidden' : ''; }
         function closeAll(){
             overlays.forEach(function(o){ o.hidden = true; });
@@ -268,6 +276,13 @@
                 vplay.hidden = true;
                 vlist.hidden = false;
             });
+        }
+
+        // কার্ড থেকে "📸 ৬টি ছবি" লিংকে এলে (detail?...#cm-photos) সরাসরি খুলে যায়
+        var wanted = (location.hash || '').replace('#', '');
+        if (wanted === 'cm-photos' || wanted === 'cm-videos') {
+            var openBtn = document.querySelector('[data-cm-open="' + wanted + '"]');
+            if (openBtn) { openBtn.click(); }
         }
 
         document.addEventListener('keydown', function(e){

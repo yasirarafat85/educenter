@@ -659,6 +659,30 @@ function render_item_card(array $item, string $type): string
                 ? '<p class="text-center text-xs text-gray-500 mt-2">এখন পারছেন না? <a href="course-interest?course_id=' . $id . '" class="font-semibold underline" style="color:' . $deep . '">আগ্রহ জানিয়ে রাখুন</a></p>'
                 : '');
 
+    // 📸 ছবি/ভিডিও — কার্ডে **ছোট টেক্সট লিংক** (বোতাম নয়, "আগ্রহ জানিয়ে রাখুন"-এর মতোই
+    // ইচ্ছাকৃত: সমান বড় করলে আসল রেজিস্ট্রেশন বোতাম চাপা পড়ে যায়)। কার্ডে ওভারলে বসানো
+    // হয়নি — গ্রিডে ১০টা কার্ড মানে ১০টা লুকানো গ্যালারি, পেজ ভারী হতো; বদলে ডিটেইল পেজের
+    // `#cm-photos` হ্যাশে পাঠানো হয়, ওখানে পৌঁছেই গ্যালারি খুলে যায় (site-footer.php-এর JS)।
+    $mediaLink = '';
+    if ($type === 'course') {
+        $mc = course_media_all_counts()[$id] ?? [];
+        $nPhoto = (int) ($mc['photos'] ?? 0);
+        $nVideo = (int) ($mc['videos'] ?? 0);
+        $bits = [];
+        if ($nPhoto > 0) {
+            $bits[] = '<a href="detail?type=course&amp;id=' . $id . '#cm-photos" class="font-semibold underline" style="color:' . $deep . '">📸 '
+                . e(bn_digits($nPhoto)) . 'টি ছবি</a>';
+        }
+        if ($nVideo > 0) {
+            $bits[] = '<a href="detail?type=course&amp;id=' . $id . '#cm-videos" class="font-semibold underline" style="color:' . $deep . '">▶️ '
+                . e(bn_digits($nVideo)) . 'টি ভিডিও</a>';
+        }
+        if ($bits) {
+            $mediaLink = '<p class="text-center text-xs text-gray-500 mt-2">' . implode(' &nbsp;·&nbsp; ', $bits) . '</p>';
+        }
+    }
+    $ctaBtn .= $mediaLink;
+
     return '
     <div class="pricing-card bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col h-full" style="border:2px solid ' . $border . ';">
         <div class="relative">
@@ -1296,6 +1320,30 @@ function course_media_counts(PDO $db, array $batchIds): array
         return [];
     }
     return $out;
+}
+
+// কার্ড-গ্রিডের জন্য **এক কোয়েরিতে সব ব্যাচের** গণনা, প্রতি রিকোয়েস্টে একবারই।
+// 🔴 `render_item_card()` প্রতি কার্ডে একবার চলে — ওখান থেকে আলাদা কোয়েরি করলে
+// হোমপেজে/কোর্স পেজে কার্ড-প্রতি একটা করে কোয়েরি হতো (N+1)। টেবিলটা ছোট, তাই
+// পুরোটা একবারে তুলে static-এ রাখা সবচেয়ে সস্তা।
+function course_media_all_counts(?PDO $db = null): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+    $cache = [];
+    try {
+        $stmt = ($db instanceof PDO ? $db : get_db())
+            ->query('SELECT batch_id, kind, COUNT(*) c FROM course_media GROUP BY batch_id, kind');
+        foreach ($stmt->fetchAll() as $r) {
+            $key = ((string) $r['kind'] === 'video') ? 'videos' : 'photos';
+            $cache[(int) $r['batch_id']][$key] = (int) $r['c'];
+        }
+    } catch (PDOException $ex) {
+        $cache = []; // টেবিল নেই (মাইগ্রেশন চালানো হয়নি) — কার্ডে কিছু দেখাবে না
+    }
+    return $cache;
 }
 
 // সংখ্যা বাংলা অঙ্কে (পাবলিক সাইটের জন্য; অ্যাডমিনে ইংরেজিই থাকে — প্রজেক্ট কনভেনশন)
