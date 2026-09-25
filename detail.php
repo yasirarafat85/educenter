@@ -1,6 +1,10 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
 
+// ⚠️ এই পেজ এতদিন `fetch_item()`-এর ভেতরের DB কানেকশনেই চলত, নিজের `$db` ছিল না।
+// render_course_media()-এ $db লাগে — না থাকলে TypeError-এ পেজ মাঝপথে ভেঙে যেত।
+$db = get_db();
+
 $type = $_GET['type'] ?? '';
 $id = (int) ($_GET['id'] ?? 0);
 $item = fetch_item($type, $id);

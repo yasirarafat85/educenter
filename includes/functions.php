@@ -1306,8 +1306,11 @@ function bn_digits($n): string
 
 // পাবলিক পেজে বোতাম দুটো + ওভারলে। কিছু না থাকলে খালি স্ট্রিং (বোতামই দেখায় না)।
 // 🔴 স্টাইল সাধারণ CSS-এ (`assets/css/style.css`-এর `.cm-*`) — Tailwind রিবিল্ড লাগে না।
-function render_course_media(PDO $db, int $batchId): string
+function render_course_media(?PDO $db, int $batchId): string
 {
+    // 🔴 `?PDO` ইচ্ছাকৃত — পাবলিক পেজে $db না থাকলে আগে TypeError-এ পুরো পেজ ভেঙে যেত
+    // (detail.php-এ ঠিক এটাই হয়েছিল, ২০২৬-০৯-২৫)। এখন নিজেই কানেকশন নিয়ে নেয়।
+    $db = $db instanceof PDO ? $db : get_db();
     $media = course_media_fetch($db, $batchId);
     if (!$media['photos'] && !$media['videos']) {
         return '';
