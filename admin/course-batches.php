@@ -215,6 +215,9 @@ if ($action === 'list') {
     }
 }
 
+// প্রতি ব্যাচে কয়টা ছবি/ভিডিও আছে — এক কোয়েরিতে (তালিকায় N+1 এড়াতে); টেবিল না থাকলে খালি
+$mediaCounts = course_media_counts($db, array_map(fn($b) => (int) $b['id'], $batches));
+
 require __DIR__ . '/includes/layout-top.php';
 ?>
 
@@ -278,6 +281,12 @@ require __DIR__ . '/includes/layout-top.php';
                     </td>
                     <td class="py-2.5 px-4 space-x-2 whitespace-nowrap">
                         <a href="course-batches.php?course_id=<?= $courseId ?>&action=form&id=<?= $b['id'] ?>" class="text-indigo-600 font-semibold">এডিট</a>
+                        <?php // 📸 ছবি ও ভিডিও — আলাদা পেজ (course_media), গণনা $mediaCounts থেকে (N+1 এড়াতে bulk) ?>
+                        <a href="course-media.php?batch_id=<?= $b['id'] ?>" class="text-purple-600 font-semibold">🖼️ ছবি/ভিডিও<?php
+                            $mc = $mediaCounts[(int) $b['id']] ?? [];
+                            $mcN = (int) ($mc['photos'] ?? 0) + (int) ($mc['videos'] ?? 0);
+                            if ($mcN > 0) { echo ' (' . $mcN . ')'; }
+                        ?></a>
                         <form method="post" action="course-batches.php?action=delete" class="inline" onsubmit="return confirmSubmit(this, '<?= $regCount > 0 ? "এই ব্যাচে {$regCount} টি রেজিস্ট্রেশন আছে। ব্যাচ আর্কাইভে সরালেও রেজিস্ট্রেশনগুলো থেকে যাবে; পরে আর্কাইভ পেজ থেকে ব্যাচ (দাম/ছবি সহ) ফিরিয়ে আনা যাবে। আর্কাইভে সরাতে চান?" : "এই ব্যাচ আর্কাইভে সরাতে চান? পরে আর্কাইভ পেজ থেকে ফিরিয়ে আনা যাবে।" ?>', 'ব্যাচ আর্কাইভ নিশ্চিতকরণ');">
                             <?= csrf_field() ?>
                             <input type="hidden" name="id" value="<?= $b['id'] ?>">

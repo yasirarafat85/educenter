@@ -42,6 +42,10 @@ $groups = [
         'stat4_value' => 'স্ট্যাট ৪ — সংখ্যা (যেমন ৯৮%)',
         'stat4_label' => 'স্ট্যাট ৪ — লেখা (যেমন সন্তুষ্ট শিক্ষার্থী)',
     ],
+    'কোর্সের ছবি ও ভিডিও বোতাম (কোর্সের পেজে)' => [
+        'course_media_photo_label' => ['label' => 'ছবির বোতামে যা লেখা থাকবে', 'type' => 'text', 'help' => 'খালি রাখলে দেখাবে: 📸 কোর্সের ছবি। ইমোজিও লিখতে পারেন।'],
+        'course_media_video_label' => ['label' => 'ভিডিওর বোতামে যা লেখা থাকবে', 'type' => 'text', 'help' => 'খালি রাখলে দেখাবে: ▶️ কোর্স ভিডিও। ছবি/ভিডিও যোগ করা হয় কোর্স → ব্যাচ তালিকা → "🖼️ ছবি/ভিডিও" থেকে।'],
+    ],
     'ফেসবুক সেকশন (হোমপেজে)' => [
         'facebook_section_on'    => 'সেকশনটি সাইটে দেখাবে? (১ = হ্যাঁ, ০ = না)',
         'facebook_section_title' => 'সেকশনের শিরোনাম',
@@ -212,6 +216,10 @@ $short_label = fn(string $s): string => trim(preg_replace('/\s*\(.*$/u', '', $s)
                         </div>
                     <?php else: ?>
                         <input type="text" name="<?= e($key) ?>" value="<?= e($val) ?>" class="w-full border rounded-xl px-4 py-2.5">
+                    <?php endif; ?>
+                    <?php // 'help' => '...' — ইনপুটের নিচে ছোট ব্যাখ্যা (form-helpers.php-এর render_field()-এর মতোই) ?>
+                    <?php if (is_array($field) && !empty($field['help'])): ?>
+                        <p class="text-xs text-gray-500 mt-1"><?= e($field['help']) ?></p>
                     <?php endif; ?>
                 </div>
             <?php endforeach; ?>

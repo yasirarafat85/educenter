@@ -160,6 +160,22 @@ CREATE TABLE course_batches (
     UNIQUE KEY uq_course_batch (course_id, batch_name) -- একই কোর্সে ডুপ্লিকেট ব্যাচ নাম আটকায় (ভিন্ন কোর্সে একই ব্যাচ-নাম সমস্যা না, যেমন দুই কোর্সেই "May_26" ব্যাচ থাকতে পারে)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 📸 কোর্সের ছবি ও ভিডিও (ব্যাচ-ভিত্তিক)। ছবি এই হোস্টিংয়ে, ভিডিও শুধু লিংক (ইউটিউব/ড্রাইভ)।
+CREATE TABLE course_media (
+    id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    batch_id   INT UNSIGNED NOT NULL,
+    kind       VARCHAR(10)  NOT NULL DEFAULT 'photo',  -- photo / video
+    file_path  VARCHAR(255) NOT NULL DEFAULT '',       -- শুধু ছবি: uploads/course-media/xxx.webp
+    video_url  VARCHAR(500) NOT NULL DEFAULT '',       -- শুধু ভিডিও: অ্যাডমিন যে লিংকটা পেস্ট করেছেন
+    provider   VARCHAR(20)  NOT NULL DEFAULT '',       -- youtube / drive
+    video_id   VARCHAR(100) NOT NULL DEFAULT '',       -- লিংক থেকে বের করা আইডি (এমবেড বানাতে লাগে)
+    caption    VARCHAR(200) NOT NULL DEFAULT '',
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_cm_batch (batch_id, sort_order),
+    FOREIGN KEY (batch_id) REFERENCES course_batches (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE course_features (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     batch_id INT UNSIGNED NOT NULL, -- ফিচারও ব্যাচ-ভিত্তিক (course_batches কে পয়েন্ট করে)

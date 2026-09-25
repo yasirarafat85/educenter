@@ -1169,3 +1169,213 @@ function render_facebook_section(): string
     $out .= '</section>';
     return $out;
 }
+
+// ─────────────────────────────────────────────────────────────
+// 📸 কোর্সের ছবি ও ভিডিও (`course_media`, ২০২৬-০৯-২৫)
+//
+// ছবি এই হোস্টিংয়ে (uploads/course-media/, অটো ৪:৩ + WebP), ভিডিও **কখনো আপলোড নয়** —
+// শুধু ইউটিউব/গুগল-ড্রাইভের লিংক রাখা হয় (শেয়ার্ড হোস্টে ভিডিও রাখলে কোটা ও
+// ব্যান্ডউইথ কয়েকটাতেই শেষ, আর PHP-র আপলোড সীমাতেও আটকায়)।
+// ─────────────────────────────────────────────────────────────
+
+// বোতাম দুটোর নাম — অ্যাডমিন সাইট সেটিংস থেকে বদলাতে পারেন (settings key-value, মাইগ্রেশন লাগে না)।
+// ⚠️ `get_setting($k, $default)` খালি স্ট্রিং কভার করে না, তাই `?:` ব্যবহার করা হয়েছে।
+function course_media_labels(): array
+{
+    return [
+        'photo' => get_setting('course_media_photo_label') ?: '📸 কোর্সের ছবি',
+        'video' => get_setting('course_media_video_label') ?: '▶️ কোর্স ভিডিও',
+    ];
+}
+
+// ভিডিও লিংক → [provider, id, embed, thumb]; চেনা না গেলে null।
+// 🔴 হোস্ট **parse_url() দিয়ে** যাচাই করা হয় — `strpos($url,'youtube.com')` দিয়ে করলে
+// `https://evil.com/?youtube.com` পাস করে যেত (ফেসবুক এমবেডে এই বাগ একবার ধরা পড়েছিল)।
+function course_video_parse(string $url): ?array
+{
+    $url = trim($url);
+    if ($url === '' || mb_strlen($url) > 500) {
+        return null;
+    }
+    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+    $host = preg_replace('/^www\./', '', $host);
+    $path = (string) parse_url($url, PHP_URL_PATH);
+    $query = [];
+    parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+    $id = '';
+    $provider = '';
+
+    if ($host === 'youtu.be') {
+        $provider = 'youtube';
+        $id = trim($path, '/');
+    } elseif (in_array($host, ['youtube.com', 'm.youtube.com', 'youtube-nocookie.com'], true)) {
+        $provider = 'youtube';
+        if (!empty($query['v'])) {
+            $id = (string) $query['v'];
+        } elseif (preg_match('~^/(?:embed|shorts|v|live)/([^/?#]+)~', $path, $m)) {
+            $id = $m[1];
+        }
+    } elseif ($host === 'drive.google.com') {
+        $provider = 'drive';
+        // ⚠️ ডেলিমিটার `~` — `#` দিলে ক্লাসের ভেতরের `#`-এ প্যাটার্ন শেষ হয়ে যেত (টেস্টে ধরা)
+        if (preg_match('~/file/d/([^/?#]+)~', $path, $m)) {
+            $id = $m[1];
+        } elseif (!empty($query['id'])) {
+            $id = (string) $query['id'];
+        }
+    }
+
+    if ($provider === '' || $id === '') {
+        return null;
+    }
+    // আইডিতে শুধু নিরাপদ ক্যারেক্টার — এই আইডি দিয়েই এমবেড URL বানানো হয়
+    if (!preg_match('/^[A-Za-z0-9_-]{6,100}$/', $id)) {
+        return null;
+    }
+
+    return $provider === 'youtube'
+        ? [
+            'provider' => 'youtube',
+            'id'       => $id,
+            // nocookie — ট্র্যাকিং কম, আর `rel=0` শেষে অন্য চ্যানেলের ভিডিও দেখায় না
+            'embed'    => 'https://www.youtube-nocookie.com/embed/' . $id . '?rel=0&autoplay=1',
+            'thumb'    => 'https://img.youtube.com/vi/' . $id . '/hqdefault.jpg',
+        ]
+        : [
+            'provider' => 'drive',
+            'id'       => $id,
+            'embed'    => 'https://drive.google.com/file/d/' . $id . '/preview',
+            // ⚠️ ফাইল "Anyone with the link" না হলে এই থাম্বনেইল আসবে না — CSS ফলব্যাক আছে
+            'thumb'    => 'https://drive.google.com/thumbnail?id=' . $id . '&sz=w640',
+        ];
+}
+
+function course_media_provider_label(string $provider): string
+{
+    return $provider === 'drive' ? 'গুগল ড্রাইভ' : 'ইউটিউব';
+}
+
+// একটা ব্যাচের ছবি+ভিডিও → ['photos' => [...], 'videos' => [...]]
+// টেবিল না থাকলে (মাইগ্রেশন চালানো হয়নি) চুপচাপ খালি — পেজ ভাঙে না।
+function course_media_fetch(PDO $db, int $batchId): array
+{
+    $out = ['photos' => [], 'videos' => []];
+    if ($batchId < 1) {
+        return $out;
+    }
+    try {
+        $stmt = $db->prepare('SELECT * FROM course_media WHERE batch_id = :b ORDER BY sort_order ASC, id ASC');
+        $stmt->execute(['b' => $batchId]);
+        foreach ($stmt->fetchAll() as $row) {
+            $out[($row['kind'] ?? '') === 'video' ? 'videos' : 'photos'][] = $row;
+        }
+    } catch (PDOException $ex) {
+        return ['photos' => [], 'videos' => []];
+    }
+    return $out;
+}
+
+// একাধিক ব্যাচের গণনা একবারে (তালিকায় N+1 এড়াতে) → [batchId => ['photos'=>n, 'videos'=>n]]
+function course_media_counts(PDO $db, array $batchIds): array
+{
+    $batchIds = array_values(array_unique(array_map('intval', $batchIds)));
+    if (!$batchIds) {
+        return [];
+    }
+    $in = implode(',', array_fill(0, count($batchIds), '?'));
+    $out = [];
+    try {
+        $stmt = $db->prepare("SELECT batch_id, kind, COUNT(*) c FROM course_media WHERE batch_id IN ($in) GROUP BY batch_id, kind");
+        $stmt->execute($batchIds);
+        foreach ($stmt->fetchAll() as $r) {
+            $key = ((string) $r['kind'] === 'video') ? 'videos' : 'photos';
+            $out[(int) $r['batch_id']][$key] = (int) $r['c'];
+        }
+    } catch (PDOException $ex) {
+        return [];
+    }
+    return $out;
+}
+
+// সংখ্যা বাংলা অঙ্কে (পাবলিক সাইটের জন্য; অ্যাডমিনে ইংরেজিই থাকে — প্রজেক্ট কনভেনশন)
+function bn_digits($n): string
+{
+    return strtr((string) $n, ['0'=>'০','1'=>'১','2'=>'২','3'=>'৩','4'=>'৪','5'=>'৫','6'=>'৬','7'=>'৭','8'=>'৮','9'=>'৯']);
+}
+
+// পাবলিক পেজে বোতাম দুটো + ওভারলে। কিছু না থাকলে খালি স্ট্রিং (বোতামই দেখায় না)।
+// 🔴 স্টাইল সাধারণ CSS-এ (`assets/css/style.css`-এর `.cm-*`) — Tailwind রিবিল্ড লাগে না।
+function render_course_media(PDO $db, int $batchId): string
+{
+    $media = course_media_fetch($db, $batchId);
+    if (!$media['photos'] && !$media['videos']) {
+        return '';
+    }
+    $labels = course_media_labels();
+    // একটাই বোতাম হলে সেটা পুরো চওড়া — `:has()` CSS-এ ভরসা না করে সার্ভারেই ঠিক করা
+    // (পুরনো ব্রাউজারে `:has()` নেই, তখন একা বোতামটা অর্ধেক চওড়ায় ঝুলে থাকত)
+    $btnCount = ($media['photos'] ? 1 : 0) + ($media['videos'] ? 1 : 0);
+    $out = '<div class="cm-btns" style="grid-template-columns:repeat(' . $btnCount . ',minmax(0,1fr))">';
+
+    if ($media['photos']) {
+        $out .= '<button type="button" class="cm-btn" data-cm-open="cm-photos">'
+             .  '<span class="cm-btn-t">' . e($labels['photo']) . '</span>'
+             .  '<span class="cm-btn-c">' . e(bn_digits(count($media['photos']))) . 'টি ছবি</span></button>';
+    }
+    if ($media['videos']) {
+        $out .= '<button type="button" class="cm-btn" data-cm-open="cm-videos">'
+             .  '<span class="cm-btn-t">' . e($labels['video']) . '</span>'
+             .  '<span class="cm-btn-c">' . e(bn_digits(count($media['videos']))) . 'টি ভিডিও</span></button>';
+    }
+    $out .= '</div>';
+
+    // ── ছবির ওভারলে ──
+    if ($media['photos']) {
+        $total = count($media['photos']);
+        $out .= '<div class="cm-ov" id="cm-photos" hidden>'
+             .  '<div class="cm-hdr"><span>' . e($labels['photo']) . '</span>'
+             .  '<button type="button" class="cm-x" data-cm-close aria-label="বন্ধ করুন">&times;</button></div>'
+             .  '<div class="cm-stage">'
+             .  '<button type="button" class="cm-arw" data-cm-prev aria-label="আগের ছবি">&lsaquo;</button>'
+             .  '<img class="cm-shot" src="" alt="">'
+             .  '<button type="button" class="cm-arw" data-cm-next aria-label="পরের ছবি">&rsaquo;</button>'
+             .  '</div>'
+             .  '<p class="cm-cap"></p><p class="cm-count"></p><div class="cm-strip">';
+        foreach ($media['photos'] as $i => $p) {
+            $src = (string) $p['file_path'];
+            $out .= '<button type="button" class="cm-th" data-cm-i="' . (int) $i . '"'
+                 .  ' data-src="' . e($src) . '" data-cap="' . e((string) $p['caption']) . '"'
+                 .  ' aria-label="ছবি ' . e(bn_digits($i + 1)) . '">'
+                 .  '<img src="' . e($src) . '" alt="" loading="lazy"></button>';
+        }
+        $out .= '</div><p class="cm-total" hidden>' . (int) $total . '</p></div>';
+    }
+
+    // ── ভিডিওর ওভারলে ──
+    if ($media['videos']) {
+        $out .= '<div class="cm-ov" id="cm-videos" hidden>'
+             .  '<div class="cm-hdr"><span>' . e($labels['video']) . '</span>'
+             .  '<button type="button" class="cm-x" data-cm-close aria-label="বন্ধ করুন">&times;</button></div>'
+             .  '<div class="cm-vlist">';
+        foreach ($media['videos'] as $v) {
+            $meta = course_video_parse((string) $v['video_url']);
+            if (!$meta) {
+                continue; // লিংক নষ্ট/অচেনা — নীরবে বাদ, ভাঙা কার্ড দেখানোর চেয়ে ভালো
+            }
+            $name = trim((string) $v['caption']) !== '' ? (string) $v['caption'] : 'ভিডিও';
+            $out .= '<button type="button" class="cm-vcard" data-embed="' . e($meta['embed']) . '" data-name="' . e($name) . '">'
+                 .  '<span class="cm-vthumb"><img src="' . e($meta['thumb']) . '" alt="" loading="lazy"'
+                 .  ' onerror="this.style.display=\'none\'"></span>'
+                 .  '<span class="cm-vmeta"><span class="cm-vname">' . e($name) . '</span>'
+                 .  '<span class="cm-vsrc">' . e(course_media_provider_label((string) $meta['provider'])) . '</span></span></button>';
+        }
+        $out .= '</div>'
+             .  '<div class="cm-vplay" hidden>'
+             .  '<button type="button" class="cm-back">&lsaquo; সব ভিডিও</button>'
+             .  '<div class="cm-frame"></div><p class="cm-cap cm-vcap"></p></div>'
+             .  '</div>';
+    }
+
+    return $out;
+}

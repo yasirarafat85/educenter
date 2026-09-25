@@ -17,8 +17,10 @@ function archive_children_map(): array
     return [
         'courses'        => [['table' => 'course_batches', 'fk' => 'course_id', 'children' => [
                                 ['table' => 'course_features', 'fk' => 'batch_id'],
+                                ['table' => 'course_media', 'fk' => 'batch_id'],
                             ]]],
-        'course_batches' => [['table' => 'course_features', 'fk' => 'batch_id']],
+        'course_batches' => [['table' => 'course_features', 'fk' => 'batch_id'],
+                             ['table' => 'course_media', 'fk' => 'batch_id']],
         'products'       => [['table' => 'product_features', 'fk' => 'product_id']],
         // রেজিস্ট্রেশন/অর্ডার — child ক্রম গুরুত্বপূর্ণ (রিস্টোরে এই ক্রমেই re-insert হয়, FK টার্গেট আগে থাকতে হয়):
         // income (registration_id), তারপর courier_batches (registration_id), তারপর courier_shipments

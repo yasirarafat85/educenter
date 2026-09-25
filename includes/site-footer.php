@@ -178,5 +178,108 @@
         document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && lb.classList.contains('open')) { closeLb(); } });
     })();
     </script>
+
+    <!-- 📸 কোর্সের ছবি ও ভিডিও — বোতামে ক্লিকে ওভারলে (render_course_media() মার্কআপ বসায়) -->
+    <script>
+    (function(){
+        var overlays = document.querySelectorAll('.cm-ov');
+        if (!overlays.length) { return; }   // এই পেজে ছবি/ভিডিও নেই — কিছুই করার নেই
+
+        function lock(on){ document.body.style.overflow = on ? 'hidden' : ''; }
+        function closeAll(){
+            overlays.forEach(function(o){ o.hidden = true; });
+            var f = document.querySelector('#cm-videos .cm-frame');
+            if (f) { f.innerHTML = ''; }   // 🔴 iframe সরানো = ভিডিও থেমে যায়
+            lock(false);
+        }
+
+        document.querySelectorAll('[data-cm-open]').forEach(function(btn){
+            btn.addEventListener('click', function(){
+                var el = document.getElementById(btn.getAttribute('data-cm-open'));
+                if (!el) { return; }
+                closeAll();
+                el.hidden = false;
+                lock(true);
+                var list = el.querySelector('.cm-vlist'), play = el.querySelector('.cm-vplay');
+                if (list && play) { list.hidden = false; play.hidden = true; }
+            });
+        });
+        document.querySelectorAll('[data-cm-close]').forEach(function(b){ b.addEventListener('click', closeAll); });
+
+        // ── ছবির স্লাইডার ──
+        var pov = document.getElementById('cm-photos');
+        if (pov) {
+            var thumbs = Array.prototype.slice.call(pov.querySelectorAll('.cm-th'));
+            var shot = pov.querySelector('.cm-shot');
+            var cap = pov.querySelector('.cm-cap');
+            var count = pov.querySelector('.cm-count');
+            var idx = 0;
+            var bn = function(n){ return String(n).replace(/[0-9]/g, function(d){ return '০১২৩৪৫৬৭৮৯'[d]; }); };
+
+            function paint(){
+                var t = thumbs[idx];
+                if (!t) { return; }
+                shot.src = t.getAttribute('data-src');
+                shot.alt = t.getAttribute('data-cap') || '';
+                cap.textContent = t.getAttribute('data-cap') || '';
+                count.textContent = bn(idx + 1) + ' / ' + bn(thumbs.length);
+                thumbs.forEach(function(el, i){ el.setAttribute('aria-current', i === idx ? 'true' : 'false'); });
+                t.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            }
+            thumbs.forEach(function(t, i){ t.addEventListener('click', function(){ idx = i; paint(); }); });
+            pov.querySelector('[data-cm-prev]').addEventListener('click', function(){ idx = (idx - 1 + thumbs.length) % thumbs.length; paint(); });
+            pov.querySelector('[data-cm-next]').addEventListener('click', function(){ idx = (idx + 1) % thumbs.length; paint(); });
+            paint();
+
+            // মোবাইলে সোয়াইপ
+            var x0 = null;
+            pov.querySelector('.cm-stage').addEventListener('touchstart', function(e){ x0 = e.touches[0].clientX; }, { passive: true });
+            pov.querySelector('.cm-stage').addEventListener('touchend', function(e){
+                if (x0 === null) { return; }
+                var dx = e.changedTouches[0].clientX - x0;
+                if (Math.abs(dx) > 45) { idx = (idx + (dx < 0 ? 1 : thumbs.length - 1)) % thumbs.length; paint(); }
+                x0 = null;
+            });
+        }
+
+        // ── ভিডিও: ট্যাপ করার আগে iframe বসেই না (পেজ হালকা রাখতে) ──
+        var vov = document.getElementById('cm-videos');
+        if (vov) {
+            var vlist = vov.querySelector('.cm-vlist');
+            var vplay = vov.querySelector('.cm-vplay');
+            var vframe = vov.querySelector('.cm-frame');
+            var vcap = vov.querySelector('.cm-vcap');
+            vov.querySelectorAll('.cm-vcard').forEach(function(card){
+                card.addEventListener('click', function(){
+                    var f = document.createElement('iframe');
+                    f.src = card.getAttribute('data-embed');
+                    f.setAttribute('allow', 'accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen');
+                    f.setAttribute('allowfullscreen', 'allowfullscreen');
+                    f.setAttribute('title', card.getAttribute('data-name') || 'ভিডিও');
+                    vframe.innerHTML = '';
+                    vframe.appendChild(f);
+                    vcap.textContent = card.getAttribute('data-name') || '';
+                    vlist.hidden = true;
+                    vplay.hidden = false;
+                });
+            });
+            vov.querySelector('.cm-back').addEventListener('click', function(){
+                vframe.innerHTML = '';
+                vplay.hidden = true;
+                vlist.hidden = false;
+            });
+        }
+
+        document.addEventListener('keydown', function(e){
+            var open = document.querySelector('.cm-ov:not([hidden])');
+            if (!open) { return; }
+            if (e.key === 'Escape') { closeAll(); }
+            if (open.id === 'cm-photos') {
+                if (e.key === 'ArrowRight') { open.querySelector('[data-cm-next]').click(); }
+                if (e.key === 'ArrowLeft')  { open.querySelector('[data-cm-prev]').click(); }
+            }
+        });
+    })();
+    </script>
 </body>
 </html>

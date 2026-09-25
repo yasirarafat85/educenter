@@ -362,3 +362,85 @@ body { padding-bottom: 64px; }
     border: none; font-size: 22px; line-height: 1; cursor: pointer;
 }
 #img-lightbox .ilb-close:hover { background: rgba(255, 255, 255, .3); }
+
+/* ── 📸 কোর্সের ছবি ও ভিডিও (২০২৬-০৯-২৫) ───────────────────────
+   সাধারণ CSS-এ রাখা (Tailwind নয়) — নতুন ক্লাসে রিবিল্ড-নির্ভরতা এড়াতে।
+   রঙ সাইট থিমের ভ্যারিয়েবল থেকেই আসে, তাই থিম বদলালে এগুলোও বদলায়। */
+.cm-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.cm-btn {
+    font: inherit; cursor: pointer; text-align: center; line-height: 1.5;
+    padding: 11px 8px; border-radius: 13px;
+    border: 1.5px solid rgb(var(--c-border)); background: rgb(var(--c-tint));
+    color: rgb(var(--c-deep)); font-weight: 700;
+}
+.cm-btn:hover { background: rgb(var(--c-border) / .55); }
+.cm-btn-t { display: block; font-size: .95rem; }
+.cm-btn-c { display: block; font-size: .72rem; font-weight: 600; opacity: .75; }
+
+.cm-ov {
+    position: fixed; inset: 0; z-index: 9998;
+    background: rgba(9, 16, 12, .96); color: #fff;
+    display: flex; flex-direction: column;
+}
+.cm-ov[hidden] { display: none !important; }
+.cm-hdr {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 16px; font-weight: 700; flex: none;
+}
+.cm-x {
+    font: inherit; background: rgba(255, 255, 255, .16); color: #fff; border: 0;
+    width: 40px; height: 40px; border-radius: 50%; font-size: 22px; line-height: 1; cursor: pointer; flex: none;
+}
+.cm-x:hover { background: rgba(255, 255, 255, .3); }
+.cm-stage {
+    flex: 1; min-height: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px;
+}
+.cm-shot { flex: 1; min-width: 0; max-height: 100%; object-fit: contain; border-radius: 10px; }
+.cm-arw {
+    font: inherit; background: rgba(255, 255, 255, .16); color: #fff; border: 0;
+    width: 44px; height: 44px; border-radius: 50%; font-size: 22px; line-height: 1; cursor: pointer; flex: none;
+}
+.cm-arw:hover { background: rgba(255, 255, 255, .3); }
+.cm-cap { text-align: center; font-size: .9rem; padding: 12px 16px 2px; margin: 0; }
+.cm-count { text-align: center; font-size: .8rem; color: rgba(255, 255, 255, .6); padding: 0 0 10px; margin: 0; }
+.cm-strip { display: flex; gap: 6px; padding: 0 12px 18px; overflow-x: auto; flex: none; }
+.cm-th {
+    width: 56px; height: 42px; border-radius: 8px; flex: none; cursor: pointer; padding: 0;
+    border: 2px solid transparent; background: rgba(255, 255, 255, .1); opacity: .55; overflow: hidden;
+}
+.cm-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cm-th[aria-current="true"] { border-color: #fff; opacity: 1; }
+
+.cm-vlist { padding: 4px 16px 20px; overflow-y: auto; }
+.cm-vcard {
+    display: flex; gap: 12px; align-items: center; width: 100%; text-align: left;
+    background: rgba(255, 255, 255, .09); border: 0; border-radius: 13px;
+    padding: 10px; margin-bottom: 10px; cursor: pointer; font: inherit; color: #fff;
+}
+.cm-vcard:hover { background: rgba(255, 255, 255, .17); }
+.cm-vthumb {
+    width: 104px; height: 78px; border-radius: 9px; flex: none; position: relative;
+    background: linear-gradient(135deg, #1f2937, #4b5563); overflow: hidden;
+}
+.cm-vthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cm-vthumb::after {
+    content: "\25B6"; position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, .35); font-size: 20px; color: #fff;
+}
+.cm-vmeta { min-width: 0; }
+.cm-vname { display: block; font-weight: 700; font-size: .92rem; line-height: 1.5; }
+.cm-vsrc { display: block; font-size: .74rem; color: rgba(255, 255, 255, .58); }
+.cm-vplay[hidden] { display: none !important; }
+.cm-back {
+    font: inherit; background: none; border: 0; color: #86efac;
+    font-weight: 700; cursor: pointer; padding: 14px 16px 6px;
+}
+.cm-frame { padding: 0 16px; }
+.cm-frame iframe {
+    width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 12px; background: #000; display: block;
+}
+@media (max-width: 480px) {
+    .cm-arw { width: 38px; height: 38px; font-size: 19px; }
+    .cm-vthumb { width: 86px; height: 65px; }
+}

@@ -46,6 +46,7 @@ function admin_page_sections(): array
     return [
         // manage.php entity-নির্ভর — admin_can_action()-এ আলাদা হ্যান্ডল করা হয়
         'course-batches.php'        => ['content:courses'],
+        'course-media.php'          => ['content:courses'],   // ব্যাচের ছবি/ভিডিও — কোর্স কনটেন্টেরই অংশ
         'registrations.php'         => ['orders'],
         'course-data.php'           => ['orders'],
         'course-interests.php'      => ['orders'],

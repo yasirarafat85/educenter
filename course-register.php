@@ -98,7 +98,10 @@ if (!$selectedCourse):
             <div id="children-chips" class="flex flex-wrap gap-2"></div>
         </div>
 
-        <form method="post" action="course-register-submit.php" class="space-y-4" id="course-register-form">
+        <?php // 📸 কোর্সের ছবি ও ভিডিও — ফর্ম পূরণের আগে দেখে নেওয়ার জন্য (detail.php-এর মতোই ফাংশন) ?>
+        <?= render_course_media($db, (int) $selectedCourse['id']) ?>
+
+        <form method="post" action="course-register-submit.php" class="space-y-4 mt-4" id="course-register-form">
             <?= csrf_field() ?>
             <?= spam_protection_fields() ?>
             <input type="hidden" name="course_id" value="<?= $selectedCourse['id'] ?>">

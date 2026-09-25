@@ -89,17 +89,23 @@ require __DIR__ . '/includes/site-header.php';
             </div>
             <?php endif; ?>
 
+            <?php // 📸 কোর্সের ছবি ও ভিডিও — ভর্তির বোতামের ঠিক নিচে বসে (নিচে render_course_media())।
+                  // কোর্সেই কেবল, আর কিছু যোগ করা না থাকলে বোতাম দেখায়ই না। ?>
+            <?php $courseMediaHtml = $type === 'course' ? render_course_media($db, (int) $item['id']) : ''; ?>
+
             <?php if ($registrationClosed): ?>
             <div>
                 <a href="course-interest?course_id=<?= (int) $item['id'] ?>" class="block w-full text-center py-4 px-6 rounded-xl font-bold text-lg shadow-lg btn-primary text-white">
                     জানিয়ে রাখুন
                 </a>
+                <?= $courseMediaHtml ?>
                 <p class="text-center text-gray-500 text-sm mt-2">এই কোর্সের রেজিস্ট্রেশন এখন বন্ধ — আগ্রহ জানিয়ে রাখুন</p>
             </div>
             <?php else: ?>
             <a href="<?= e($actionUrl) ?>" class="block w-full text-center py-4 px-6 rounded-xl font-bold text-lg shadow-lg btn-primary text-white">
                 <?= e($actionLabel) ?>
             </a>
+            <?= $courseMediaHtml ?>
             <?php if ($type === 'course'): ?>
                 <?php // ⚠️ ইচ্ছাকৃতভাবে ছোট টেক্সট লিংক, বোতাম নয় — ভর্তির বোতামের পাশে সমান বড়
                       // "জানিয়ে রাখুন" বোতাম দিলে যিনি আজই ভর্তি হতেন তিনিও ওয়েটিং লিস্টে চলে যেতে পারেন ?>
