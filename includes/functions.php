@@ -672,9 +672,13 @@ function render_item_card(array $item, string $type): string
         $nPhoto = (int) ($mc['photos'] ?? 0);
         $nVideo = (int) ($mc['videos'] ?? 0);
         if ($nPhoto > 0 || $nVideo > 0) {
-            $hash = $nPhoto > 0 ? '#cm-photos' : '#cm-videos';
+            // 🔴 লেবেল **একটাই উৎস** থেকে (`course_media_labels()`) — কার্ড আর ডিটেইল পেজে
+            // হুবহু একই লেখা দেখাতে হবে (ইউজারের চাওয়া); অ্যাডমিন একবার বদলালে দুই জায়গাতেই বদলায়।
+            $cmLabels = course_media_labels();
+            $hash  = $nPhoto > 0 ? '#cm-photos' : '#cm-videos';
+            $label = $nPhoto > 0 ? $cmLabels['photo'] : $cmLabels['video'];
             $previewBtn = '<a href="detail?type=course&amp;id=' . $id . $hash . '" class="cc-btn">'
-                . e(course_media_card_label()) . '</a>';
+                . e($label) . '</a>';
         }
     }
     // দুই বোতামের সারি — প্রিভিউ না থাকলে "বিস্তারিত" একাই পুরো চওড়া
@@ -1210,16 +1214,9 @@ function render_facebook_section(): string
 function course_media_labels(): array
 {
     return [
-        'photo' => get_setting('course_media_photo_label') ?: '📸 কোর্সের ছবি',
+        'photo' => get_setting('course_media_photo_label') ?: '📸 প্রিভিউ দেখুন',
         'video' => get_setting('course_media_video_label') ?: '▶️ কোর্স ভিডিও',
     ];
-}
-
-// কার্ডের "প্রিভিউ দেখুন" বোতামের লেখা — অ্যাডমিন সেটিংস থেকে বদলানো যায়
-// (`?:` ফলব্যাক, কারণ get_setting()-এর ডিফল্ট খালি স্ট্রিং কভার করে না)
-function course_media_card_label(): string
-{
-    return get_setting('course_media_card_label') ?: 'প্রিভিউ দেখুন';
 }
 
 // ভিডিও লিংক → [provider, id, embed, thumb]; চেনা না গেলে null।
@@ -1380,14 +1377,14 @@ function render_course_media(?PDO $db, int $batchId): string
     $out = '<div class="cm-btns" style="grid-template-columns:repeat(' . $btnCount . ',minmax(0,1fr))">';
 
     if ($media['photos']) {
+        // 🔴 সংখ্যা দেখানো হয় না (২০২৬-০৯-২৫, ইউজারের স্পষ্ট চাওয়া — কার্ড ও এখানে দুই জায়গাতেই
+        // শুধু বোতামের নাম; গ্যালারির ভেতরে "৩ / ৮" গণনা আগের মতোই আছে)
         $out .= '<button type="button" class="cm-btn" data-cm-open="cm-photos">'
-             .  '<span class="cm-btn-t">' . e($labels['photo']) . '</span>'
-             .  '<span class="cm-btn-c">' . e(bn_digits(count($media['photos']))) . 'টি ছবি</span></button>';
+             .  '<span class="cm-btn-t">' . e($labels['photo']) . '</span></button>';
     }
     if ($media['videos']) {
         $out .= '<button type="button" class="cm-btn" data-cm-open="cm-videos">'
-             .  '<span class="cm-btn-t">' . e($labels['video']) . '</span>'
-             .  '<span class="cm-btn-c">' . e(bn_digits(count($media['videos']))) . 'টি ভিডিও</span></button>';
+             .  '<span class="cm-btn-t">' . e($labels['video']) . '</span></button>';
     }
     $out .= '</div>';
 

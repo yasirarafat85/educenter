@@ -26,6 +26,8 @@ $pageDescription = mb_substr(trim(strip_tags($item['description'] ?? '')), 0, 15
 $pageOgImage = $item['image'] ?? '';
 $activePage = $type === 'course' ? 'courses' : ($type === 'worksheet' ? 'worksheets' : 'products');
 $backUrl = $type === 'course' ? 'courses' : ($type === 'worksheet' ? 'worksheets' : 'products');
+// নিচের ফিরে-যাওয়ার বোতামে টাইপ অনুযায়ী পরিষ্কার নাম (উপরেরটা ছোট, শুধু "ফিরে যান")
+$backLabel = $type === 'course' ? 'সব কোর্স দেখুন' : ($type === 'worksheet' ? 'সব ওয়ার্কশিট দেখুন' : 'সব প্রোডাক্ট দেখুন');
 $registrationClosed = $type === 'course' && empty($item['registration_open']);
 $actionLabel = $registrationClosed ? 'রেজিস্ট্রেশন বন্ধ' : ($type === 'course' ? 'Register Now - রেজিস্ট্রেশন করুন' : 'Order Now - অর্ডার করুন');
 $actionUrl = $type === 'course' ? ('course-register?course_id=' . (int) $item['id']) : ('register?type=' . urlencode($type) . '&id=' . (int) $item['id']);
@@ -120,6 +122,13 @@ require __DIR__ . '/includes/site-header.php';
             <?php endif; ?>
             <?php endif; ?>
         </div>
+    </div>
+
+    <?php // ⬅️ নিচেও একটা "ফিরে যান" (২০২৬-০৯-২৫, ইউজারের স্ক্রিনশট — কার্ডের নিচে ফাঁকা জায়গা
+          // পড়ে থাকত, আর পুরো পেজ পড়ার পর আবার উপরে স্ক্রল করতে হতো)। স্টাইল `.cc-btn`
+          // (সাধারণ CSS, থিম-রঙ) — Tailwind রিবিল্ড লাগে না। ?>
+    <div class="mt-6 flex justify-center">
+        <a href="<?= e($backUrl) ?>" class="cc-btn cc-btn-plain" style="min-width:min(260px,100%)">← <?= e($backLabel) ?></a>
     </div>
 </div>
 
