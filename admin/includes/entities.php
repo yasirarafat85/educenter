@@ -23,6 +23,8 @@ function get_entities(): array
         ],
 
         'worksheets' => [
+            // 🖼️ ছবি/ভিডিও গ্যালারি চালু (২০২৬-০৯-২৬) — তালিকায় লিংক বসে, পেজ course-media.php
+            'media' => true,
             'label' => 'ওয়ার্কশিট',
             'label_plural' => 'ওয়ার্কশিট সমূহ',
             'table' => 'worksheets',
@@ -43,6 +45,8 @@ function get_entities(): array
         ],
 
         'products' => [
+            // 🖼️ ছবি/ভিডিও গ্যালারি চালু (২০২৬-০৯-২৬) — তালিকায় লিংক বসে, পেজ course-media.php
+            'media' => true,
             'label' => 'প্রোডাক্ট',
             'label_plural' => 'প্রোডাক্ট সমূহ',
             'table' => 'products',

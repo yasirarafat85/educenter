@@ -21,7 +21,11 @@ function archive_children_map(): array
                             ]]],
         'course_batches' => [['table' => 'course_features', 'fk' => 'batch_id'],
                              ['table' => 'course_media', 'fk' => 'batch_id']],
-        'products'       => [['table' => 'product_features', 'fk' => 'product_id']],
+        // ওয়ার্কশিট/প্রোডাক্টের ছবি-ভিডিও একই `course_media` টেবিলে থাকে, কিন্তু owner_type দিয়ে আলাদা —
+        // তাই 'where' (ধ্রুবক কলাম-শর্ত) দিয়ে শুধু নিজের সারিগুলোই তোলা হয় (কোর্সের media batch_id দিয়েই আসে)।
+        'worksheets'     => [['table' => 'course_media', 'fk' => 'owner_id', 'where' => ['owner_type' => 'worksheet']]],
+        'products'       => [['table' => 'product_features', 'fk' => 'product_id'],
+                             ['table' => 'course_media', 'fk' => 'owner_id', 'where' => ['owner_type' => 'product']]],
         // রেজিস্ট্রেশন/অর্ডার — child ক্রম গুরুত্বপূর্ণ (রিস্টোরে এই ক্রমেই re-insert হয়, FK টার্গেট আগে থাকতে হয়):
         // income (registration_id), তারপর courier_batches (registration_id), তারপর courier_shipments
         // (registration_id — flat, batch_id ওই batch গুলোকেই পয়েন্ট করে যা এইমাত্র restore হলো)।
@@ -53,8 +57,18 @@ function archive_collect_row(PDO $db, string $table, array $row, array $childDef
 {
     $bundle = ['table' => $table, 'row' => $row, 'children' => []];
     foreach ($childDefs as $cd) {
-        $cstmt = $db->prepare("SELECT * FROM `{$cd['table']}` WHERE `{$cd['fk']}` = :id");
-        $cstmt->execute(['id' => $row['id']]);
+        // ঐচ্ছিক 'where' => ['col' => 'const'] — একই টেবিলে একাধিক owner টাইপ থাকলে (course_media)
+        // শুধু নিজের সারিগুলো তুলতে। কলামের নাম কোডে লেখা ধ্রুবক, কখনো ইউজার-ইনপুট নয়।
+        $extra = '';
+        $params = ['id' => $row['id']];
+        $i = 0;
+        foreach ($cd['where'] ?? [] as $wcol => $wval) {
+            $ph = 'w' . $i++;
+            $extra .= " AND `" . $wcol . "` = :$ph";
+            $params[$ph] = $wval;
+        }
+        $cstmt = $db->prepare("SELECT * FROM `{$cd['table']}` WHERE `{$cd['fk']}` = :id" . $extra);
+        $cstmt->execute($params);
         foreach ($cstmt->fetchAll(PDO::FETCH_ASSOC) as $crow) {
             $bundle['children'][] = archive_collect_row($db, $cd['table'], $crow, $cd['children'] ?? []);
         }

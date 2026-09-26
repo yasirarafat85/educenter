@@ -95,9 +95,10 @@ require __DIR__ . '/includes/site-header.php';
             </div>
             <?php endif; ?>
 
-            <?php // 📸 কোর্সের ছবি ও ভিডিও — ভর্তির বোতামের ঠিক নিচে বসে (নিচে render_course_media())।
-                  // কোর্সেই কেবল, আর কিছু যোগ করা না থাকলে বোতাম দেখায়ই না। ?>
-            <?php $courseMediaHtml = $type === 'course' ? render_course_media($db, (int) $item['id']) : ''; ?>
+            <?php // 📸 ছবি ও ভিডিও — ভর্তি/অর্ডার বোতামের ঠিক নিচে (নিচে render_course_media())।
+                  // ২০২৬-০৯-২৬ থেকে **ওয়ার্কশিট ও প্রোডাক্টেও** (আগে শুধু কোর্সে ছিল);
+                  // কিছু যোগ করা না থাকলে বোতামই দেখায় না। ?>
+            <?php $courseMediaHtml = media_owner_valid($type) ? render_course_media($db, (int) $item['id'], $type) : ''; ?>
 
             <?php if ($registrationClosed): ?>
             <div>

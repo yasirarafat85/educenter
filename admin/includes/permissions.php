@@ -46,7 +46,10 @@ function admin_page_sections(): array
     return [
         // manage.php entity-নির্ভর — admin_can_action()-এ আলাদা হ্যান্ডল করা হয়
         'course-batches.php'        => ['content:courses'],
-        'course-media.php'          => ['content:courses'],   // ব্যাচের ছবি/ভিডিও — কোর্স কনটেন্টেরই অংশ
+        // ⚠️ course-media.php **এই ম্যাপ দিয়ে চলে না** — টাইপ-নির্ভর, admin_can_action()-এ
+        //    আলাদা শাখা আছে (কোর্স/ওয়ার্কশিট/প্রোডাক্ট তিনটা আলাদা সেকশনে)। এন্ট্রিটা
+        //    এখানে রাখা হয়েছে শুধু "অজানা পেজ → fail-closed" গার্ডে না পড়ার জন্য।
+        'course-media.php'          => ['content:courses'],
         'registrations.php'         => ['orders'],
         'course-data.php'           => ['orders'],
         'course-interests.php'      => ['orders'],
@@ -182,6 +185,17 @@ function admin_can_action(string $script, string $cap): bool
     if ($script === 'manage.php') {
         $ent = $_GET['entity'] ?? '';
         return $ent !== '' && admin_can('content:' . $ent, $cap);
+    }
+    // 🔴 course-media.php-ও এখন টাইপ-নির্ভর (২০২৬-০৯-২৬): ওয়ার্কশিটের ছবি পরিচালনার
+    //    অনুমতি `content:worksheets`-এ, কোর্সেরটা `content:courses`-এ — একটার অনুমতি
+    //    দিয়ে অন্যটা খোলা যাবে না। টাইপ না চিনলে fail-closed (কোর্স ধরে নেওয়া হয় না)।
+    if ($script === 'course-media.php') {
+        $t = (string) ($_GET['type'] ?? ($_POST['owner_type'] ?? ''));
+        if ($t === '' && (isset($_GET['batch_id']) || isset($_POST['batch_id']))) {
+            $t = 'course';   // পুরনো `?batch_id=X` লিংক
+        }
+        $map = ['course' => 'content:courses', 'worksheet' => 'content:worksheets', 'product' => 'content:products'];
+        return isset($map[$t]) && admin_can($map[$t], $cap);
     }
     $sections = admin_page_sections()[$script] ?? null;
     if ($sections === null) {

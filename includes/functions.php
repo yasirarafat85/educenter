@@ -667,8 +667,8 @@ function render_item_card(array $item, string $type): string
     // ১০টা লুকানো গ্যালারি, পেজ ভারী হতো; বদলে ডিটেইল পেজের `#cm-photos` হ্যাশে পাঠানো হয়,
     // ওখানে পৌঁছেই গ্যালারি খুলে যায় (site-footer.php-এর JS)।
     $previewBtn = '';
-    if ($type === 'course') {
-        $mc = course_media_all_counts()[$id] ?? [];
+    if (media_owner_valid($type)) {   // ২০২৬-০৯-২৬ থেকে ওয়ার্কশিট/প্রোডাক্টেও (আগে শুধু কোর্স)
+        $mc = course_media_all_counts()[$type . ':' . $id] ?? [];
         $nPhoto = (int) ($mc['photos'] ?? 0);
         $nVideo = (int) ($mc['videos'] ?? 0);
         if ($nPhoto > 0 || $nVideo > 0) {
@@ -677,7 +677,7 @@ function render_item_card(array $item, string $type): string
             $cmLabels = course_media_labels();
             $hash  = $nPhoto > 0 ? '#cm-photos' : '#cm-videos';
             $label = $nPhoto > 0 ? $cmLabels['photo'] : $cmLabels['video'];
-            $previewBtn = '<a href="detail?type=course&amp;id=' . $id . $hash . '" class="cc-btn">'
+            $previewBtn = '<a href="detail?type=' . e($type) . '&amp;id=' . $id . $hash . '" class="cc-btn">'
                 . e($label) . '</a>';
         }
     }
@@ -1300,36 +1300,75 @@ function course_media_provider_label(string $provider): string
 
 // একটা ব্যাচের ছবি+ভিডিও → ['photos' => [...], 'videos' => [...]]
 // টেবিল না থাকলে (মাইগ্রেশন চালানো হয়নি) চুপচাপ খালি — পেজ ভাঙে না।
-function course_media_fetch(PDO $db, int $batchId): array
+// কোন কোন আইটেমে ছবি/ভিডিও দেওয়া যায় (২০২৬-০৯-২৬ থেকে ওয়ার্কশিট/প্রোডাক্টেও)।
+// 🔴 course-এ owner_id = course_batches.id (ব্যাচ-ভিত্তিক), বাকিদের নিজের টেবিলের id।
+function media_owner_types(): array
+{
+    return ['course' => 'কোর্স', 'worksheet' => 'ওয়ার্কশিট', 'product' => 'প্রোডাক্ট'];
+}
+function media_owner_valid(string $t): bool
+{
+    return isset(media_owner_types()[$t]);
+}
+
+// 🔴 `owner_type`/`owner_id` কলাম দুটো `migrate-media-owner.sql`-এ যোগ হয়। মাইগ্রেশনের
+// **আগে** ওগুলো নেই, তাই প্রতিটা কোয়েরি try/catch-এ ও ব্যর্থ হলে পুরনো `batch_id`
+// কোয়েরিতে ফলব্যাক — কোর্সের ছবি তখনো দেখায়, শুধু ওয়ার্কশিট/প্রোডাক্ট খালি থাকে।
+function course_media_fetch(PDO $db, int $ownerId, string $ownerType = 'course'): array
 {
     $out = ['photos' => [], 'videos' => []];
-    if ($batchId < 1) {
+    if ($ownerId < 1 || !media_owner_valid($ownerType)) {
         return $out;
     }
+    $rows = [];
     try {
-        $stmt = $db->prepare('SELECT * FROM course_media WHERE batch_id = :b ORDER BY sort_order ASC, id ASC');
-        $stmt->execute(['b' => $batchId]);
-        foreach ($stmt->fetchAll() as $row) {
-            $out[($row['kind'] ?? '') === 'video' ? 'videos' : 'photos'][] = $row;
-        }
+        $stmt = $db->prepare('SELECT * FROM course_media WHERE owner_type = :t AND owner_id = :b ORDER BY sort_order ASC, id ASC');
+        $stmt->execute(['t' => $ownerType, 'b' => $ownerId]);
+        $rows = $stmt->fetchAll();
     } catch (PDOException $ex) {
-        return ['photos' => [], 'videos' => []];
+        if ($ownerType !== 'course') {
+            return $out; // মাইগ্রেশনের আগে ওয়ার্কশিট/প্রোডাক্টের ছবি থাকতেই পারে না
+        }
+        try {
+            $stmt = $db->prepare('SELECT * FROM course_media WHERE batch_id = :b ORDER BY sort_order ASC, id ASC');
+            $stmt->execute(['b' => $ownerId]);
+            $rows = $stmt->fetchAll();
+        } catch (PDOException $ex2) {
+            return $out;
+        }
+    }
+    foreach ($rows as $row) {
+        $out[($row['kind'] ?? '') === 'video' ? 'videos' : 'photos'][] = $row;
     }
     return $out;
 }
 
 // একাধিক ব্যাচের গণনা একবারে (তালিকায় N+1 এড়াতে) → [batchId => ['photos'=>n, 'videos'=>n]]
-function course_media_counts(PDO $db, array $batchIds): array
+// অ্যাডমিন তালিকার জন্য — কয়েকটা আইটেমের গণনা এক কোয়েরিতে (কী = আইটেমের id)
+function course_media_counts(PDO $db, array $ownerIds, string $ownerType = 'course'): array
 {
-    $batchIds = array_values(array_unique(array_map('intval', $batchIds)));
-    if (!$batchIds) {
+    $ownerIds = array_values(array_unique(array_map('intval', $ownerIds)));
+    if (!$ownerIds || !media_owner_valid($ownerType)) {
         return [];
     }
-    $in = implode(',', array_fill(0, count($batchIds), '?'));
+    $in = implode(',', array_fill(0, count($ownerIds), '?'));
     $out = [];
     try {
+        $stmt = $db->prepare("SELECT owner_id, kind, COUNT(*) c FROM course_media WHERE owner_type = ? AND owner_id IN ($in) GROUP BY owner_id, kind");
+        $stmt->execute(array_merge([$ownerType], $ownerIds));
+        foreach ($stmt->fetchAll() as $r) {
+            $key = ((string) $r['kind'] === 'video') ? 'videos' : 'photos';
+            $out[(int) $r['owner_id']][$key] = (int) $r['c'];
+        }
+        return $out;
+    } catch (PDOException $ex) {
+        if ($ownerType !== 'course') {
+            return []; // মাইগ্রেশনের আগে — ওয়ার্কশিট/প্রোডাক্টে কিছু থাকতেই পারে না
+        }
+    }
+    try {   // মাইগ্রেশনের আগের ফলব্যাক (কোর্স)
         $stmt = $db->prepare("SELECT batch_id, kind, COUNT(*) c FROM course_media WHERE batch_id IN ($in) GROUP BY batch_id, kind");
-        $stmt->execute($batchIds);
+        $stmt->execute($ownerIds);
         foreach ($stmt->fetchAll() as $r) {
             $key = ((string) $r['kind'] === 'video') ? 'videos' : 'photos';
             $out[(int) $r['batch_id']][$key] = (int) $r['c'];
@@ -1344,6 +1383,8 @@ function course_media_counts(PDO $db, array $batchIds): array
 // 🔴 `render_item_card()` প্রতি কার্ডে একবার চলে — ওখান থেকে আলাদা কোয়েরি করলে
 // হোমপেজে/কোর্স পেজে কার্ড-প্রতি একটা করে কোয়েরি হতো (N+1)। টেবিলটা ছোট, তাই
 // পুরোটা একবারে তুলে static-এ রাখা সবচেয়ে সস্তা।
+// পুরো টেবিলের গণনা **এক কোয়েরিতে**, static ক্যাশে — কার্ড-প্রতি কোয়েরি (N+1) এড়াতে।
+// 🔴 কী এখন `"<type>:<id>"` (আগে শুধু id ছিল) — কারণ ওয়ার্কশিট ৫ আর কোর্স-ব্যাচ ৫ আলাদা।
 function course_media_all_counts(?PDO $db = null): array
 {
     static $cache = null;
@@ -1351,15 +1392,25 @@ function course_media_all_counts(?PDO $db = null): array
         return $cache;
     }
     $cache = [];
+    $pdo = $db instanceof PDO ? $db : get_db();
     try {
-        $stmt = ($db instanceof PDO ? $db : get_db())
-            ->query('SELECT batch_id, kind, COUNT(*) c FROM course_media GROUP BY batch_id, kind');
+        $stmt = $pdo->query('SELECT owner_type, owner_id, kind, COUNT(*) c FROM course_media GROUP BY owner_type, owner_id, kind');
         foreach ($stmt->fetchAll() as $r) {
             $key = ((string) $r['kind'] === 'video') ? 'videos' : 'photos';
-            $cache[(int) $r['batch_id']][$key] = (int) $r['c'];
+            $cache[(string) $r['owner_type'] . ':' . (int) $r['owner_id']][$key] = (int) $r['c'];
+        }
+        return $cache;
+    } catch (PDOException $ex) {
+        // মাইগ্রেশনের আগে owner_* কলাম নেই — পুরনো batch_id দিয়েই কোর্সের গণনা
+    }
+    try {
+        $stmt = $pdo->query('SELECT batch_id, kind, COUNT(*) c FROM course_media GROUP BY batch_id, kind');
+        foreach ($stmt->fetchAll() as $r) {
+            $key = ((string) $r['kind'] === 'video') ? 'videos' : 'photos';
+            $cache['course:' . (int) $r['batch_id']][$key] = (int) $r['c'];
         }
     } catch (PDOException $ex) {
-        $cache = []; // টেবিল নেই (মাইগ্রেশন চালানো হয়নি) — কার্ডে কিছু দেখাবে না
+        $cache = []; // টেবিলই নেই — কার্ডে কিছু দেখাবে না
     }
     return $cache;
 }
@@ -1372,12 +1423,12 @@ function bn_digits($n): string
 
 // পাবলিক পেজে বোতাম দুটো + ওভারলে। কিছু না থাকলে খালি স্ট্রিং (বোতামই দেখায় না)।
 // 🔴 স্টাইল সাধারণ CSS-এ (`assets/css/style.css`-এর `.cm-*`) — Tailwind রিবিল্ড লাগে না।
-function render_course_media(?PDO $db, int $batchId): string
+function render_course_media(?PDO $db, int $ownerId, string $ownerType = 'course'): string
 {
     // 🔴 `?PDO` ইচ্ছাকৃত — পাবলিক পেজে $db না থাকলে আগে TypeError-এ পুরো পেজ ভেঙে যেত
     // (detail.php-এ ঠিক এটাই হয়েছিল, ২০২৬-০৯-২৫)। এখন নিজেই কানেকশন নিয়ে নেয়।
     $db = $db instanceof PDO ? $db : get_db();
-    $media = course_media_fetch($db, $batchId);
+    $media = course_media_fetch($db, $ownerId, $ownerType);
     if (!$media['photos'] && !$media['videos']) {
         return '';
     }

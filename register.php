@@ -52,7 +52,11 @@ require __DIR__ . '/includes/site-header.php';
             </div>
         <?php endif; ?>
 
-        <form method="post" action="register-submit.php" class="space-y-4">
+        <?php // 📸 ছবি ও ভিডিও — অর্ডারের আগে দেখে নেওয়ার জন্য (course-register.php-এর মতোই)।
+              // 🔴 `?PDO` ফলব্যাক আছে বলে এখানে আলাদা $db লাগে না (detail.php-এর বাগের শিক্ষা)। ?>
+        <?= render_course_media(null, (int) $orderItem['id'], $type) ?>
+
+        <form method="post" action="register-submit.php" class="space-y-4 mt-4">
             <?= csrf_field() ?>
             <?= spam_protection_fields() ?>
             <input type="hidden" name="type" value="<?= e($type) ?>">

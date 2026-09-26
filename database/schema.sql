@@ -163,7 +163,9 @@ CREATE TABLE course_batches (
 -- 📸 কোর্সের ছবি ও ভিডিও (ব্যাচ-ভিত্তিক)। ছবি এই হোস্টিংয়ে, ভিডিও শুধু লিংক (ইউটিউব/ড্রাইভ)।
 CREATE TABLE course_media (
     id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    batch_id   INT UNSIGNED NOT NULL,
+    owner_type VARCHAR(20)  NOT NULL DEFAULT 'course',  -- course / worksheet / product
+    owner_id   INT UNSIGNED NOT NULL DEFAULT 0,         -- course হলে course_batches.id, নাহলে worksheets/products.id
+    batch_id   INT UNSIGNED NULL,                       -- 🔴 শুধু কোর্সে (FK CASCADE); worksheet/product-এ NULL
     kind       VARCHAR(10)  NOT NULL DEFAULT 'photo',  -- photo / video
     file_path  VARCHAR(255) NOT NULL DEFAULT '',       -- শুধু ছবি: uploads/course-media/xxx.webp
     video_url  VARCHAR(500) NOT NULL DEFAULT '',       -- শুধু ভিডিও: অ্যাডমিন যে লিংকটা পেস্ট করেছেন
@@ -173,6 +175,7 @@ CREATE TABLE course_media (
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_cm_batch (batch_id, sort_order),
+    INDEX idx_cm_owner (owner_type, owner_id, sort_order),
     FOREIGN KEY (batch_id) REFERENCES course_batches (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

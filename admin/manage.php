@@ -135,6 +135,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete') {
     // ছবির ফাইল ইচ্ছাকৃতভাবে মোছা হয় না (রিস্টোরে দরকার হবে) — আগে এখানে delete_uploaded_image ছিল।
     archive_entity($db, $table, $id);
     $db->prepare("DELETE FROM `$table` WHERE id = :id")->execute(['id' => $id]);
+
+    // 🔴 ওয়ার্কশিট/প্রোডাক্টের ছবি-ভিডিও `course_media`-তে owner_type/owner_id দিয়ে যুক্ত (FK নয়),
+    //    তাই DELETE cascade করে না — হাতে মুছতে হয়। আর্কাইভে আগেই বান্ডল হয়ে গেছে (archive_children_map),
+    //    তাই রিস্টোরে ছবিগুলো ফিরে আসে। কোর্স/ব্যাচের media batch_id FK দিয়ে অটো মোছে।
+    $delMediaType = rtrim($entityKey, 's');
+    if (!empty($conf['media']) && $delMediaType !== 'course' && media_owner_valid($delMediaType)) {
+        try {
+            $db->prepare('DELETE FROM course_media WHERE owner_type = :t AND owner_id = :i')
+               ->execute(['t' => $delMediaType, 'i' => $id]);
+        } catch (Throwable $e) {
+            // টেবিল/কলাম না থাকলে (মাইগ্রেশনের আগে) চুপচাপ বাদ
+        }
+    }
     set_flash('success', $conf['label'] . ' আর্কাইভে সরানো হয়েছে — আর্কাইভ পেজ থেকে ফিরিয়ে আনা যাবে।');
     redirect('manage.php?entity=' . urlencode($entityKey));
 }
@@ -203,6 +216,14 @@ $listDisplay = $conf['list_display'] ?? 'table';
 // admin/course-batches.php তে ("ব্যাচসমূহ পরিচালনা" লিংক)।
 $courseBatchStats = [];
 $courseRegCounts = [];
+// 🖼️ ছবি/ভিডিও গণনা — `'media' => true` মার্ক করা এন্টিটিতে, **এক কোয়েরিতে** (N+1 এড়াতে)।
+// `$mediaOwnerType` = entities.php-এর কী থেকে একবচন ('worksheets' → 'worksheet')।
+$mediaOwnerType = rtrim($entityKey, 's');
+$mediaCounts = [];
+if (!empty($conf['media']) && !empty($listRows) && media_owner_valid($mediaOwnerType)) {
+    $mediaCounts = course_media_counts($db, array_map(fn($r) => (int) $r['id'], $listRows), $mediaOwnerType);
+}
+
 $courseBatchDetails = [];   // course_id => [ব্যাচ রো, ...] — 🕘 আইকনে খোলা মডালের প্রি-রেন্ডার কন্টেন্টের জন্য
 $batchRegCounts = [];       // batch_id => রেজিস্ট্রেশন সংখ্যা (মডালে প্রতি ব্যাচের পাশে দেখানোর জন্য)
 if ($entityKey === 'courses' && $action === 'list') {
@@ -270,7 +291,10 @@ require __DIR__ . '/includes/layout-top.php';
                 <?php $isFirst = true; foreach ($conf['list_columns'] as $col): $val = $row[$col] ?? ''; if ($col === $imageField) continue; ?>
                     <p class="<?= $isFirst ? 'text-sm font-bold text-gray-900' : 'text-xs text-gray-500' ?> truncate"><?= e((string) $val) ?: '—' ?></p>
                 <?php $isFirst = false; endforeach; ?>
-                <div class="flex gap-2 mt-2 text-sm">
+                <div class="flex flex-wrap gap-2 mt-2 text-sm">
+                    <?php if (!empty($conf['media'])): ?>
+                        <a href="course-media.php?type=<?= e($mediaOwnerType) ?>&id=<?= $row['id'] ?>" class="text-purple-600 font-semibold bg-purple-50 px-3 py-1.5 rounded-lg">🖼️ ছবি/ভিডিও</a>
+                    <?php endif; ?>
                     <a href="manage.php?entity=<?= e($entityKey) ?>&action=form&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold bg-indigo-50 px-3 py-1.5 rounded-lg">এডিট</a>
                     <form method="post" action="manage.php?entity=<?= e($entityKey) ?>&action=delete" class="inline" onsubmit="return confirmSubmit(this, 'আপনি কি নিশ্চিত এই <?= e($conf['label']) ?> ডিলিট করতে চান?', 'ডিলিট নিশ্চিতকরণ');">
                         <?= csrf_field() ?>
@@ -382,6 +406,15 @@ require __DIR__ . '/includes/layout-top.php';
                     </td>
                     <?php endif; ?>
                     <td class="py-2.5 px-4 space-x-2 whitespace-nowrap">
+                        <?php // 🖼️ ছবি/ভিডিও — entities.php-এ `'media' => true` দেওয়া এন্টিটিতেই (২০২৬-০৯-২৬)।
+                              // কোর্সের লিংকটা এখানে নয়, course-batches.php-এ (ওটা ব্যাচ-ভিত্তিক)। ?>
+                        <?php if (!empty($conf['media'])): ?>
+                            <a href="course-media.php?type=<?= e($mediaOwnerType) ?>&id=<?= $row['id'] ?>" class="text-purple-600 font-semibold">🖼️ ছবি/ভিডিও<?php
+                                $mc = $mediaCounts[(int) $row['id']] ?? [];
+                                $mn = (int) ($mc['photos'] ?? 0) + (int) ($mc['videos'] ?? 0);
+                                echo $mn ? ' (' . $mn . ')' : '';
+                            ?></a>
+                        <?php endif; ?>
                         <a href="manage.php?entity=<?= e($entityKey) ?>&action=form&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">এডিট</a>
                         <form method="post" action="manage.php?entity=<?= e($entityKey) ?>&action=delete" class="inline" onsubmit="return confirmSubmit(this, '<?= $entityKey === 'courses' ? 'এই কোর্স ও এর সব ব্যাচ আর্কাইভে সরাতে চান? পরে আর্কাইভ পেজ থেকে ফিরিয়ে আনা যাবে।' : 'এই ' . e($conf['label']) . ' আর্কাইভে সরাতে চান? পরে ফিরিয়ে আনা যাবে।' ?>', 'আর্কাইভ নিশ্চিতকরণ');">
                             <?= csrf_field() ?>
