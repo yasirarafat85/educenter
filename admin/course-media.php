@@ -316,19 +316,26 @@ require __DIR__ . '/includes/layout-top.php';
 </div>
 <?php endif; ?>
 
-<div class="bg-white rounded-2xl shadow overflow-x-auto">
-    <div class="px-5 pt-5 pb-2 flex flex-wrap items-center justify-between gap-2">
-        <h2 class="font-bold text-gray-800">এই ব্যাচে যা আছে (<?= count($all) ?>)</h2>
-        <p class="text-xs text-gray-500">ছোট ক্রম নম্বর আগে দেখাবে</p>
-    </div>
+<?php // 🔴 কাঠামোর নিয়ম (২০২৬-০৯-২৬-এ ইউজারের মোবাইল স্ক্রিনশটে ধরা): `<table>` অবশ্যই
+      //    `.overflow-x-auto`-এর **সরাসরি সন্তান** হতে হবে — layout-top.php-এর মোবাইল কার্ড-CSS ও
+      //    layout-bottom.php-এর labelize() দুটোই `main .overflow-x-auto > table` সিলেক্টর ব্যবহার করে।
+      //    আগে টেবিলটা `<form>`-এর ভেতরে ছিল, তাই কার্ড-লেআউট বসত না আর ক্যাপশনের ঘর পেজ ছাপিয়ে যেত।
+      //    তাই ফর্ম ও শিরোনাম এখন মোড়কের **বাইরে**। ?>
+<div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <h2 class="font-bold text-gray-800">এই ব্যাচে যা আছে (<?= count($all) ?>)</h2>
+    <p class="text-xs text-gray-500">ছোট ক্রম নম্বর আগে দেখাবে</p>
+</div>
 
-    <?php if (!$all): ?>
-        <p class="px-5 pb-5 text-sm text-gray-500">এখনো কিছু যোগ করা হয়নি — উপরের ঘর দুটো থেকে ছবি বা ভিডিও যোগ করুন। কিছু না থাকলে সাইটে বোতামই দেখাবে না।</p>
-    <?php else: ?>
+<?php if (!$all): ?>
+    <div class="bg-white rounded-2xl shadow p-5">
+        <p class="text-sm text-gray-500">এখনো কিছু যোগ করা হয়নি — উপরের ঘর দুটো থেকে ছবি বা ভিডিও যোগ করুন। কিছু না থাকলে সাইটে বোতামই দেখাবে না।</p>
+    </div>
+<?php else: ?>
     <form method="post" action="course-media.php?batch_id=<?= $batchId ?>">
         <?= csrf_field() ?>
         <input type="hidden" name="action" value="save-order">
         <input type="hidden" name="batch_id" value="<?= $batchId ?>">
+        <div class="bg-white rounded-2xl shadow overflow-x-auto">
         <table class="w-full text-sm">
             <thead class="bg-gray-50 text-left text-gray-600">
                 <tr>
@@ -372,7 +379,9 @@ require __DIR__ . '/includes/layout-top.php';
                     </td>
                     <td class="py-2.5 px-4">
                         <input type="text" name="m[<?= (int) $m['id'] ?>][caption]" value="<?= e((string) $m['caption']) ?>" maxlength="200"
-                               class="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm" style="min-width:12rem">
+                               <?php // 🔴 min-width দেবেন না — মোবাইল কার্ডে সেলটা flex (লেবেল + ইনপুট),
+                                     //    ফিক্সড প্রস্থ দিলে ৩২০px পর্দায় ঘরটা বাইরে বেরিয়ে যায় ?>
+                               class="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm" style="min-width:0">
                         <?php if ($isVideo): ?>
                             <span class="block text-xs text-gray-400 mt-1" style="word-break:break-all"><?= e((string) $m['video_url']) ?></span>
                         <?php endif; ?>
@@ -384,7 +393,8 @@ require __DIR__ . '/includes/layout-top.php';
             <?php endforeach; ?>
             </tbody>
         </table>
-        <div class="p-5">
+        </div>
+        <div class="mt-4">
             <button type="submit" class="bg-indigo-600 text-white font-bold px-5 py-2.5 rounded-xl text-sm">ক্রম ও নাম সংরক্ষণ করুন</button>
         </div>
     </form>
@@ -396,8 +406,7 @@ require __DIR__ . '/includes/layout-top.php';
         <input type="hidden" name="batch_id" value="<?= $batchId ?>">
         <input type="hidden" name="id" id="cmDeleteId" value="">
     </form>
-    <?php endif; ?>
-</div>
+<?php endif; ?>
 
 <script>
 document.querySelectorAll('.cm-del').forEach(function (b) {
