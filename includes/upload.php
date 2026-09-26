@@ -3,7 +3,11 @@
 
 // $fieldName এ কোনো ফাইল আপলোড করা হয়েছে কিনা যাচাই করে uploads/$subDir/ এ সেভ করে
 // রিটার্ন করে: uploads/... পাথ (স্ট্রিং) অথবা null (কোনো ফাইল আপলোড না হলে)
-function handle_image_upload(string $fieldName, string $subDir): ?string
+// $pad = false দিলে **সাদা প্যাডিং বসে না** — ছবি নিজের অনুপাতেই থাকে, শুধু বাক্সের ভেতরে
+// ছোট করা হয় (২০২৬-০৯-২৬)। গ্যালারির ছবিতে এটাই লাগে: পোর্ট্রেট ছবি ৪:৩ ক্যানভাসে বসালে
+// দুই পাশে বড় সাদা ফালি পড়ে আর পুরো স্ক্রিনে ছোট্ট বাক্সের মতো দেখায় (ইউজারের স্ক্রিনশটে ধরা)।
+// 🔴 কার্ড/কভার ছবিতে $pad সবসময় true-ই রাখুন — সব কার্ড একরকম দেখানোর নিয়মটা ওখানে ইচ্ছাকৃত।
+function handle_image_upload(string $fieldName, string $subDir, bool $pad = true, int $maxW = 1000, int $maxH = 750): ?string
 {
     if (empty($_FILES[$fieldName]) || $_FILES[$fieldName]['error'] === UPLOAD_ERR_NO_FILE) {
         return null;
@@ -77,7 +81,7 @@ function handle_image_upload(string $fieldName, string $subDir): ?string
 
     // অটো-রিসাইজ: ছবিকে স্ট্যান্ডার্ড ৪:৩ ক্যানভাসে (১০০০×৭৫০) fit+pad করে বসানো হয় — পুরো ছবি দেখা
     // যায় (দরকারে সাদা প্যাডিং), কিছু কাটে না, সব কার্ড একরকম। GD না থাকলে/ব্যর্থ হলে আসল ছবিই সেভ হয়।
-    if (!resize_image_to_canvas($file['tmp_name'], $destPath, $srcExt, $outExt)) {
+    if (!resize_image_to_canvas($file['tmp_name'], $destPath, $srcExt, $outExt, $maxW, $maxH, $pad)) {
         // fallback: আসল ছবি আসল ফরম্যাটে (WebP না)
         $filename = bin2hex(random_bytes(8)) . '.' . $srcExt;
         $destPath = $uploadRoot . '/' . $filename;
@@ -170,7 +174,7 @@ function upload_failure_reason(array $file, string $uploadRoot, string $subDir):
 // ছবিকে target ক্যানভাসে (ডিফল্ট ৪:৩, ১০০০×৭৫০) fit+pad করে সেভ করে — পুরো ছবি অক্ষত থাকে, অনুপাত
 // না মিললে দু'পাশে/উপর-নিচে সাদা প্যাডিং বসে। সফল হলে true; GD না থাকলে/ফরম্যাট না পড়লে false
 // (তখন caller move_uploaded_file দিয়ে আসল ছবি সেভ করে — কখনো আপলোড ব্যর্থ হয় না)।
-function resize_image_to_canvas(string $srcPath, string $destPath, string $ext, string $outExt = '', int $targetW = 1000, int $targetH = 750): bool
+function resize_image_to_canvas(string $srcPath, string $destPath, string $ext, string $outExt = '', int $targetW = 1000, int $targetH = 750, bool $pad = true): bool
 {
     if (!extension_loaded('gd')) {
         return false;
@@ -218,15 +222,19 @@ function resize_image_to_canvas(string $srcPath, string $destPath, string $ext, 
         return false;
     }
 
-    $scale = min($targetW / $sw, $targetH / $sh); // ভেতরে fit — পুরো ছবি ধরে রাখে
+    // 🔴 কখনো বড় করা হয় না (scale ১-এ ক্ল্যাম্প) — ছোট ছবি টেনে বড় করলে ঝাপসা হয়
+    $scale = min($targetW / $sw, $targetH / $sh, 1); // ভেতরে fit — পুরো ছবি ধরে রাখে
     $nw = max(1, (int) round($sw * $scale));
     $nh = max(1, (int) round($sh * $scale));
-    $dx = (int) (($targetW - $nw) / 2);
-    $dy = (int) (($targetH - $nh) / 2);
+    // $pad = false → ক্যানভাস ছবির মাপেই (কোনো সাদা ফালি নেই)
+    $cw = $pad ? $targetW : $nw;
+    $ch = $pad ? $targetH : $nh;
+    $dx = (int) (($cw - $nw) / 2);
+    $dy = (int) (($ch - $nh) / 2);
 
-    $canvas = imagecreatetruecolor($targetW, $targetH);
+    $canvas = imagecreatetruecolor($cw, $ch);
     $white = imagecolorallocate($canvas, 255, 255, 255);
-    imagefilledrectangle($canvas, 0, 0, $targetW, $targetH, $white);
+    imagefilledrectangle($canvas, 0, 0, $cw, $ch, $white);
     imagecopyresampled($canvas, $src, $dx, $dy, 0, 0, $nw, $nh, $sw, $sh);
 
     switch ($outExt) {

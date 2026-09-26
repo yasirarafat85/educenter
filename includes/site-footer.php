@@ -214,6 +214,13 @@
         });
         document.querySelectorAll('[data-cm-close]').forEach(function(b){ b.addEventListener('click', closeAll); });
 
+        // 🔒 ওভারলের ভেতরে ডান-ক্লিক/লং-প্রেস মেনু বন্ধ (ছবি সেভ করা কঠিন করতে)।
+        // ⚠️ এটা কেবল সহজ পথটা বন্ধ করে — ডেভটুল/সরাসরি URL দিয়ে ছবি পাওয়া তবু সম্ভব।
+        document.querySelectorAll('.cm-ov').forEach(function(ov){
+            ov.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+            ov.addEventListener('dragstart', function(e){ e.preventDefault(); });
+        });
+
         // ── ছবির স্লাইডার ──
         var pov = document.getElementById('cm-photos');
         if (pov) {
@@ -227,8 +234,9 @@
             function paint(){
                 var t = thumbs[idx];
                 if (!t) { return; }
-                shot.src = t.getAttribute('data-src');
-                shot.alt = t.getAttribute('data-cap') || '';
+                // 🔒 background-image (src নয়) — লং-প্রেসে "Download image" মেনু আসে না
+                shot.style.backgroundImage = 'url("' + t.getAttribute('data-src').replace(/"/g, '%22') + '")';
+                shot.setAttribute('aria-label', t.getAttribute('data-cap') || '');
                 cap.textContent = t.getAttribute('data-cap') || '';
                 count.textContent = bn(idx + 1) + ' / ' + bn(thumbs.length);
                 thumbs.forEach(function(el, i){ el.setAttribute('aria-current', i === idx ? 'true' : 'false'); });

@@ -83,7 +83,9 @@ if ($post && $act === 'add-photos' && $hasTable) {
                 'size'     => $files['size'][$i],
             ];
             try {
-                $path = handle_image_upload('__cm_one', 'course-media');
+                // 🔴 গ্যালারির ছবি **প্যাডিং ছাড়া** (pad=false) ও বড় বাক্সে (১৪০০×১৪০০) — পোর্ট্রেট ছবিও
+                //    পুরো স্ক্রিন জুড়ে দেখায়; ৪:৩ ক্যানভাসে বসালে দুই পাশে সাদা ফালি পড়ত।
+                $path = handle_image_upload('__cm_one', 'course-media', false, 1400, 1400);
                 if ($path) {
                     $db->prepare(
                         'INSERT INTO course_media (batch_id, kind, file_path, caption, sort_order)

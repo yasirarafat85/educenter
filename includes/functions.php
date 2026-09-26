@@ -1219,6 +1219,17 @@ function course_media_labels(): array
     ];
 }
 
+// গ্যালারির ছবির উপরের ওয়াটারমার্কের লেখা — খালি স্ট্রিং মানে ওয়াটারমার্ক বন্ধ।
+// 🔴 স্ক্রিনশট আটকানো ওয়েবে **অসম্ভব** (কোনো ব্রাউজার API নেই) — তাই আসল সুরক্ষা এটাই:
+// স্ক্রিনশট নিলেও ছবির উপর প্রতিষ্ঠানের নাম বসে থাকে।
+function course_media_watermark_text(): string
+{
+    if (get_setting('course_media_watermark') === '0') {
+        return '';
+    }
+    return trim((string) (get_setting('course_media_watermark_text') ?: get_setting('site_name') ?: ''));
+}
+
 // ভিডিও লিংক → [provider, id, embed, thumb]; চেনা না গেলে null।
 // 🔴 হোস্ট **parse_url() দিয়ে** যাচাই করা হয় — `strpos($url,'youtube.com')` দিয়ে করলে
 // `https://evil.com/?youtube.com` পাস করে যেত (ফেসবুক এমবেডে এই বাগ একবার ধরা পড়েছিল)।
@@ -1391,12 +1402,18 @@ function render_course_media(?PDO $db, int $batchId): string
     // ── ছবির ওভারলে ──
     if ($media['photos']) {
         $total = count($media['photos']);
+        // 🔒 ছবি **`<img>` নয়, CSS background** — মোবাইলে ছবির উপর চেপে ধরলে ক্রোমের
+        // "Download image / Copy image" মেনুটা আর আসে না (ইউজারের চাওয়া, ২০২৬-০৯-২৬)।
+        // ⚠️ এটা ডাউনলোড **কঠিন** করে, অসম্ভব নয় — ফাইলের URL জানলে যে কেউ নামাতে পারে।
+        $wm = course_media_watermark_text();
         $out .= '<div class="cm-ov" id="cm-photos" hidden>'
              .  '<div class="cm-hdr"><span>' . e($labels['photo']) . '</span>'
              .  '<button type="button" class="cm-x" data-cm-close aria-label="বন্ধ করুন">&times;</button></div>'
              .  '<div class="cm-stage">'
              .  '<button type="button" class="cm-arw" data-cm-prev aria-label="আগের ছবি">&lsaquo;</button>'
-             .  '<img class="cm-shot" src="" alt="">'
+             .  '<div class="cm-shot" role="img" aria-label="">'
+             .  ($wm !== '' ? '<span class="cm-wm">' . e($wm) . '</span><span class="cm-wm2">' . e($wm) . '</span>' : '')
+             .  '</div>'
              .  '<button type="button" class="cm-arw" data-cm-next aria-label="পরের ছবি">&rsaquo;</button>'
              .  '</div>'
              .  '<p class="cm-cap"></p><p class="cm-count"></p><div class="cm-strip">';
@@ -1405,7 +1422,7 @@ function render_course_media(?PDO $db, int $batchId): string
             $out .= '<button type="button" class="cm-th" data-cm-i="' . (int) $i . '"'
                  .  ' data-src="' . e($src) . '" data-cap="' . e((string) $p['caption']) . '"'
                  .  ' aria-label="ছবি ' . e(bn_digits($i + 1)) . '">'
-                 .  '<img src="' . e($src) . '" alt="" loading="lazy"></button>';
+                 .  '<span class="cm-thimg" style="background-image:url(' . e($src) . ')"></span></button>';
         }
         $out .= '</div><p class="cm-total" hidden>' . (int) $total . '</p></div>';
     }

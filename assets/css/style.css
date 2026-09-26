@@ -381,6 +381,8 @@ body { padding-bottom: 64px; }
     position: fixed; inset: 0; z-index: 9998;
     background: rgba(9, 16, 12, .96); color: #fff;
     display: flex; flex-direction: column;
+    /* 🔒 লেখা সিলেক্ট ও iOS-এর লং-প্রেস কল-আউট বন্ধ (ছবি সেভ করা কঠিন করতে) */
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
 .cm-ov[hidden] { display: none !important; }
 .cm-hdr {
@@ -393,9 +395,27 @@ body { padding-bottom: 64px; }
 }
 .cm-x:hover { background: rgba(255, 255, 255, .3); }
 .cm-stage {
-    flex: 1; min-height: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px;
+    flex: 1; min-height: 0; display: flex; align-items: stretch; gap: 8px; padding: 0 8px;
 }
-.cm-shot { flex: 1; min-width: 0; max-height: 100%; object-fit: contain; border-radius: 10px; }
+/* 🔒 ছবি `<img>` নয় — CSS background (লং-প্রেসে ডাউনলোড মেনু আসে না)।
+   `align-self: stretch` + `contain` মিলে ছবিটা পুরো উচ্চতা-প্রস্থ জুড়ে যতটা সম্ভব বড় হয়
+   (আগে `<img>`-এর স্বাভাবিক উচ্চতায় মাঝখানে ছোট বাক্সের মতো দেখাত)। */
+.cm-shot {
+    flex: 1; min-width: 0; position: relative; border-radius: 10px;
+    background-position: center; background-repeat: no-repeat; background-size: contain;
+}
+/* ওয়াটারমার্ক — মাঝখানে বড় ও কোনায় ছোট (ক্রপ করলেও একটা থেকে যায়) */
+.cm-wm, .cm-wm2 { position: absolute; pointer-events: none; font-weight: 800; white-space: nowrap; }
+.cm-wm {
+    top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-24deg);
+    font-size: clamp(1.1rem, 6vw, 2.4rem); color: rgba(255, 255, 255, .28);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+}
+.cm-wm2 {
+    right: 10px; bottom: 8px; font-size: .72rem;
+    color: rgba(255, 255, 255, .78); text-shadow: 0 1px 3px rgba(0, 0, 0, .6);
+}
+.cm-arw { align-self: center; }
 .cm-arw {
     font: inherit; background: rgba(255, 255, 255, .16); color: #fff; border: 0;
     width: 44px; height: 44px; border-radius: 50%; font-size: 22px; line-height: 1; cursor: pointer; flex: none;
@@ -408,7 +428,7 @@ body { padding-bottom: 64px; }
     width: 56px; height: 42px; border-radius: 8px; flex: none; cursor: pointer; padding: 0;
     border: 2px solid transparent; background: rgba(255, 255, 255, .1); opacity: .55; overflow: hidden;
 }
-.cm-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cm-thimg { display: block; width: 100%; height: 100%; background-position: center; background-size: cover; }
 .cm-th[aria-current="true"] { border-color: #fff; opacity: 1; }
 
 .cm-vlist { padding: 4px 16px 20px; overflow-y: auto; }
