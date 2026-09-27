@@ -748,43 +748,52 @@ function render_item_card(array $item, string $type): string
         ? '<p class="text-center text-xs text-gray-500 mt-2.5">এখন ভর্তি না হতে চাইলে? <a href="course-interest?course_id=' . $id . '" class="font-semibold underline" style="color:' . $deep . '">আগ্রহ জানিয়ে রাখুন</a></p>'
         : '';
 
-    // 📸 ছবি/ভিডিও — কার্ডে **একটাই "প্রিভিউ দেখুন" আউটলাইন বোতাম**, "বিস্তারিত দেখুন"-এর
-    // পাশে (২০২৬-০৯-২৫, ইউজারের নিজের মকআপ)। 🔴 সংখ্যা দেখানো হয় না (ইউজারের স্পষ্ট চাওয়া —
+    // 📸 ছবি/ভিডিও — কার্ডে আউটলাইন বোতাম, "বিস্তারিত দেখুন"-এর পাশে
+    // (২০২৬-০৯-২৫, ইউজারের নিজের মকআপ)। 🔴 সংখ্যা দেখানো হয় না (ইউজারের স্পষ্ট চাওয়া —
     // "৬টি ছবি" লিখলে কার্ডে ভিড় লাগে)। কার্ডে ওভারলে বসানো হয়নি — গ্রিডে ১০টা কার্ড মানে
     // ১০টা লুকানো গ্যালারি, পেজ ভারী হতো; বদলে ডিটেইল পেজের `#cm-photos` হ্যাশে পাঠানো হয়,
     // ওখানে পৌঁছেই গ্যালারি খুলে যায় (site-footer.php-এর JS)।
-    $previewBtn = '';
+    // 🔴 ছবি ও ভিডিও এখন **আলাদা দুটো বোতাম** (২০২৬-০৯-২৭, ইউজার: "ভিডিওটা বিস্তারিতে গিয়ে
+    //    দেখতে হয় — এটা সমস্যা, সামনে থাকা উচিত")। আগে দুটো থাকলেও কার্ডে শুধু ছবির বোতামটাই
+    //    বসত, ফলে ভিডিও আছে সেটা কার্ড থেকে বোঝারই উপায় ছিল না।
+    $mediaBtns = [];
     if (media_owner_valid($type)) {   // ২০২৬-০৯-২৬ থেকে ওয়ার্কশিট/প্রোডাক্টেও (আগে শুধু কোর্স)
         $mc = course_media_all_counts()[$type . ':' . $id] ?? [];
-        $nPhoto = (int) ($mc['photos'] ?? 0);
-        $nVideo = (int) ($mc['videos'] ?? 0);
-        if ($nPhoto > 0 || $nVideo > 0) {
-            // 🔴 লেবেল **একটাই উৎস** থেকে (`course_media_labels()`) — কার্ড আর ডিটেইল পেজে
-            // হুবহু একই লেখা দেখাতে হবে (ইউজারের চাওয়া); অ্যাডমিন একবার বদলালে দুই জায়গাতেই বদলায়।
-            $cmLabels = course_media_labels();
-            $hash  = $nPhoto > 0 ? '#cm-photos' : '#cm-videos';
-            $label = $nPhoto > 0 ? $cmLabels['photo'] : $cmLabels['video'];
-            $previewBtn = '<a href="' . e(item_url($item, $type, $hash)) . '" class="cc-btn">'
-                . e($label) . '</a>';
+        // 🔴 লেবেল **একটাই উৎস** থেকে (`course_media_labels()`) — কার্ড আর ডিটেইল পেজে
+        // হুবহু একই লেখা দেখাতে হবে (ইউজারের চাওয়া); অ্যাডমিন একবার বদলালে দুই জায়গাতেই বদলায়।
+        $cmLabels = course_media_labels();
+        foreach ([['photos', '#cm-photos', 'photo'], ['videos', '#cm-videos', 'video']] as [$cKey, $hash, $lKey]) {
+            if ((int) ($mc[$cKey] ?? 0) > 0) {
+                $mediaBtns[] = '<a href="' . e(item_url($item, $type, $hash)) . '" class="cc-btn">'
+                    . e($cmLabels[$lKey]) . '</a>';
+            }
         }
     }
-    // দুই বোতামের সারি — প্রিভিউ না থাকলে "বিস্তারিত" একাই পুরো চওড়া
-    // (`:has()` CSS-এ ভরসা না করে কলাম-সংখ্যা সার্ভারেই বসানো, render_course_media()-এর মতো)
-    $btnCount = ($previewBtn !== '' ? 1 : 0) + 1;
-    $cardBtns = '<div class="cc-btns" style="grid-template-columns:repeat(' . $btnCount . ',minmax(0,1fr))">'
-        . $previewBtn
-        . '<a href="' . e(item_url($item, $type)) . '" class="cc-btn cc-btn-plain">বিস্তারিত দেখুন →</a>'
-        . '</div>';
+    // 🔴 "বিস্তারিত দেখুন" এখন **নিজের সারিতে পুরো চওড়া** যখন দুটো মিডিয়া বোতাম আছে
+    //    (২০২৬-০৯-২৭, ইউজার: "বিস্তারিততে অনেকে ক্লিক করছে না")। তিনটা বোতাম এক সারিতে
+    //    দিলে ৩২০px পর্দায় প্রতিটা ~৯০px হয়ে বাংলা লেখা কেটে যেত, আর সবচেয়ে দরকারি
+    //    বোতামটাই সবচেয়ে ছোট হতো। এক-সারির হিসাব সার্ভারেই (`:has()`-এ ভরসা না করে)।
+    $moreBtn = '<a href="' . e(item_url($item, $type)) . '" class="cc-btn cc-btn-go">বিস্তারিত দেখুন →</a>';
+    if (count($mediaBtns) >= 2) {
+        $cardBtns = '<div class="cc-btns" style="grid-template-columns:repeat(2,minmax(0,1fr))">'
+            . implode('', $mediaBtns) . '</div>'
+            . '<div class="cc-btns" style="grid-template-columns:minmax(0,1fr)">' . $moreBtn . '</div>';
+    } else {
+        $cardBtns = '<div class="cc-btns" style="grid-template-columns:repeat(' . (count($mediaBtns) + 1) . ',minmax(0,1fr))">'
+            . implode('', $mediaBtns) . $moreBtn . '</div>';
+    }
 
     return '
     <div class="pricing-card bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col h-full" style="border:2px solid ' . $border . ';">
         <div class="relative">
-            <img src="' . e($image) . '" alt="' . e($item['title']) . '" class="w-full object-cover bg-white zoomable" style="aspect-ratio:4/3;" loading="lazy">
+            <a href="' . e(item_url($item, $type)) . '" class="cc-imglink">
+                <img src="' . e($image) . '" alt="' . e($item['title']) . '" class="w-full object-cover bg-white" style="aspect-ratio:4/3;" loading="lazy">
+            </a>
             ' . $closedBadge . '
         </div>
         <div class="p-5 sm:p-6 flex flex-col flex-1">
             <div class="flex items-center gap-2 flex-wrap mb-1.5">
-                <h3 class="text-lg font-black text-gray-900 leading-snug">' . e($item['title']) . '</h3>
+                <h3 class="text-lg font-black text-gray-900 leading-snug"><a href="' . e(item_url($item, $type)) . '" class="cc-titlelink">' . e($item['title']) . '</a></h3>
                 ' . $openBadge . '
             </div>
             <p class="text-gray-500 text-sm mb-3 leading-relaxed">' . e($cardText) . '</p>
@@ -1350,7 +1359,8 @@ function course_media_labels(): array
 {
     return [
         'photo' => get_setting('course_media_photo_label') ?: '📸 প্রিভিউ দেখুন',
-        'video' => get_setting('course_media_video_label') ?: '▶️ কোর্স ভিডিও',
+        // 🔴 "কোর্স ভিডিও" নয় — ওয়ার্কশিট/প্রোডাক্টেও একই বোতাম বসে (২০২৬-০৯-২৭, ইউজার)
+        'video' => get_setting('course_media_video_label') ?: '▶️ ভিডিও দেখুন',
     ];
 }
 

@@ -12,6 +12,12 @@ $featuredCourses = $db->query(
 )->fetchAll();
 // এখন কয়টা কোর্সে ভর্তি চলছে — হোমপেজে হাইলাইট করার জন্য
 $openCourseCount = (int) $db->query('SELECT COUNT(*) FROM course_batches WHERE is_active = 1 AND registration_open = 1')->fetchColumn();
+// 🔴 ওয়ার্কশিট ও প্রোডাক্টও হোমপেজে (২০২৬-০৯-২৭, ইউজার: "প্রোডাক্ট পেইজে মেনু থেকে খুঁজতে
+//    হয়, যেটা অনেকেই করবে না")। নিচের স্টিকি বারে ঠিক ৫টা স্লট বলে ওখানে জায়গা নেই
+//    (CLAUDE.md-এর নিয়ম) — তাই স্ক্রল করলেই সামনে পড়ে, এভাবেই সমাধান।
+//    ⚠️ তালিকা-পেজের হুবহু একই ক্রম (`sort_order ASC, id ASC`), শুধু LIMIT 3।
+$featuredWorksheets = $db->query('SELECT * FROM worksheets WHERE is_active = 1 ORDER BY sort_order ASC, id ASC LIMIT 3')->fetchAll();
+$featuredProducts   = $db->query('SELECT * FROM products   WHERE is_active = 1 ORDER BY sort_order ASC, id ASC LIMIT 3')->fetchAll();
 $siteName = get_setting('site_name', 'EduCenter');
 
 // হোমপেজ "সংখ্যায় সাফল্য" স্ট্যাট — অ্যাডমিন সেটিংস থেকে (খালি হলে ডিফল্ট)। [value, label, icon, color]
@@ -85,6 +91,40 @@ require __DIR__ . '/includes/site-header.php';
             <p class="text-center text-gray-500">এখনো কোনো কোর্স যোগ করা হয়নি।</p>
         <?php endif; ?>
     </section>
+
+    <?php
+    // 📝🛍️ ওয়ার্কশিট ও প্রোডাক্ট — কোর্স সেকশনের হুবহু একই কাঠামো (eyebrow + হেডিং + ৩টা কার্ড
+    //    + "সব ... দেখুন" লিংক)। 🔴 কিছু না থাকলে সেকশনটাই দেখায় না (খালি শিরোনাম ঝুলবে না)।
+    //    কার্ড বিদ্যমান `render_item_card()` থেকেই, তাই নতুন কোনো CSS/Tailwind ক্লাস লাগেনি।
+    $homeRows = [
+        ['items' => $featuredWorksheets, 'type' => 'worksheet', 'icon' => 'file-text', 'eyebrow' => 'অনুশীলন',
+         'title' => 'ওয়ার্কশিট সমূহ', 'sub' => 'ঘরে বসেই শিশুর হাতের লেখা ও অঙ্কের অনুশীলন',
+         'url' => 'worksheets', 'more' => 'সব ওয়ার্কশিট দেখুন'],
+        ['items' => $featuredProducts, 'type' => 'product', 'icon' => 'shopping-bag', 'eyebrow' => 'শিক্ষা উপকরণ',
+         'title' => 'আমাদের প্রোডাক্ট', 'sub' => 'শিশুর শেখার সঙ্গী — বই, রঙ ও শিক্ষা উপকরণ',
+         'url' => 'products', 'more' => 'সব প্রোডাক্ট দেখুন'],
+    ];
+    foreach ($homeRows as $hr):
+        if (!$hr['items']) continue;
+    ?>
+    <section>
+        <div class="text-center mb-14 sm:mb-16 section-heading">
+            <span class="eyebrow-badge">
+                <i data-lucide="<?= e($hr['icon']) ?>" class="w-4 h-4"></i> <?= e($hr['eyebrow']) ?>
+            </span>
+            <h2 class="text-3xl sm:text-5xl font-black mb-4 text-gray-800"><?= e($hr['title']) ?></h2>
+            <p class="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto"><?= e($hr['sub']) ?></p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+            <?= implode('', array_map(fn($it) => render_item_card($it, $hr['type']), $hr['items'])) ?>
+        </div>
+        <div class="text-center mt-12">
+            <a href="<?= e($hr['url']) ?>" class="inline-flex items-center gap-2 text-indigo-600 font-bold text-lg hover:gap-3 transition-all">
+                <?= e($hr['more']) ?> <i data-lucide="arrow-right" class="w-5 h-5"></i>
+            </a>
+        </div>
+    </section>
+    <?php endforeach; ?>
 
     <section class="relative gradient-bg py-12 sm:py-16 rounded-3xl text-white shadow-2xl overflow-hidden">
         <div class="hero-blob w-64 h-64 -top-16 -left-16"></div>

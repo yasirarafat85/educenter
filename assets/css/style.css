@@ -479,6 +479,17 @@ body { padding-bottom: 64px; }
 .cc-btn:hover { background: rgb(var(--c-tint)); }
 .cc-btn-plain { border-color: #e5e7eb; color: #4b5563; }
 .cc-btn-plain:hover { background: #f9fafb; color: #1f2937; }
+/* 🔗 "বিস্তারিত দেখুন" — আগে ধূসর `.cc-btn-plain` ছিল, দেখে মনে হতো কম গুরুত্বপূর্ণ,
+   তাই ক্লিক কম পড়ত (২০২৬-০৯-২৭ ইউজারের পর্যবেক্ষণ)। এখন থিম-রঙের হালকা ব্যাকগ্রাউন্ড। */
+.cc-btn-go { background: rgb(var(--c-tint)); border-color: rgb(var(--c-border)); color: rgb(var(--c-deep)); }
+.cc-btn-go:hover { background: rgb(var(--c-border)); }
+.cc-btns + .cc-btns { margin-top: 8px; }
+
+/* 🖼️ কার্ডের ছবি ও নাম দুটোই এখন বিস্তারিত পেজের লিংক (২০২৬-০৯-২৭) — মানুষ স্বভাবতই
+   ছবি/নামে ট্যাপ করে, আগে সেখানে কিছুই হতো না (ছবিতে শুধু লাইটবক্স খুলত)। */
+.cc-imglink { display: block; }
+.cc-titlelink { color: inherit; text-decoration: none; }
+.cc-titlelink:hover { color: rgb(var(--c-deep)); text-decoration: underline; }
 
 /* ── ♿ "সরাসরি মূল লেখায় যান" (skip-to-content, ২০২৬-০৯-২৭) ─────────────
    ডিফল্টে পর্দার বাইরে, কীবোর্ডে Tab চাপলে (ফোকাস পেলে) উপরে বাঁয়ে নেমে আসে।
