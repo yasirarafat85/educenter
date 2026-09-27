@@ -596,6 +596,56 @@ function render_fee_box(?string $price, ?string $secLabel, ?string $secAmount, s
 
 // কোর্স/ওয়ার্কশিট/প্রোডাক্ট কার্ড রেন্ডার — courses.php, worksheets.php, products.php, index.php এ ব্যবহার হয়
 // AI Master Bangladesh সাইটের মতো প্রাইসিং-কার্ড স্টাইল: প্রমিনেন্ট দাম, ✓ ফিচার লিস্ট, ফুল-উইডথ CTA
+// ─────────────────────────────────────────────────────────────────────────────
+// ✂️ কার্ড/তালিকায় দেখানোর জন্য বিবরণের সংক্ষিপ্ত রূপ (২০২৬-০৯-২৭)
+//
+// আগে `mb_strimwidth($desc, 0, 90, '...')` ছিল — ওটা **ঠিক ৯০ প্রস্থে কাঁচি চালায়**,
+// শব্দ বা বাক্য কোথায় শেষ হলো দেখে না। ফলে কার্ডে "…আরবি ভাষার সঙ্গে ত..." /
+// "…কোর্স শেষ..." জাতীয় আধখানা শব্দ দেখাচ্ছিল (ইউজারের স্ক্রিনশটে ধরা)।
+//
+// এখন দুই ধাপ:
+//   (১) সীমার ভেতরে কোনো **বাক্য-শেষ** (। ? ! .) থাকলে সেখানেই থামি — লাইনটা পুরো শেষ হয়,
+//       কোনো "…"-ও লাগে না।
+//   (২) না থাকলে অন্তত **শব্দের মাঝখানে কাটি না** — শেষ স্পেস পর্যন্ত পিছিয়ে এসে "…"।
+//
+// 🔴 বাক্য-শেষ ধরা হয় শুধু তখনই যখন তার পরে স্পেস/শেষ — নাহলে "বয়স: ৩.৫ বছর"-এর
+//    দশমিক বিন্দুতেই থেমে যেত ("৩." )।
+// 🔴 `rtrim()`-এর চরিত্র-তালিকায় কখনো মাল্টিবাইট অক্ষর (।, —) দেবেন না — ওটা
+//    বাইট ধরে ছাঁটে, বাংলা অক্ষর ভেঙে mojibake হয়ে যাবে। শুধু ASCII।
+// 🔴 অর্ধেকের কম জায়গায় বাক্য/শব্দ শেষ হলে পিছিয়ে আসি না (নাহলে গ্রিডে কোনো কার্ডে
+//    এক-দুই শব্দ, কোনোটায় তিন লাইন — দেখতে এলোমেলো লাগত)।
+// ─────────────────────────────────────────────────────────────────────────────
+function text_excerpt(?string $text, int $maxChars = 110): string
+{
+    // নতুন লাইন/একাধিক স্পেস এক স্পেসে — কার্ডে বিবরণ এক অনুচ্ছেদ হিসেবেই দেখানো হয়
+    $t = trim((string) preg_replace('/\s+/u', ' ', strip_tags((string) $text)));
+    if ($t === '' || $maxChars < 1) {
+        return $t;
+    }
+    if (mb_strlen($t, 'UTF-8') <= $maxChars) {
+        return $t;   // ছোট বিবরণে কিছুই কাটা হয় না, "…"-ও বসে না
+    }
+
+    $cut = mb_substr($t, 0, $maxChars, 'UTF-8');
+    // কতটুকুর আগে পিছিয়ে আসা চলবে না (বাইটে, কারণ নিচের খোঁজাগুলো বাইট-অফসেটে)
+    $minBytes = strlen(mb_substr($cut, 0, (int) ($maxChars * 0.45), 'UTF-8'));
+
+    // (১) বাক্য-শেষ — দাঁড়ি/প্রশ্ন/বিস্ময়/ফুলস্টপ, পরে স্পেস বা লেখার শেষ
+    if (preg_match_all('/(?:।|\?|!|\.)(?=\s|$)/u', $cut, $m, PREG_OFFSET_CAPTURE)) {
+        $last = end($m[0]);
+        if ($last[1] >= $minBytes) {
+            return rtrim(substr($cut, 0, $last[1] + strlen($last[0])));
+        }
+    }
+
+    // (২) শব্দ-সীমা
+    $sp = strrpos($cut, ' ');
+    if ($sp !== false && $sp >= $minBytes) {
+        $cut = substr($cut, 0, $sp);
+    }
+    return rtrim($cut, " \t\n,;:-") . '…';
+}
+
 function render_item_card(array $item, string $type): string
 {
     [$grad, $solid, $tint, $deep, $border] = item_accent($type);
@@ -700,7 +750,7 @@ function render_item_card(array $item, string $type): string
                 <h3 class="text-lg font-black text-gray-900 leading-snug">' . e($item['title']) . '</h3>
                 ' . $openBadge . '
             </div>
-            <p class="text-gray-500 text-sm mb-3 leading-relaxed">' . e(mb_strimwidth($item['description'] ?? '', 0, 90, '...')) . '</p>
+            <p class="text-gray-500 text-sm mb-3 leading-relaxed">' . e(text_excerpt($item['description'] ?? '')) . '</p>
             ' . ($meta ? '<div class="flex flex-wrap gap-1.5 mb-4">' . $meta . '</div>' : '') . '
             ' . $featuresHtml . '
             <div class="mt-auto pt-2">
