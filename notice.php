@@ -3,9 +3,12 @@ require_once __DIR__ . '/includes/functions.php';
 
 $pageTitle = 'নোটিশ বোর্ড';
 $activePage = 'notice';
+$pageDescription = 'ভর্তি, ক্লাসের সময়সূচি ও পরীক্ষা সংক্রান্ত সর্বশেষ নোটিশ ও ঘোষণা এখানে পাবেন।';
 
 $notices = get_db()->query('SELECT * FROM notices WHERE is_active = 1 ORDER BY notice_date DESC, id DESC')->fetchAll();
 $colors = ['blue', 'green', 'yellow', 'purple', 'red'];
+
+$pageJsonLd = jsonld_breadcrumb([['name' => 'নোটিশ', 'url' => 'notice']]);
 
 require __DIR__ . '/includes/site-header.php';
 ?>

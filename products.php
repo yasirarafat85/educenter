@@ -3,8 +3,11 @@ require_once __DIR__ . '/includes/functions.php';
 
 $pageTitle = 'পণ্য সমূহ';
 $activePage = 'products';
+$pageDescription = 'শিশুদের শেখার সহায়ক প্রোডাক্ট — বই, শিক্ষা উপকরণ ও শিশুবান্ধব সামগ্রী। সারা দেশে কুরিয়ারে পৌঁছে দেওয়া হয়।';
 
 $products = get_db()->query('SELECT * FROM products WHERE is_active = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
+
+$pageJsonLd = jsonld_breadcrumb([['name' => 'প্রোডাক্ট', 'url' => 'products']]);
 
 require __DIR__ . '/includes/site-header.php';
 ?>

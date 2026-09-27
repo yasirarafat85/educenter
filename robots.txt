@@ -6,7 +6,15 @@ Disallow: /database/
 Disallow: /config.php
 Disallow: /register-submit.php
 Disallow: /course-register-submit.php
+Disallow: /course-interest-submit.php
+Disallow: /account-request-submit.php
 Disallow: /log-download.php
 Disallow: /ajax-lookup-registration.php
+Disallow: /ajax-lookup-interest.php
 
-# সাইটম্যাপ Google Search Console এ সাবমিট করুন: https://your-domain.com/sitemap.php
+# অভিভাবকের ব্যক্তিগত পাতা — এগুলো সার্চে আসার কিছু নেই
+Disallow: /account
+Disallow: /account-*
+Disallow: /register-thanks.php
+
+Sitemap: https://shishurmedhabikash.com/sitemap.php

@@ -3,8 +3,11 @@ require_once __DIR__ . '/includes/functions.php';
 
 $pageTitle = 'শিক্ষক মন্ডলী';
 $activePage = 'teachers';
+$pageDescription = 'আমাদের অভিজ্ঞ ও প্রশিক্ষিত শিক্ষক মন্ডলীর সাথে পরিচিত হন — কে কোন বিষয়ে পড়ান ও তাঁদের অভিজ্ঞতা।';
 
 $teachers = get_db()->query('SELECT * FROM teachers WHERE is_active = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
+
+$pageJsonLd = jsonld_breadcrumb([['name' => 'শিক্ষক', 'url' => 'teachers']]);
 
 require __DIR__ . '/includes/site-header.php';
 ?>
@@ -15,7 +18,7 @@ require __DIR__ . '/includes/site-header.php';
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
         <?php foreach ($teachers as $t): ?>
         <div class="colorful-card rounded-2xl shadow-lg p-6 sm:p-8 text-center card-hover border border-white/30">
-            <img src="<?= e($t['image'] ?: 'https://placehold.co/300x300?text=Teacher') ?>" alt="<?= e($t['name']) ?>" class="w-32 h-32 sm:w-40 sm:h-40 rounded-full mx-auto mb-6 object-cover shadow-lg ring-4 ring-indigo-100">
+            <img src="<?= e($t['image'] ?: placeholder_img('user')) ?>" alt="<?= e($t['name']) ?>" class="w-32 h-32 sm:w-40 sm:h-40 rounded-full mx-auto mb-6 object-cover shadow-lg ring-4 ring-indigo-100" loading="lazy">
             <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-2"><?= e($t['name']) ?></h3>
             <p class="text-indigo-600 font-bold mb-3 text-base sm:text-lg"><?= e($t['subject']) ?></p>
             <?php if ($t['experience']): ?>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="ছবি নেই">
+  <rect width="400" height="300" fill="#f1f5f9"/>
+  <g fill="none" stroke="#cbd5e1" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="148" y="112" width="104" height="80" rx="8"/>
+    <circle cx="174" cy="138" r="9"/>
+    <path d="M152 178l26-24 20 18 22-20 28 26"/>
+  </g>
+  <text x="200" y="228" text-anchor="middle" font-family="sans-serif" font-size="17" fill="#94a3b8">No Image</text>
+</svg>

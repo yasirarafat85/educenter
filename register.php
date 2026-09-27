@@ -22,6 +22,10 @@ if (!$orderItem) {
 }
 
 $pageTitle = 'অর্ডার - ' . $orderItem['title'];
+// আইটেম-ভিত্তিক SEO/শেয়ার মেটা (detail.php-এর মতোই) — লিংক শেয়ার করলে ঐ আইটেমের ছবি ও বিবরণ দেখাবে
+$pageDescription = mb_substr(trim(strip_tags($orderItem['description'] ?? '')), 0, 155)
+    ?: ($orderItem['title'] . ' — অনলাইনে অর্ডার করুন, সারা দেশে কুরিয়ারে পৌঁছে দেওয়া হয়।');
+$pageOgImage = $orderItem['image'] ?? '';
 $activePage = '';
 $old = $_SESSION['register_form_old'] ?? [];
 unset($_SESSION['register_form_old']);
@@ -33,7 +37,7 @@ require __DIR__ . '/includes/site-header.php';
 
 <div class="max-w-2xl mx-auto">
     <div class="colorful-card rounded-2xl shadow-lg p-5 sm:p-6 mb-6 flex items-center gap-4">
-        <img src="<?= e($orderItem['image'] ?: 'https://placehold.co/100x100') ?>" class="w-16 h-16 rounded-xl object-cover">
+        <img src="<?= e($orderItem['image'] ?: placeholder_img()) ?>" alt="<?= e($orderItem['title'] ?? '') ?>" class="w-16 h-16 rounded-xl object-cover" loading="lazy">
         <div>
             <p class="text-xs text-gray-500 uppercase font-semibold">অর্ডার</p>
             <h2 class="font-bold text-gray-900 text-lg"><?= e($orderItem['title']) ?></h2>

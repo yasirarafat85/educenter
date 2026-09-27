@@ -11,6 +11,7 @@ require_once __DIR__ . '/includes/functions.php';
 $db = get_db();
 $pageTitle = 'আগ্রহ জানিয়ে রাখুন';
 $activePage = 'courses';
+$pageDescription = 'এখনই ভর্তি হতে না পারলেও আগ্রহ জানিয়ে রাখুন — নতুন ব্যাচ খুললে আমরা আপনাকে আগে জানাবো।';
 
 $courseId = (int) ($_GET['course_id'] ?? 0);
 $selectedCourse = null;
@@ -51,7 +52,7 @@ if (!$selectedCourse):
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         <?php foreach ($courses as $c): ?>
         <a href="course-interest?course_id=<?= $c['id'] ?>" class="colorful-card rounded-2xl shadow-lg overflow-hidden card-hover border border-white/30 block relative">
-            <img src="<?= e($c['image'] ?: 'https://placehold.co/400x300') ?>" alt="<?= e($c['title']) ?>" class="w-full h-36 sm:h-40 object-cover">
+            <img src="<?= e($c['image'] ?: placeholder_img()) ?>" alt="<?= e($c['title']) ?>" class="w-full h-36 sm:h-40 object-cover" loading="lazy">
             <?php $isOpen = !empty($c['registration_open']); ?>
             <div class="absolute top-3 left-3 <?= $isOpen ? 'bg-green-600/90' : 'bg-gray-800/80' ?> text-white px-3 py-1 rounded-full font-semibold text-xs"><?= $isOpen ? '▶ এখন খোলা' : '🔜 আসছে শীঘ্রই' ?></div>
             <div class="p-4 sm:p-5">

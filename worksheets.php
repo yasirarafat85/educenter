@@ -3,8 +3,11 @@ require_once __DIR__ . '/includes/functions.php';
 
 $pageTitle = 'ওয়ার্কশিট সমূহ';
 $activePage = 'worksheets';
+$pageDescription = 'শিশুদের অনুশীলনের জন্য বিশেষভাবে তৈরি ওয়ার্কশিট — হাতের লেখা, অঙ্ক ও চিন্তার দক্ষতা গড়ে তোলার সহজ উপকরণ। ঘরে বসেই অর্ডার করুন।';
 
 $worksheets = get_db()->query('SELECT * FROM worksheets WHERE is_active = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
+
+$pageJsonLd = jsonld_breadcrumb([['name' => 'ওয়ার্কশিট', 'url' => 'worksheets']]);
 
 require __DIR__ . '/includes/site-header.php';
 ?>

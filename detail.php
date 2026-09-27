@@ -32,6 +32,15 @@ $registrationClosed = $type === 'course' && empty($item['registration_open']);
 $actionLabel = $registrationClosed ? 'রেজিস্ট্রেশন বন্ধ' : ($type === 'course' ? 'Register Now - রেজিস্ট্রেশন করুন' : 'Order Now - অর্ডার করুন');
 $actionUrl = $type === 'course' ? ('course-register?course_id=' . (int) $item['id']) : ('register?type=' . urlencode($type) . '&id=' . (int) $item['id']);
 
+// 🔍 এই আইটেমের structured data + ব্রেডক্রাম্ব (site-header.php `$pageJsonLd` পড়ে <head>-এ বসায়)
+$jsonLdUrl = (defined('SITE_URL') ? rtrim(SITE_URL, '/') : '')
+    . '/detail?type=' . rawurlencode($type) . '&id=' . (int) $item['id'];
+$pageJsonLd = jsonld_item($item, $type, $jsonLdUrl)
+    . jsonld_breadcrumb([
+        ['name' => $type === 'course' ? 'কোর্স' : ($type === 'worksheet' ? 'ওয়ার্কশিট' : 'প্রোডাক্ট'), 'url' => $backUrl],
+        ['name' => $item['title'], 'url' => $jsonLdUrl],
+    ]);
+
 require __DIR__ . '/includes/site-header.php';
 ?>
 
@@ -43,7 +52,7 @@ require __DIR__ . '/includes/site-header.php';
     <div class="colorful-card rounded-2xl shadow-lg p-6 sm:p-8">
         <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-6"><?= e($item['title']) ?></h1>
 
-        <img src="<?= e($item['image'] ?: 'https://placehold.co/800x600?text=No+Image') ?>" alt="<?= e($item['title']) ?>" class="w-full object-cover rounded-xl mb-6 shadow-lg bg-white zoomable" style="aspect-ratio:4/3;">
+        <img src="<?= e($item['image'] ?: placeholder_img()) ?>" alt="<?= e($item['title']) ?>" class="w-full object-cover rounded-xl mb-6 shadow-lg bg-white zoomable" style="aspect-ratio:4/3;">
 
         <div class="space-y-6">
             <p class="text-gray-700 text-base sm:text-lg leading-relaxed break-words" style="overflow-wrap:anywhere;"><?= nl2br(e($item['description'] ?? '')) ?></p>

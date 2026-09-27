@@ -8,6 +8,7 @@ if (user_logged_in()) {
 }
 
 $pageTitle = 'অ্যাকাউন্ট তৈরি';
+$pageDescription = 'অভিভাবক অ্যাকাউন্ট খুলুন — কোর্সের অগ্রগতি, জমা-বাকি ও পার্সেলের খবর এক জায়গায়।';
 $activePage = '';
 $old = $_SESSION['account_signup_old'] ?? [];
 unset($_SESSION['account_signup_old']);

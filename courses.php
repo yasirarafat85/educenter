@@ -13,6 +13,8 @@ $courses = get_db()->query(
 $openCourses   = array_filter($courses, fn($c) => !empty($c['registration_open']));
 $closedCourses = array_filter($courses, fn($c) => empty($c['registration_open']));
 
+$pageJsonLd = jsonld_breadcrumb([['name' => 'কোর্স', 'url' => 'courses']]);
+
 require __DIR__ . '/includes/site-header.php';
 ?>
 

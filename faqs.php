@@ -3,8 +3,12 @@ require_once __DIR__ . '/includes/functions.php';
 
 $pageTitle = 'প্রায়শ জিজ্ঞাসিত প্রশ্ন';
 $activePage = 'faqs';
+$pageDescription = 'ভর্তি, ফি, ক্লাসের সময় ও কুরিয়ার নিয়ে অভিভাবকদের সবচেয়ে বেশি জিজ্ঞাসিত প্রশ্নের উত্তর।';
 
 $faqs = get_db()->query('SELECT * FROM faqs WHERE is_active = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
+
+// 🔍 FAQPage — গুগল সার্চেই প্রশ্নগুলো ভাঁজ-করা অবস্থায় দেখাতে পারে
+$pageJsonLd = jsonld_faq($faqs) . jsonld_breadcrumb([['name' => 'প্রশ্নোত্তর', 'url' => 'faqs']]);
 
 require __DIR__ . '/includes/site-header.php';
 ?>

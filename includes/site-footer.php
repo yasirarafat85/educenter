@@ -7,7 +7,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
                 <div>
                     <div class="flex items-center space-x-3 mb-6">
-                        <img src="<?= e($logoPath) ?>" alt="<?= e($siteName) ?> Logo" class="w-10 h-10 rounded-lg shadow-lg object-cover">
+                        <img src="<?= e($logoPath) ?>" alt="<?= e($siteName) ?> Logo" class="w-10 h-10 rounded-lg shadow-lg object-cover" loading="lazy">
                         <div>
                             <h3 class="text-xl font-bold"><?= e($siteName) ?></h3>
                             <p class="text-sm text-gray-400"><?= e($siteTagline) ?></p>
@@ -116,7 +116,13 @@
     <?php endif; ?>
 
     <script>
-        lucide.createIcons();
+        // 🔴 lucide.js এখন `defer` দিয়ে লোড হয় (site-header.php) — অর্থাৎ **এই ইনলাইন স্ক্রিপ্টটা
+        // আগে চলে, লাইব্রেরিটা পরে**। তাই সরাসরি ডাকলে "lucide is not defined" হয়ে এই পুরো
+        // স্ক্রিপ্টটাই মরে যেত (আইকন, মোবাইল মেনু, লাইটবক্স, ফেসবুক lazy-load — সব একসাথে)।
+        // 🔴 নিয়ম: **সবসময় eduIcons() ডাকুন**, লাইব্রেরিটা সরাসরি নয়।
+        function eduIcons() { if (window.lucide) { lucide.createIcons(); } }
+        // defer করা স্ক্রিপ্ট DOMContentLoaded-এর ঠিক আগে চলে, তাই এখানে লাইব্রেরিটা নিশ্চিতভাবে আছে
+        document.addEventListener('DOMContentLoaded', eduIcons);
 
         // ── স্টিকি বারের "উপরে" আইটেম — ক্লিকে পেজের উপরে নিয়ে যায় (আলাদা ভাসমান বাটন নয়) ──
         (function () {
@@ -139,7 +145,7 @@
                 mobileBtn.innerHTML = open
                     ? '<i data-lucide="x" class="w-6 h-6 text-gray-700"></i>'
                     : '<i data-lucide="menu" class="w-6 h-6 text-gray-700"></i>';
-                lucide.createIcons();
+                eduIcons();
             }
             mobileBtn.addEventListener('click', (e) => {
                 e.stopPropagation();

@@ -29,8 +29,13 @@ $logoPath = get_setting('logo_path', 'https://i.postimg.cc/T3FzJyxM/logo.png');
 // সাইট থিম ও ফন্ট (অ্যাডমিন-নিয়ন্ত্রিত, site-wide) — প্যালেট CSS ভ্যারিয়েবলে বসানো হয় নিচে
 $sitePalette = get_active_site_palette();
 $siteFonts = get_site_fonts();
+// 🔴 আইডিটা সবসময় তালিকার মধ্যেই ক্ল্যাম্প করা হয় — নিচে এটা দিয়ে **ফাইলের পাথ** বানানো হয়
+// (assets/fonts/<id>.css), তাই settings-এ আজেবাজে মান থাকলে পাথ-ট্রাভার্সাল হতে পারত।
 $siteFontId = get_setting('site_font') ?: 'noto';
-$siteFont = $siteFonts[$siteFontId] ?? $siteFonts['noto'];
+if (!isset($siteFonts[$siteFontId])) {
+    $siteFontId = 'noto';
+}
+$siteFont = $siteFonts[$siteFontId];
 
 // SEO / সোশ্যাল শেয়ার মেটা — কোনো পেজ চাইলে include করার আগে $pageDescription / $pageOgImage সেট করে
 // আইটেম-ভিত্তিক (যেমন নির্দিষ্ট কোর্সের) বিবরণ/ছবি দিতে পারে; নাহলে সাইট-ওয়াইড সেটিংস বা ডিফল্ট ব্যবহার হয়।
@@ -62,7 +67,13 @@ $metaFullTitle = (!empty($pageTitle) ? $pageTitle . ' - ' : '') . $siteName;
 
     <!-- SEO -->
     <meta name="description" content="<?= e($metaDescription) ?>">
-    <link rel="canonical" href="<?= e($canonicalUrl) ?>">
+    <?php // 🔴 ৪০৪/সার্চের মতো পেজ ইনডেক্স করানো উচিত নয় — `$pageNoIndex = true;` দিলে
+          // canonical-ও বাদ যায় (নাহলে অস্তিত্বহীন URL-টাই canonical হিসেবে যেত)। ?>
+    <?php if (!empty($pageNoIndex)): ?>
+        <meta name="robots" content="noindex, follow">
+    <?php else: ?>
+        <link rel="canonical" href="<?= e($canonicalUrl) ?>">
+    <?php endif; ?>
     <meta name="theme-color" content="<?= e($metaThemeColor) ?>">
     <link rel="icon" href="<?= e($logoPath) ?>">
     <link rel="apple-touch-icon" href="<?= e($logoPath) ?>">
@@ -81,13 +92,28 @@ $metaFullTitle = (!empty($pageTitle) ? $pageTitle . ' - ' : '') . $siteName;
     <meta name="twitter:description" content="<?= e($metaDescription) ?>">
     <meta name="twitter:image" content="<?= e($ogImageAbs) ?>">
 
+    <?php // 🔍 Structured data — সব পাবলিক পেজে প্রতিষ্ঠানের পরিচয়, আর পেজ চাইলে নিজেরটা
+          // ($pageJsonLd-এ বসিয়ে; detail/faqs/reviews এভাবেই দেয়)। বিস্তারিত functions.php-এ। ?>
+    <?= jsonld_organization() ?>
+    <?= $pageJsonLd ?? '' ?>
+
     <!-- সেল্ফ-হোস্টেড কম্পাইলড Tailwind (আগে cdn.tailwindcss.com JIT ছিল — এখন স্ট্যাটিক CSS, দ্রুত + ঝলকমুক্ত) -->
     <link rel="stylesheet" href="assets/css/tailwind.css?v=<?= @filemtime(__DIR__ . '/../assets/css/tailwind.css') ?: '1' ?>">
-    <script src="assets/js/lucide.js?v=<?= @filemtime(__DIR__ . '/../assets/js/lucide.js') ?: '1' ?>"></script>
+    <?php // 🔴 `defer` — আগে এটা render-blocking ছিল (লেখা দেখানোর আগে স্ক্রিপ্টের জন্য অপেক্ষা)।
+          // আইকন বসানোর কল site-footer.php-এ, পেজের একদম নিচে — তাই defer-এ সমস্যা হয় না। ?>
+    <script defer src="assets/js/lucide.js?v=<?= @filemtime(__DIR__ . '/../assets/js/lucide.js') ?: '1' ?>"></script>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=<?= e($siteFont['google']) ?>&display=swap" rel="stylesheet">
+    <?php // 🔤 ফন্ট এখন **সেল্ফ-হোস্টেড** (২০২৬-০৯-২৭) — আগে fonts.googleapis.com থেকে আসত, যেটা
+          // বাইরের দুটো রাউন্ড-ট্রিপ (CSS তারপর woff2) যোগ করত। ফাইল assets/fonts/<id>.(css|woff2)।
+          // ফলব্যাক: কোনো কারণে ফাইলটা না থাকলে পুরনো গুগল-লিংকই ব্যবহার হয় (ফন্ট কখনো ভাঙে না)। ?>
+    <?php $fontCss = __DIR__ . '/../assets/fonts/' . $siteFontId . '.css'; ?>
+    <?php if (is_file($fontCss)): ?>
+        <link rel="stylesheet" href="assets/fonts/<?= e($siteFontId) ?>.css?v=<?= @filemtime($fontCss) ?: '1' ?>">
+    <?php else: ?>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=<?= e($siteFont['google']) ?>&display=swap" rel="stylesheet">
+    <?php endif; ?>
     <link rel="stylesheet" href="assets/css/style.css?v=<?= @filemtime(__DIR__ . '/../assets/css/style.css') ?: '1' ?>">
     <style>
         /* অ্যাডমিন-নিয়ন্ত্রিত সাইট থিম — এই ভ্যারিয়েবলগুলো থেকে সব ব্র্যান্ড রঙ আসে (style.css + inline) */

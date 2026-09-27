@@ -638,7 +638,7 @@ function render_item_card(array $item, string $type): string
     $registrationClosed = $type === 'course' && empty($item['registration_open']);
     $actionLabel = $registrationClosed ? 'রেজিস্ট্রেশন বন্ধ' : ($type === 'course' ? 'রেজিস্ট্রেশন করুন' : 'অর্ডার করুন');
     $actionUrl = $type === 'course' ? 'course-register?course_id=' . $id : 'register?type=' . e($type) . '&id=' . $id;
-    $image = $item['image'] ?: 'https://placehold.co/400x300?text=No+Image';
+    $image = $item['image'] ?: placeholder_img();
     $closedBadge = $registrationClosed ? '<div class="card-ribbon">🔜 আসছে</div>' : '';
     // চলমান কোর্সে সবুজ "ভর্তি চলছে" ব্যাজ — এখন কোর্সের নামের পাশে (ছবিতে না, ইউজারের চাওয়া)
     $openBadge = ($type === 'course' && !empty($item['registration_open']))
@@ -1413,6 +1413,208 @@ function course_media_all_counts(?PDO $db = null): array
         $cache = []; // টেবিলই নেই — কার্ডে কিছু দেখাবে না
     }
     return $cache;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔍 Structured data (JSON-LD) — গুগলের "রিচ রেজাল্ট" (২০২৬-০৯-২৭)
+//
+// গুগল/ফেসবুক পেজের লেখা পড়ে অনুমান করার বদলে এই ব্লক থেকে **নিশ্চিতভাবে** জানে —
+// এটা কোন প্রতিষ্ঠান, কোনটা কোর্স, দাম কত, প্রশ্নোত্তর কী। ফলে সার্চে দাম/তারা/
+// ভাঁজ-করা প্রশ্ন সহ বড় করে দেখাতে পারে।
+//
+// 🔴 নিরাপত্তা: `JSON_HEX_TAG` বাধ্যতামূলক — নাহলে কোনো কোর্সের নামে `</script>` থাকলে
+//    স্ক্রিপ্ট ট্যাগটা ওখানেই শেষ হয়ে বাকিটা HTML হিসেবে চলত (XSS)। `JSON_UNESCAPED_UNICODE`
+//    রাখা হয়েছে যাতে বাংলা `\uXXXX` না হয়ে পড়ার মতো থাকে (গুগল দুটোই বোঝে, ফাইল ছোট হয়)।
+// 🔴 খালি মান কখনো পাঠাবেন না — `jsonld_clean()` খালি স্ট্রিং/অ্যারে ছেঁটে দেয়,
+//    কারণ `"telephone": ""` থাকলে গুগল সেটাকে ত্রুটি হিসেবে দেখায়।
+// ─────────────────────────────────────────────────────────────────────────────
+
+// খালি মান (null / '' / খালি অ্যারে) বাদ দিয়ে দেয়, recursive
+function jsonld_clean(array $data): array
+{
+    $out = [];
+    foreach ($data as $k => $v) {
+        if (is_array($v)) {
+            $v = jsonld_clean($v);
+        }
+        if ($v === null || $v === '' || $v === []) {
+            continue;
+        }
+        $out[$k] = $v;
+    }
+    return $out;
+}
+
+function render_jsonld(array $data): string
+{
+    $data = jsonld_clean($data);
+    if (!$data) {
+        return '';
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG);
+    if ($json === false) {
+        return '';   // এনকোড না হলে চুপচাপ বাদ — পেজ কখনো ভাঙবে না
+    }
+    return '<script type="application/ld+json">' . $json . "</script>\n";
+}
+
+// রিলেটিভ পাথ → সম্পূর্ণ URL (structured data-য় absolute URL লাগে)
+function jsonld_abs(string $path): string
+{
+    $path = trim($path);
+    if ($path === '' || preg_match('#^https?://#i', $path)) {
+        return $path;
+    }
+    $base = defined('SITE_URL') ? rtrim(SITE_URL, '/') : '';
+    return $base . '/' . ltrim($path, '/');
+}
+
+// প্রতিষ্ঠানের পরিচয় — **সব পাবলিক পেজে** একবার (site-header.php থেকে)
+function jsonld_organization(): string
+{
+    $sameAs = [];
+    foreach (['social_facebook', 'social_youtube', 'social_instagram', 'social_twitter'] as $k) {
+        $u = trim((string) get_setting($k));
+        if ($u !== '') {
+            $sameAs[] = $u;
+        }
+    }
+    return render_jsonld([
+        '@context'    => 'https://schema.org',
+        '@type'       => 'EducationalOrganization',
+        'name'        => get_setting('site_name', 'EduCenter'),
+        'description' => get_setting('site_meta_description') ?: get_setting('site_tagline'),
+        'url'         => defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/' : '',
+        'logo'        => jsonld_abs((string) get_setting('logo_path')),
+        'telephone'   => trim((string) get_setting('contact_phone')),
+        'email'       => trim((string) get_setting('contact_email')),
+        'address'     => array_filter([
+            '@type'           => 'PostalAddress',
+            'streetAddress'   => trim((string) get_setting('contact_address')),
+            'addressCountry'  => 'BD',
+        ]),
+        'sameAs'      => $sameAs,
+    ]);
+}
+
+// একটা আইটেমের (কোর্স / ওয়ার্কশিট / প্রোডাক্ট) structured data — detail.php থেকে
+// 🔴 কোর্স = schema.org/Course, বাকি দুটো = Product (গুগলের আলাদা নিয়ম, গুলিয়ে ফেলবেন না)
+function jsonld_item(array $item, string $type, string $url): string
+{
+    $price = parse_price_to_number($item['price'] ?? '');
+    $name  = (string) ($item['title'] ?? '');
+    $desc  = mb_substr(trim(strip_tags((string) ($item['description'] ?? ''))), 0, 500);
+    $img   = jsonld_abs((string) ($item['image'] ?? ''));
+    $org   = get_setting('site_name', 'EduCenter');
+
+    if ($type === 'course') {
+        $data = [
+            '@context'    => 'https://schema.org',
+            '@type'       => 'Course',
+            'name'        => $name,
+            'description' => $desc,
+            'image'       => $img,
+            'url'         => $url,
+            'inLanguage'  => 'bn',
+            'provider'    => ['@type' => 'EducationalOrganization', 'name' => $org],
+        ];
+        // 🔴 গুগল Course-এ `hasCourseInstance` চায় (নাহলে ওয়ার্নিং); আমাদের ক্লাস অনলাইন/ব্যাচভিত্তিক
+        $data['hasCourseInstance'] = jsonld_clean([
+            '@type'              => 'CourseInstance',
+            'courseMode'         => 'online',
+            'courseWorkload'     => trim((string) ($item['duration'] ?? '')),
+            'name'               => trim((string) ($item['batch_name'] ?? '')),
+        ]);
+        if ($price > 0) {
+            $data['offers'] = [
+                '@type'         => 'Offer',
+                'price'         => (string) $price,
+                'priceCurrency' => 'BDT',
+                'category'      => 'Paid',
+                'url'           => $url,
+                'availability'  => empty($item['registration_open'])
+                    ? 'https://schema.org/PreOrder' : 'https://schema.org/InStock',
+            ];
+        }
+        return render_jsonld($data);
+    }
+
+    $data = [
+        '@context'    => 'https://schema.org',
+        '@type'       => 'Product',
+        'name'        => $name,
+        'description' => $desc,
+        'image'       => $img,
+        'url'         => $url,
+        'brand'       => ['@type' => 'Brand', 'name' => $org],
+    ];
+    if ($price > 0) {
+        $data['offers'] = [
+            '@type'         => 'Offer',
+            'price'         => (string) $price,
+            'priceCurrency' => 'BDT',
+            'url'           => $url,
+            'availability'  => 'https://schema.org/InStock',
+        ];
+    }
+    return render_jsonld($data);
+}
+
+// FAQ পেজ — গুগলে প্রশ্নগুলো ভাঁজ-করা অবস্থায় দেখাতে পারে
+function jsonld_faq(array $faqs): string
+{
+    $items = [];
+    foreach ($faqs as $f) {
+        $q = trim((string) ($f['question'] ?? ''));
+        $a = trim(strip_tags((string) ($f['answer'] ?? '')));
+        if ($q === '' || $a === '') {
+            continue;
+        }
+        $items[] = [
+            '@type'          => 'Question',
+            'name'           => $q,
+            'acceptedAnswer' => ['@type' => 'Answer', 'text' => $a],
+        ];
+    }
+    return $items ? render_jsonld([
+        '@context'   => 'https://schema.org',
+        '@type'      => 'FAQPage',
+        'mainEntity' => $items,
+    ]) : '';
+}
+
+// ব্রেডক্রাম্ব — সার্চ ফলাফলে "হোম › কোর্স › নাম" পথটা দেখায়
+// $trail = [['name' => 'কোর্স', 'url' => '.../courses'], ...]  (হোম নিজে থেকেই যোগ হয়)
+function jsonld_breadcrumb(array $trail): string
+{
+    $base = defined('SITE_URL') ? rtrim(SITE_URL, '/') : '';
+    $list = [['@type' => 'ListItem', 'position' => 1, 'name' => 'হোম', 'item' => $base . '/']];
+    $pos = 2;
+    foreach ($trail as $t) {
+        if (empty($t['name'])) {
+            continue;
+        }
+        $list[] = jsonld_clean([
+            '@type'    => 'ListItem',
+            'position' => $pos++,
+            'name'     => (string) $t['name'],
+            'item'     => isset($t['url']) ? jsonld_abs((string) $t['url']) : '',
+        ]);
+    }
+    return count($list) > 1 ? render_jsonld([
+        '@context'        => 'https://schema.org',
+        '@type'           => 'BreadcrumbList',
+        'itemListElement' => $list,
+    ]) : '';
+}
+
+// ছবি না থাকলে যে প্লেসহোল্ডার বসে (২০২৬-০৯-২৭)। আগে বাইরের `placehold.co` ব্যবহার হতো —
+// ৬টা পাবলিক পেজে, অর্থাৎ ছবিবিহীন প্রতিটা আইটেমে বাইরের সার্ভারে একটা করে হিট, আর সার্ভিসটা
+// ডাউন/ব্লক হলে ভাঙা ছবি। এখন লোকাল SVG (কয়েকশ বাইট, ক্যাশেবল, সবসময় চলে)।
+// 🔴 পাথ **রিলেটিভ** — ক্লিন-URL নিয়ম অনুযায়ী (সাবডিরেক্টরি `/website`-এ absolute `/` ভাঙে)।
+function placeholder_img(string $kind = 'item'): string
+{
+    return $kind === 'user' ? 'assets/img/placeholder-user.svg' : 'assets/img/placeholder.svg';
 }
 
 // সংখ্যা বাংলা অঙ্কে (পাবলিক সাইটের জন্য; অ্যাডমিনে ইংরেজিই থাকে — প্রজেক্ট কনভেনশন)

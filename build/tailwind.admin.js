@@ -1,5 +1,6 @@
 module.exports = {
-  content: ['D:/clude_project/website/admin/**/*.php'],
+  // 🔴 রিলেটিভ পাথ (২০২৬-০৯-২৭) — কারণ উপরের public কনফিগে লেখা আছে; প্রজেক্ট রুট থেকে চালান।
+  content: ['./admin/**/*.php'],
   theme: {
     extend: {
       fontFamily: {

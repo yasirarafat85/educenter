@@ -24,4 +24,63 @@
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME}.php -f
     RewriteRule ^(.+?)/?$ $1.php [L,QSA]
+
+    # (D) যা কিছুই মিলল না → সাইটের নিজের ৪০৪ পেজ (২০২৬-০৯-২৭)
+    # 🔴 ইচ্ছাকৃতভাবে `ErrorDocument 404 /404.php` ব্যবহার করা হয়নি — Apache সেখানে
+    #    ডকুমেন্ট-রুট থেকে absolute পাথ চায়, তাই লাইভে (`/404.php`) চললেও লোকাল
+    #    সাবডিরেক্টরিতে (`/website/404.php`) ভেঙে যেত। mod_rewrite-এর substitution
+    #    .htaccess যে ফোল্ডারে সেটার সাপেক্ষে হয়, তাই এই নিয়মটা দুই জায়গাতেই চলে।
+    # HTTP স্ট্যাটাস ৪০৪ বসায় 404.php নিজেই (`http_response_code(404)`) — গুগল যেন
+    # "soft 404" হিসেবে ইনডেক্স না করে।
+    # ⚠️ অনুপস্থিত ছবি/CSS/JS-এ পুরো HTML পাঠানো অপচয়, তাই সেগুলো বাদ (Apache-এর
+    #    নিজের সংক্ষিপ্ত ৪০৪-ই যাবে)। admin/ ও বাদ — ওখানকার নিজের গার্ড চলুক।
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} !(^|/)admin/ [NC]
+    RewriteCond %{REQUEST_URI} !\.(css|js|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|eot|xml|txt|json|pdf|zip)$ [NC]
+    RewriteRule ^ 404.php [L]
+</IfModule>
+
+# ── gzip কম্প্রেশন (২০২৬-০৯-২৭) ──────────────────────────────────────────────
+# টেক্সট-ফাইল (HTML/CSS/JS/SVG) ~৭০% ছোট হয়ে যায় — মোবাইল নেটে সবচেয়ে বড় লাভ।
+# ⚠️ ছবি/woff2 আগে থেকেই কম্প্রেসড, ওগুলো আবার চাপলে উল্টো CPU নষ্ট হয় — তাই বাদ।
+# মডিউল না থাকলে <IfModule> গার্ডে পুরো ব্লকটা নীরবে বাদ যায় (সাইট ভাঙে না)।
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css
+    AddOutputFilterByType DEFLATE application/javascript application/x-javascript text/javascript
+    AddOutputFilterByType DEFLATE application/json application/xml application/rss+xml
+    AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# ── ব্রাউজার ক্যাশিং ─────────────────────────────────────────────────────────
+# 🔴 নিরাপদ, কারণ CSS/JS-এর লিংকে `?v=filemtime()` বসে — ফাইল বদলালেই URL বদলায়,
+#    তাই ব্রাউজার নতুনটা নামায়। **নতুন কোনো CSS/JS যোগ করলে সেটাতেও `?v=` দিতেই হবে**,
+#    নাহলে ইউজারের ব্রাউজারে এক বছর পুরনোটা আটকে থাকতে পারে।
+# 🔴 HTML কখনো ক্যাশ করা হয় না — কোর্স/দাম/নোটিশ বদলালে সাথে সাথে দেখা যেতে হবে।
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresDefault                          "access plus 1 hour"
+    ExpiresByType text/html                 "access plus 0 seconds"
+    ExpiresByType text/css                  "access plus 1 year"
+    ExpiresByType application/javascript    "access plus 1 year"
+    ExpiresByType text/javascript           "access plus 1 year"
+    ExpiresByType image/jpeg                "access plus 6 months"
+    ExpiresByType image/png                 "access plus 6 months"
+    ExpiresByType image/webp                "access plus 6 months"
+    ExpiresByType image/gif                 "access plus 6 months"
+    ExpiresByType image/svg+xml             "access plus 6 months"
+    ExpiresByType image/x-icon              "access plus 6 months"
+    ExpiresByType font/woff2                "access plus 1 year"
+    ExpiresByType application/font-woff2    "access plus 1 year"
+</IfModule>
+
+<IfModule mod_headers.c>
+    # ফন্ট ফাইল কখনো বদলায় না (নামে হ্যাশ আছে) — immutable দিলে ব্রাউজার পুনরায় জিজ্ঞাসাও করে না
+    <FilesMatch "\.(woff2?|ttf|eot)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+    # HTML সবসময় তাজা
+    <FilesMatch "\.(php|html)$">
+        Header set Cache-Control "no-cache, must-revalidate"
+    </FilesMatch>
 </IfModule>

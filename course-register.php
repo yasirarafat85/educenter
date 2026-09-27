@@ -4,6 +4,7 @@ require_once __DIR__ . '/includes/functions.php';
 $db = get_db();
 $pageTitle = 'কোর্স রেজিস্ট্রেশন';
 $activePage = 'courses';
+$pageDescription = 'অনলাইনে কোর্সে ভর্তির ফর্ম পূরণ করুন — শিশুর তথ্য দিন, আসন নিশ্চিত করুন।';
 
 $courseId = (int) ($_GET['course_id'] ?? 0);
 $selectedCourse = null;
@@ -42,7 +43,7 @@ if (!$selectedCourse):
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         <?php foreach ($courses as $c): $courseClosed = !$c['registration_open']; ?>
         <a href="course-register?course_id=<?= $c['id'] ?>" class="colorful-card rounded-2xl shadow-lg overflow-hidden card-hover border border-white/30 block relative">
-            <img src="<?= e($c['image'] ?: 'https://placehold.co/400x300') ?>" alt="<?= e($c['title']) ?>" class="w-full h-36 sm:h-40 object-cover">
+            <img src="<?= e($c['image'] ?: placeholder_img()) ?>" alt="<?= e($c['title']) ?>" class="w-full h-36 sm:h-40 object-cover" loading="lazy">
             <?php if ($courseClosed): ?>
                 <div class="absolute top-3 left-3 bg-gray-800/80 text-white px-3 py-1 rounded-full font-semibold text-xs">রেজিস্ট্রেশন বন্ধ</div>
             <?php endif; ?>

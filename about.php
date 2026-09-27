@@ -3,6 +3,9 @@ require_once __DIR__ . '/includes/functions.php';
 
 $pageTitle = 'আমাদের সম্পর্কে';
 $activePage = 'about';
+$pageDescription = 'আমরা কারা, আমাদের লক্ষ্য ও শিক্ষাদানের পদ্ধতি — প্রতিষ্ঠান সম্পর্কে বিস্তারিত জানুন।';
+
+$pageJsonLd = jsonld_breadcrumb([['name' => 'আমাদের সম্পর্কে', 'url' => 'about']]);
 
 require __DIR__ . '/includes/site-header.php';
 ?>
