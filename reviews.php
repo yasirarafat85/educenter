@@ -52,9 +52,13 @@ require __DIR__ . '/includes/site-header.php';
         <?php foreach ($reviews as $r): ?>
         <div class="colorful-card rounded-2xl shadow-lg p-6 sm:p-8 card-hover border border-white/30 relative">
             <i data-lucide="quote" class="w-8 h-8 text-indigo-100 absolute top-5 right-5"></i>
-            <div class="flex items-center mb-6">
+            <?php // ♿ তারাগুলো নিছক আইকন — স্ক্রিন-রিডার কিছুই পড়ত না। `role="img"` + `aria-label`
+                  // দিলে পুরোটা একটা মান হিসেবে পড়ে ("৫ এর মধ্যে ৪ তারা"), আর ভেতরের আইকনগুলো
+                  // `aria-hidden` বলে আলাদা করে আবার পড়ে না। ?>
+            <div class="flex items-center mb-6" role="img"
+                 aria-label="৫ এর মধ্যে <?= e(bn_digits((int) $r['rating'])) ?> তারা">
                 <?php for ($i = 0; $i < (int) $r['rating']; $i++): ?>
-                    <i data-lucide="star" class="w-5 h-5 sm:w-6 sm:h-6 text-amber-400 fill-current"></i>
+                    <i data-lucide="star" class="w-5 h-5 sm:w-6 sm:h-6 text-amber-400 fill-current" aria-hidden="true"></i>
                 <?php endfor; ?>
             </div>
             <p class="text-gray-600 mb-6 italic text-base sm:text-lg leading-relaxed">"<?= e($r['comment']) ?>"</p>

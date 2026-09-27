@@ -32,9 +32,12 @@ $registrationClosed = $type === 'course' && empty($item['registration_open']);
 $actionLabel = $registrationClosed ? 'রেজিস্ট্রেশন বন্ধ' : ($type === 'course' ? 'Register Now - রেজিস্ট্রেশন করুন' : 'Order Now - অর্ডার করুন');
 $actionUrl = $type === 'course' ? ('course-register?course_id=' . (int) $item['id']) : ('register?type=' . urlencode($type) . '&id=' . (int) $item['id']);
 
+// 🔗 এই আইটেমের পড়ার-মতো URL (`course/12-নাম`) — পুরনো `detail?type=..&id=..` রূপে
+// খোলা হলেও canonical/OG/structured-data সবখানে এটাই যায়, তাই গুগল একটাই ঠিকানা চেনে।
+$pageCanonical = item_url($item, $type);
+
 // 🔍 এই আইটেমের structured data + ব্রেডক্রাম্ব (site-header.php `$pageJsonLd` পড়ে <head>-এ বসায়)
-$jsonLdUrl = (defined('SITE_URL') ? rtrim(SITE_URL, '/') : '')
-    . '/detail?type=' . rawurlencode($type) . '&id=' . (int) $item['id'];
+$jsonLdUrl = (defined('SITE_URL') ? rtrim(SITE_URL, '/') : '') . '/' . $pageCanonical;
 $pageJsonLd = jsonld_item($item, $type, $jsonLdUrl)
     . jsonld_breadcrumb([
         ['name' => $type === 'course' ? 'কোর্স' : ($type === 'worksheet' ? 'ওয়ার্কশিট' : 'প্রোডাক্ট'), 'url' => $backUrl],

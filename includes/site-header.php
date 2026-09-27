@@ -55,6 +55,14 @@ if ($sitePath !== '' && $sitePath !== '/' && strpos($reqPath, $sitePath) === 0) 
     $reqPath = substr($reqPath, strlen($sitePath));
 }
 $canonicalUrl = $baseUrl . '/' . ltrim($reqPath, '/');
+// 🔗 পেজ চাইলে নিজের canonical দিতে পারে — detail.php পুরনো `detail?type=..&id=..` রূপে
+// খোলা হলেও canonical-এ নতুন পড়ার-মতো URL (`course/12-নাম`) দেখায়, তাই গুগল ওটাকেই
+// আসল ঠিকানা ধরে। (রিলেটিভ দিলে SITE_URL জুড়ে absolute করা হয়।)
+if (!empty($pageCanonical)) {
+    $canonicalUrl = preg_match('#^https?://#i', $pageCanonical)
+        ? $pageCanonical
+        : ($baseUrl . '/' . ltrim($pageCanonical, '/'));
+}
 $ogImageAbs = preg_match('#^https?://#i', $metaOgImage) ? $metaOgImage : ($baseUrl . '/' . ltrim($metaOgImage, '/'));
 $metaFullTitle = (!empty($pageTitle) ? $pageTitle . ' - ' : '') . $siteName;
 ?>
@@ -138,6 +146,9 @@ $metaFullTitle = (!empty($pageTitle) ? $pageTitle . ' - ' : '') . $siteName;
     </style>
 </head>
 <body class="min-h-screen">
+    <?php // ♿ "সরাসরি মূল লেখায় যান" — কীবোর্ড/স্ক্রিন-রিডার ব্যবহারকারীকে ১১টা মেনু-লিংক
+          // পেরোতে হয় না। ডিফল্টে অদৃশ্য, Tab চাপলে দেখা যায় (স্টাইল style.css-এর `.skip-link`)। ?>
+    <a href="#main-content" class="skip-link">সরাসরি মূল লেখায় যান</a>
     <header class="header-glass sticky top-0 z-40">
         <div class="container mx-auto px-4">
             <div class="flex justify-between items-center py-4">
@@ -158,9 +169,17 @@ $metaFullTitle = (!empty($pageTitle) ? $pageTitle . ' - ' : '') . $siteName;
                     <?php endforeach; ?>
                 </nav>
 
-                <button id="mobile-menu-btn" class="lg:hidden p-3 rounded-xl glass-effect hover:bg-white/30 transition-colors">
-                    <i data-lucide="menu" class="w-6 h-6 text-gray-700"></i>
-                </button>
+                <div class="flex items-center gap-2">
+                    <?php // 🔎 সার্চ — ডেস্কটপ ও মোবাইল দুটোতেই আইকন হিসেবে (২০২৬-০৯-২৭)।
+                          // 🔴 উপরের মেনুতে টেক্সট-আইটেম হিসেবে যোগ করা হয়নি — ওখানে ১১টা আইটেম,
+                          //    আরেকটা দিলে ভিড় হতো (CLAUDE.md-এর নিয়ম)। নিচের স্টিকি বারেও নয় (৫ স্লট পূর্ণ)। ?>
+                    <a href="search" class="p-3 rounded-xl glass-effect hover:bg-white/30 transition-colors" aria-label="খুঁজুন" title="খুঁজুন">
+                        <i data-lucide="search" class="w-6 h-6 text-gray-700"></i>
+                    </a>
+                    <button id="mobile-menu-btn" class="lg:hidden p-3 rounded-xl glass-effect hover:bg-white/30 transition-colors" aria-label="মেনু" aria-expanded="false" aria-controls="mobile-nav">
+                        <i data-lucide="menu" class="w-6 h-6 text-gray-700"></i>
+                    </button>
+                </div>
             </div>
 
             <nav id="mobile-nav" class="lg:hidden py-4 border-t border-white/20 hidden">
@@ -177,5 +196,5 @@ $metaFullTitle = (!empty($pageTitle) ? $pageTitle . ' - ' : '') . $siteName;
         </div>
     </header>
 
-    <main class="container mx-auto px-4 py-8">
+    <main id="main-content" tabindex="-1" class="container mx-auto px-4 py-8">
         <div class="fade-in">

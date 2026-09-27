@@ -38,6 +38,7 @@ require __DIR__ . '/includes/site-header.php';
             ['products',   'shopping-bag', 'প্রোডাক্ট'],
             ['notice',     'bell',       'নোটিশ'],
             ['about',      'phone',      'যোগাযোগ'],
+            ['search',     'search',     'খুঁজুন'],
         ];
         foreach ($lostLinks as [$u, $ic, $lb]):
         ?>

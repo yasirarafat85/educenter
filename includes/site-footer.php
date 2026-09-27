@@ -19,6 +19,7 @@
                 <div>
                     <h4 class="font-bold mb-4 text-lg">কুইক লিংক</h4>
                     <ul class="space-y-3 text-gray-300">
+                        <li><a href="search" class="inline-block py-1 hover:text-white transition-colors">🔎 খুঁজুন</a></li>
                         <li><a href="courses" class="inline-block py-1 hover:text-white transition-colors">📚 কোর্স সমূহ</a></li>
                         <li><a href="worksheets" class="inline-block py-1 hover:text-white transition-colors">📝 ওয়ার্কশিট</a></li>
                         <li><a href="products" class="inline-block py-1 hover:text-white transition-colors">🛍️ প্রোডাক্ট</a></li>

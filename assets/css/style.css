@@ -479,3 +479,101 @@ body { padding-bottom: 64px; }
 .cc-btn:hover { background: rgb(var(--c-tint)); }
 .cc-btn-plain { border-color: #e5e7eb; color: #4b5563; }
 .cc-btn-plain:hover { background: #f9fafb; color: #1f2937; }
+
+/* ── ♿ "সরাসরি মূল লেখায় যান" (skip-to-content, ২০২৬-০৯-২৭) ─────────────
+   ডিফল্টে পর্দার বাইরে, কীবোর্ডে Tab চাপলে (ফোকাস পেলে) উপরে বাঁয়ে নেমে আসে।
+   🔴 `display:none` দেওয়া যাবে না — তাহলে ফোকাসই পেত না, লিংকটা অকেজো হতো। */
+.skip-link {
+    position: absolute;
+    left: 8px;
+    top: -60px;
+    z-index: 100;
+    padding: 10px 18px;
+    border-radius: 0 0 12px 12px;
+    background: rgb(var(--c-primary));
+    color: #fff;
+    font-weight: 700;
+    box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+    transition: top .18s ease;
+}
+.skip-link:focus {
+    top: 0;
+    outline: 3px solid #fff;
+    outline-offset: -6px;
+}
+/* মূল কনটেন্টে ঝাঁপ দেওয়ার পর ব্রাউজারের ফোকাস-রিং যেন বিরক্তিকর না লাগে */
+main:focus { outline: none; }
+
+/* ── 📄 পেজিনেশন বার (২০২৬-০৯-২৭) ──────────────────────────────────────
+   🔴 সাধারণ CSS-এ রাখা (Tailwind নয়) — তাই নতুন ক্লাস যোগ করতে রিবিল্ড লাগে না।
+   মোবাইলে wrap করে, ট্যাপ-টার্গেট ৪৪px-এর কাছাকাছি (CLAUDE.md-এর নিয়ম)। */
+.pg-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 40px;
+}
+.pg-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid rgb(var(--c-border));
+    background: #fff;
+    color: rgb(var(--c-deep));
+    font-weight: 700;
+    font-size: 15px;
+    transition: background .15s ease, transform .15s ease;
+}
+a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
+.pg-link.pg-on { background: rgb(var(--c-primary)); border-color: rgb(var(--c-primary)); color: #fff; }
+.pg-link.pg-off { opacity: .4; cursor: default; }
+.pg-gap { padding: 0 4px; color: #9ca3af; font-weight: 700; }
+
+/* ── 🔎 পাবলিক সার্চ বক্স (search.php, ২০২৬-০৯-২৭) ─────────────────────
+   সাধারণ CSS-এ (Tailwind রিবিল্ড লাগে না)। মোবাইলে বোতামটা নিচে নেমে আসে। */
+.sr-only-label {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+}
+.sr-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 2px solid rgb(var(--c-border));
+    border-radius: 18px;
+    padding: 8px 10px 8px 16px;
+    box-shadow: 0 6px 20px rgb(0 0 0 / 0.06);
+}
+.sr-box:focus-within { border-color: rgb(var(--c-primary)); box-shadow: 0 0 0 4px rgb(var(--c-primary) / 0.14); }
+.sr-ic { color: rgb(var(--c-primary)); flex: 0 0 auto; }
+.sr-input {
+    flex: 1 1 auto;
+    min-width: 0;                /* 🔴 নাহলে ৩২০px পর্দায় ইনপুট বাক্সের বাইরে ঠেলে দেয় */
+    border: 0;
+    outline: none;
+    background: transparent;
+    font-size: 17px;
+    padding: 10px 2px;
+    font-family: inherit;
+}
+.sr-btn {
+    flex: 0 0 auto;
+    padding: 12px 22px;
+    border-radius: 14px;
+    font-weight: 700;
+    border: 0;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 16px;
+}
+@media (max-width: 420px) {
+    .sr-box { flex-wrap: wrap; }
+    .sr-input { flex-basis: calc(100% - 40px); }
+    .sr-btn { flex-basis: 100%; }
+}

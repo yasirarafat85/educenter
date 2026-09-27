@@ -5,7 +5,14 @@ $pageTitle = 'গ্যালারি';
 $activePage = 'gallery';
 $pageDescription = 'আমাদের ক্লাস, কর্মশালা ও শিক্ষার্থীদের কাজের ছবি — প্রতিষ্ঠানের সুন্দর মুহূর্তগুলোর গ্যালারি।';
 
-$images = get_db()->query('SELECT * FROM gallery ORDER BY sort_order ASC, id ASC')->fetchAll();
+// 📄 পেজিনেশন (২০২৬-০৯-২৭) — গ্যালারিতে লাভ সবচেয়ে বেশি (অনেক ছবি একসাথে নামত)
+$db = get_db();
+$gPage = public_paginate((int) $db->query('SELECT COUNT(*) FROM gallery')->fetchColumn());
+$gStmt = $db->prepare('SELECT * FROM gallery ORDER BY sort_order ASC, id ASC LIMIT :lim OFFSET :off');
+$gStmt->bindValue(':lim', $gPage['per'], PDO::PARAM_INT);
+$gStmt->bindValue(':off', $gPage['offset'], PDO::PARAM_INT);
+$gStmt->execute();
+$images = $gStmt->fetchAll();
 
 $pageJsonLd = jsonld_breadcrumb([['name' => 'গ্যালারি', 'url' => 'gallery']]);
 
@@ -29,6 +36,7 @@ require __DIR__ . '/includes/site-header.php';
         </div>
         <?php endforeach; ?>
     </div>
+    <?= render_pagination($gPage, 'gallery') ?>
     <?php else: ?>
         <p class="text-center text-gray-500">এখনো কোনো ছবি যোগ করা হয়নি।</p>
     <?php endif; ?>

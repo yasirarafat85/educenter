@@ -9,7 +9,8 @@ $base = defined('SITE_URL') ? rtrim(SITE_URL, '/') : '';
 $db = get_db();
 $urls = [];
 
-// ক্লিন URL (.htaccess রিরাইট) — index → রুট, বাকি পেজ extensionless, detail → detail?type=..&id=..
+// ক্লিন URL (.htaccess রিরাইট) — index → রুট, বাকি পেজ extensionless,
+// আইটেম → `course/12-নাম` (item_url(); ২০২৬-০৯-২৭ থেকে, আগে `detail?type=..&id=..` ছিল)
 $urls[] = [$base . '/', '1.0', ''];
 foreach (['courses', 'worksheets', 'products', 'notice', 'teachers', 'reviews', 'about', 'gallery', 'faqs', 'course-interest'] as $p) {
     $urls[] = [$base . '/' . $p, '0.8', ''];
@@ -28,14 +29,17 @@ $lastmod = static function ($row): string {
 };
 
 try {
-    foreach ($db->query("SELECT * FROM course_batches WHERE is_active = 1")->fetchAll() as $r) {
-        $urls[] = [$base . '/detail?type=course&id=' . (int) $r['id'], '0.7', $lastmod($r)];
+    // 🔴 item_url() কোর্সে `title` + `batch_name` দুটোই পড়ে — তাই courses-এর সাথে JOIN
+    //    (course_batches-এ title নেই, ওটা parent টেবিলে — CLAUDE.md-এর parent/child নিয়ম)
+    $cbSql = "SELECT cb.*, c.title FROM course_batches cb JOIN courses c ON c.id = cb.course_id WHERE cb.is_active = 1";
+    foreach ($db->query($cbSql)->fetchAll() as $r) {
+        $urls[] = [$base . '/' . item_url($r, 'course'), '0.7', $lastmod($r)];
     }
     foreach ($db->query("SELECT * FROM worksheets WHERE is_active = 1")->fetchAll() as $r) {
-        $urls[] = [$base . '/detail?type=worksheet&id=' . (int) $r['id'], '0.6', $lastmod($r)];
+        $urls[] = [$base . '/' . item_url($r, 'worksheet'), '0.6', $lastmod($r)];
     }
     foreach ($db->query("SELECT * FROM products WHERE is_active = 1")->fetchAll() as $r) {
-        $urls[] = [$base . '/detail?type=product&id=' . (int) $r['id'], '0.6', $lastmod($r)];
+        $urls[] = [$base . '/' . item_url($r, 'product'), '0.6', $lastmod($r)];
     }
 } catch (Throwable $e) {
     // টেবিল না থাকলে শুধু স্ট্যাটিক পেজ থাকবে

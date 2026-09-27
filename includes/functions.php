@@ -677,7 +677,7 @@ function render_item_card(array $item, string $type): string
             $cmLabels = course_media_labels();
             $hash  = $nPhoto > 0 ? '#cm-photos' : '#cm-videos';
             $label = $nPhoto > 0 ? $cmLabels['photo'] : $cmLabels['video'];
-            $previewBtn = '<a href="detail?type=' . e($type) . '&amp;id=' . $id . $hash . '" class="cc-btn">'
+            $previewBtn = '<a href="' . e(item_url($item, $type, $hash)) . '" class="cc-btn">'
                 . e($label) . '</a>';
         }
     }
@@ -686,7 +686,7 @@ function render_item_card(array $item, string $type): string
     $btnCount = ($previewBtn !== '' ? 1 : 0) + 1;
     $cardBtns = '<div class="cc-btns" style="grid-template-columns:repeat(' . $btnCount . ',minmax(0,1fr))">'
         . $previewBtn
-        . '<a href="detail?type=' . e($type) . '&id=' . $id . '" class="cc-btn cc-btn-plain">বিস্তারিত দেখুন →</a>'
+        . '<a href="' . e(item_url($item, $type)) . '" class="cc-btn cc-btn-plain">বিস্তারিত দেখুন →</a>'
         . '</div>';
 
     return '
@@ -1606,6 +1606,112 @@ function jsonld_breadcrumb(array $trail): string
         '@type'           => 'BreadcrumbList',
         'itemListElement' => $list,
     ]) : '';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔗 আইটেমের পড়ার-মতো URL (২০২৬-০৯-২৭)
+//
+// আগে সব আইটেম `detail?type=course&id=12` — গুগলে দুর্বল, আর শেয়ার করলে পড়ে কিছু বোঝা যেত না।
+// এখন `course/12-হাতের-লেখা-৫ম-ব্যাচ`।
+//
+// 🔴 **আইডিটাই আসল চাবি, নামটা শুধু পড়ার জন্য** — ইচ্ছাকৃত সিদ্ধান্ত:
+//    (ক) অ্যাডমিন কোর্স/ব্যাচের নাম বদলালে পুরনো শেয়ার করা লিংক **কখনো ভাঙে না**
+//        (নাম না মিললেও আইডি দিয়েই খুঁজে পাওয়া যায়);
+//    (খ) ওয়ার্কশিট/প্রোডাক্টে `slug` কলাম নেই — এভাবে **কোনো DB মাইগ্রেশন লাগে না**;
+//    (গ) দুটো আইটেমের নাম এক হলেও সংঘর্ষ হয় না।
+// 🔴 পুরনো `detail?type=..&id=..` লিংক **চিরকাল চলতে থাকবে** (detail.php অপরিবর্তিত) —
+//    শুধু canonical নতুন URL-এ দেখায়, তাই গুগল ধীরে ধীরে নতুনটাতেই সরে যায়।
+//    ইচ্ছাকৃতভাবে 301 রিডাইরেক্ট দেওয়া হয়নি: mod_rewrite কোনো কারণে বন্ধ থাকলে
+//    301 পাঠালে পুরনো লিংকগুলো ৪০৪-এ গিয়ে পড়ত (এখন সবচেয়ে খারাপ ক্ষেত্রেও কাজ করে)।
+// ⚠️ পাথ **রিলেটিভ** (leading `/` ছাড়া) — সাবডিরেক্টরি ইনস্টলেও (`/website`) চলে।
+// ─────────────────────────────────────────────────────────────────────────────
+function item_url(array $item, string $type, string $hash = ''): string
+{
+    $id = (int) ($item['id'] ?? 0);
+    $seg = ['course' => 'course', 'worksheet' => 'worksheet', 'product' => 'product'][$type] ?? '';
+    if ($seg === '' || $id < 1) {
+        return 'detail?type=' . rawurlencode($type) . '&id=' . $id . $hash;   // অজানা টাইপ → পুরনো রূপ
+    }
+    // কোর্সে ব্যাচের নামও জুড়ে দিই — এক কোর্সের ভিন্ন ব্যাচ URL দেখেই আলাদা করা যায়
+    $name = trim((string) ($item['title'] ?? ''));
+    if ($type === 'course' && !empty($item['batch_name'])) {
+        $name .= ' ' . $item['batch_name'];
+    }
+    $slug = make_slug($name);
+    // ⚠️ খুব লম্বা নাম URL-এ বিশ্রী লাগে ও কিছু টুলে কাটা পড়ে — ৬০ অক্ষরে ছাঁটা
+    if (mb_strlen($slug, 'UTF-8') > 60) {
+        $slug = rtrim(mb_substr($slug, 0, 60, 'UTF-8'), '-');
+    }
+    return $seg . '/' . $id . ($slug !== '' ? '-' . rawurlencode($slug) : '') . $hash;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 📄 পাবলিক তালিকার পেজিনেশন (২০২৬-০৯-২৭)
+//
+// worksheets/products/gallery আগে **সব রো একসাথে** তুলত (`LIMIT` ছিল না) — ৫০-৬০টা
+// হয়ে গেলে পেজ ভারী হতো ও মোবাইলে দেরিতে খুলত।
+//
+// 🔴 অ্যাডমিনের `$activeFilters`+`reg_url()` প্যাটার্নের হালকা সংস্করণ — পাবলিক পেজে
+//    ফিল্টার নেই বলে শুধু `page` বয়ে নিলেই চলে।
+// 🔴 সীমার বাইরের `page` **শেষ পাতায় ক্ল্যাম্প** হয় (users.php-এর মতোই) — নাহলে
+//    `?page=999` খালি পাতা দেখাত আর গুগল ওটাই ইনডেক্স করত।
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PUBLIC_PER_PAGE = 12;   // কার্ড-গ্রিড ৩ কলাম, তাই ১২ = ৪ সারি (গ্যালারিও একই)
+
+// মোট রো থেকে পাতার হিসাব → ['page','pages','offset','per','total']
+function public_paginate(int $total, int $perPage = PUBLIC_PER_PAGE): array
+{
+    $per   = max(1, $perPage);
+    $pages = max(1, (int) ceil($total / $per));
+    $page  = max(1, (int) ($_GET['page'] ?? 1));
+    if ($page > $pages) {
+        $page = $pages;   // সীমার বাইরে হলে শেষ পাতা (খালি পাতা দেখানো হয় না)
+    }
+    return ['page' => $page, 'pages' => $pages, 'offset' => ($page - 1) * $per, 'per' => $per, 'total' => $total];
+}
+
+// পেজিনেশনের লিংক-বার। কিছু না থাকলে (১ পাতা) খালি স্ট্রিং — অর্থাৎ মার্কআপে গার্ড লাগে না।
+// $baseUrl = extensionless রিলেটিভ পাথ (যেমন 'worksheets') — ক্লিন-URL নিয়ম।
+function render_pagination(array $pg, string $baseUrl): string
+{
+    if ($pg['pages'] < 2) {
+        return '';
+    }
+    $url = static function (int $n) use ($baseUrl): string {
+        return e($baseUrl) . ($n > 1 ? '?page=' . $n : '');
+    };
+    $out = '<nav class="pg-bar" aria-label="পাতা নির্বাচন">';
+
+    // ← আগের
+    $out .= $pg['page'] > 1
+        ? '<a href="' . $url($pg['page'] - 1) . '" class="pg-link" rel="prev">← আগের</a>'
+        : '<span class="pg-link pg-off">← আগের</span>';
+
+    // 🔴 অনেক পাতা হলে সব নম্বর দেখানো হয় না — বর্তমানের দুই পাশে ২টা করে, মাঝে "…"
+    $win = 2;
+    $last = 0;
+    for ($i = 1; $i <= $pg['pages']; $i++) {
+        $near = ($i === 1 || $i === $pg['pages'] || abs($i - $pg['page']) <= $win);
+        if (!$near) {
+            continue;
+        }
+        if ($last && $i - $last > 1) {
+            $out .= '<span class="pg-gap">…</span>';
+        }
+        $out .= $i === $pg['page']
+            ? '<span class="pg-link pg-on" aria-current="page">' . e(bn_digits($i)) . '</span>'
+            : '<a href="' . $url($i) . '" class="pg-link">' . e(bn_digits($i)) . '</a>';
+        $last = $i;
+    }
+
+    // পরের →
+    $out .= $pg['page'] < $pg['pages']
+        ? '<a href="' . $url($pg['page'] + 1) . '" class="pg-link" rel="next">পরের →</a>'
+        : '<span class="pg-link pg-off">পরের →</span>';
+
+    $out .= '</nav>';
+    return $out;
 }
 
 // ছবি না থাকলে যে প্লেসহোল্ডার বসে (২০২৬-০৯-২৭)। আগে বাইরের `placehold.co` ব্যবহার হতো —
