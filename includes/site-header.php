@@ -4,6 +4,15 @@
 
 require_once __DIR__ . '/functions.php';
 
+// 🔢 পুরো পাবলিক পেজের দৃশ্যমান লেখায় বাংলা অঙ্ক → English (২০২৬-০৯-২৭)।
+// বাংলা ১ · ৮ · ৯ প্রায় একই দেখতে বলে "১২টি" পড়া যাচ্ছিল "৮২টি" (ইউজারের স্ক্রিনশট)।
+// 🔴 এখানেই বসানো হয়েছে কারণ এটাই প্রতিটা পাবলিক পেজের **প্রথম আউটপুট** — একটা জায়গায়
+//    বসালেই কোর্স · ওয়ার্কশিট · প্রোডাক্ট · রেজিস্ট্রেশন · নোটিশ সব একসাথে কভার হয়।
+// 🔴 অ্যাট্রিবিউট/script/textarea বাদ যায়, আর "৫ম ব্যাচ" জাতীয় ক্রমবাচক অক্ষত —
+//    বিস্তারিত `digits_filter_html()`-এর কমেন্টে। PHP শাটডাউনে নিজেই ফ্লাশ করে,
+//    তাই `exit` করা পেজেও (detail.php-এর ৪০৪ শাখা) চলে।
+ob_start('digits_filter_html');
+
 log_visitor();
 
 // ক্লিন URL (.htaccess রিরাইট) — সব লিংক এখন extensionless, home = './' (সাবডিরেক্টরি/রুট দুই জায়গাতেই কাজ করে)
@@ -65,6 +74,10 @@ if (!empty($pageCanonical)) {
 }
 $ogImageAbs = preg_match('#^https?://#i', $metaOgImage) ? $metaOgImage : ($baseUrl . '/' . ltrim($metaOgImage, '/'));
 $metaFullTitle = (!empty($pageTitle) ? $pageTitle . ' - ' : '') . $siteName;
+// 🔢 মেটা/সোশ্যাল লেখাগুলো অ্যাট্রিবিউটের ভেতরে বসে বলে আউটপুট-ফিল্টার (digits_filter_html)
+// এদের ছোঁয় না — কিন্তু গুগল/ফেসবুকে এগুলোই দেখা যায়, তাই এখানে আলাদা করে English অঙ্ক।
+$metaFullTitle   = en_digits($metaFullTitle);
+$metaDescription = en_digits($metaDescription);
 ?>
 <!DOCTYPE html>
 <html lang="bn">
