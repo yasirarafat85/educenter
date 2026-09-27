@@ -9,7 +9,7 @@ if (user_logged_in()) {
 
 $pageTitle = 'লগইন';
 $pageDescription = 'অভিভাবক লগইন — কোর্সের কিস্তি, জমা-বাকি ও পাঠানো পার্সেলের তথ্য নিজের ড্যাশবোর্ডে দেখুন।';
-$activePage = '';
+$activePage = 'account';   // উপরের মেনু ও নিচের স্টিকি বারে "অ্যাকাউন্ট/লগইন" হাইলাইট হয়
 $old = $_SESSION['account_login_old'] ?? [];
 unset($_SESSION['account_login_old']);
 

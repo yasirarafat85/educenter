@@ -137,12 +137,32 @@ require __DIR__ . '/includes/site-header.php';
         </div>
     </div>
 
-    <?php // ⬅️ নিচেও একটা "ফিরে যান" (২০২৬-০৯-২৫, ইউজারের স্ক্রিনশট — কার্ডের নিচে ফাঁকা জায়গা
-          // পড়ে থাকত, আর পুরো পেজ পড়ার পর আবার উপরে স্ক্রল করতে হতো)। স্টাইল `.cc-btn`
-          // (সাধারণ CSS, থিম-রঙ) — Tailwind রিবিল্ড লাগে না। ?>
-    <div class="mt-6 flex justify-center">
-        <a href="<?= e($backUrl) ?>" class="cc-btn cc-btn-plain" style="min-width:min(260px,100%)">← <?= e($backLabel) ?></a>
+</div>
+
+<?php
+// 🔗 "আরও কোর্স / সম্পর্কিত আইটেম" (২০২৬-০৯-২৭) — এতদিন ডিটেইল পেজের শেষে কিছুই ছিল না,
+// ভিজিটর পড়া শেষ করে হয় ফিরে যেতেন নয় সাইট ছেড়ে দিতেন। কার্ড বিদ্যমান
+// `render_item_card()` থেকেই (কোনো নতুন ডিজাইন/CSS নয়)।
+// ⚠️ সেকশনটা ইচ্ছাকৃতভাবে উপরের `max-w-3xl` মোড়কের **বাইরে** — ভেতরে রাখলে
+//    ৩-কলাম গ্রিড ডেস্কটপে চাপা দেখাত।
+$related = fetch_related_items($type, $item, 3);
+$relatedHeading = $type === 'course' ? '📚 আরও কোর্স'
+    : ($type === 'worksheet' ? '📝 আরও ওয়ার্কশিট' : '🛍️ আরও প্রোডাক্ট');
+?>
+<?php if ($related): ?>
+<section class="mt-12">
+    <h2 class="text-2xl sm:text-3xl font-black mb-6 text-center text-gray-800"><?= e($relatedHeading) ?></h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+        <?= implode('', array_map(fn($rel) => render_item_card($rel, $type), $related)) ?>
     </div>
+</section>
+<?php endif; ?>
+
+<?php // ⬅️ নিচেও একটা "ফিরে যান" (২০২৬-০৯-২৫, ইউজারের স্ক্রিনশট — কার্ডের নিচে ফাঁকা জায়গা
+      // পড়ে থাকত, আর পুরো পেজ পড়ার পর আবার উপরে স্ক্রল করতে হতো)। স্টাইল `.cc-btn`
+      // (সাধারণ CSS, থিম-রঙ) — Tailwind রিবিল্ড লাগে না। ?>
+<div class="mt-8 mb-4 flex justify-center">
+    <a href="<?= e($backUrl) ?>" class="cc-btn cc-btn-plain" style="min-width:min(260px,100%)">← <?= e($backLabel) ?></a>
 </div>
 
 <?php require __DIR__ . '/includes/site-footer.php'; ?>

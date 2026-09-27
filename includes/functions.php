@@ -959,6 +959,54 @@ function fetch_item(string $type, int $id): ?array
     return $row;
 }
 
+// 🔗 ডিটেইল পেজের নিচে "আরও কোর্স / সম্পর্কিত আইটেম" (২০২৬-০৯-২৭) — একই `$type`-এর
+// সক্রিয় আইটেম, নিজেকে বাদ দিয়ে। কার্ড আঁকা হয় বিদ্যমান `render_item_card()` দিয়েই, তাই
+// দাম/ফিচার/প্রিভিউ বোতাম সবই তালিকা-পেজের মতোই দেখায়।
+//
+// 🔴 ক্রম: কোর্সে **একই কোর্সের অন্য ব্যাচ আগে** (এক কোর্সের দুই ব্যাচই সবচেয়ে
+//    প্রাসঙ্গিক পরামর্শ), তারপর চলমান (`registration_open`) ব্যাচ, তারপর `sort_order`।
+// 🔴 `$limit`/`$cid` ইচ্ছাকৃতভাবে int-কাস্ট করে সরাসরি SQL-এ বসানো — `LIMIT :n` non-emulated
+//    prepare-এ স্ট্রিং গেলে সিনট্যাক্স এরর দেয়, আর ORDER BY-র ভেতরে প্লেসহোল্ডার সব
+//    ড্রাইভারে এক আচরণ করে না। দুটোই কোড-নিয়ন্ত্রিত সংখ্যা, ইউজার-ইনপুট নয়।
+// 🔴 পুরো ব্লক try/catch-এ — কোয়েরি ব্যর্থ হলে সেকশনটা চুপচাপ বাদ যায়, ডিটেইল পেজ ভাঙে না।
+function fetch_related_items(string $type, array $item, int $limit = 3): array
+{
+    $id = (int) ($item['id'] ?? 0);
+    if ($id < 1 || $limit < 1) {
+        return [];
+    }
+    $limit = min($limit, 12);
+    try {
+        $db = get_db();
+        if ($type === 'course') {
+            $cid = (int) ($item['course_id'] ?? 0);
+            $stmt = $db->prepare(
+                'SELECT cb.*, c.title FROM course_batches cb JOIN courses c ON c.id = cb.course_id
+                  WHERE cb.is_active = 1 AND cb.id <> :id
+                  ORDER BY CASE WHEN cb.course_id = ' . $cid . ' THEN 0 ELSE 1 END,
+                           cb.registration_open DESC, cb.sort_order ASC, cb.id ASC
+                  LIMIT ' . $limit
+            );
+            $stmt->execute(['id' => $id]);
+            return $stmt->fetchAll();
+        }
+
+        // টেবিলের নাম সবসময় হোয়াইটলিস্ট থেকে (কখনো $type সরাসরি SQL-এ নয়)
+        $tableMap = ['worksheet' => 'worksheets', 'product' => 'products'];
+        if (!isset($tableMap[$type])) {
+            return [];
+        }
+        $stmt = $db->prepare(
+            "SELECT * FROM `{$tableMap[$type]}` WHERE is_active = 1 AND id <> :id
+              ORDER BY sort_order ASC, id ASC LIMIT " . $limit
+        );
+        $stmt->execute(['id' => $id]);
+        return $stmt->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
 // অ্যাডমিন কনটেক্সটে item এর দাম/টাইটেল বের করার জন্য — fetch_item() এর মতো is_active ফিল্টার করে না,
 // কারণ ডিঅ্যাক্টিভেটেড আইটেমের পুরনো রেজিস্ট্রেশনেও (income/courier হিসাবের জন্য) দাম লাগে
 function get_item_details(string $type, int $itemId): ?array

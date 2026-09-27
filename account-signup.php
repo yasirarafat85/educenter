@@ -9,7 +9,7 @@ if (user_logged_in()) {
 
 $pageTitle = 'অ্যাকাউন্ট তৈরি';
 $pageDescription = 'অভিভাবক অ্যাকাউন্ট খুলুন — কোর্সের অগ্রগতি, জমা-বাকি ও পার্সেলের খবর এক জায়গায়।';
-$activePage = '';
+$activePage = 'account';   // উপরের মেনু ও নিচের স্টিকি বারে "অ্যাকাউন্ট/লগইন" হাইলাইট হয়
 $old = $_SESSION['account_signup_old'] ?? [];
 unset($_SESSION['account_signup_old']);
 
