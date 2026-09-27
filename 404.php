@@ -21,7 +21,7 @@ require __DIR__ . '/includes/site-header.php';
 ?>
 
 <div class="max-w-2xl mx-auto text-center py-10 sm:py-16">
-    <div class="text-7xl sm:text-8xl font-black mb-4" style="color:rgb(var(--c-primary));">৪০৪</div>
+    <div class="text-7xl sm:text-8xl font-black mb-4" style="color:rgb(var(--c-primary));">404</div>
     <h1 class="text-2xl sm:text-3xl font-bold text-gray-800 mb-3">দুঃখিত, পাতাটি খুঁজে পাওয়া যায়নি</h1>
     <p class="text-gray-600 text-base sm:text-lg mb-8 leading-relaxed">
         ঠিকানাটি হয়তো ভুল টাইপ হয়েছে, অথবা পাতাটি সরিয়ে ফেলা হয়েছে।<br class="hidden sm:block">

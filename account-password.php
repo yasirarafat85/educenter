@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('account-password');
     }
     if (mb_strlen($new) < 6) {
-        set_flash('error', 'নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের দিন।');
+        set_flash('error', 'নতুন পাসওয়ার্ড কমপক্ষে 6 অক্ষরের দিন।');
         redirect('account-password');
     }
     if ($new !== $confirm) {
@@ -56,7 +56,7 @@ require __DIR__ . '/includes/site-header.php';
             </div>
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">নতুন পাসওয়ার্ড *</label>
-                <input type="password" name="new_password" required placeholder="কমপক্ষে ৬ অক্ষর" class="w-full border rounded-xl px-4 py-2.5">
+                <input type="password" name="new_password" required placeholder="কমপক্ষে 6 অক্ষর" class="w-full border rounded-xl px-4 py-2.5">
             </div>
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">নতুন পাসওয়ার্ড আবার *</label>

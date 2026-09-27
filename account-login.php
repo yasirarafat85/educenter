@@ -42,7 +42,7 @@ require __DIR__ . '/includes/site-header.php';
                 </div>
                 <label class="flex items-center gap-2.5 text-white text-sm font-semibold cursor-pointer">
                     <input type="checkbox" name="remember" value="1" checked class="w-4 h-4 rounded">
-                    <span>এই ডিভাইসে আমাকে মনে রাখুন (৩০ দিন)</span>
+                    <span>এই ডিভাইসে আমাকে মনে রাখুন (30 দিন)</span>
                 </label>
 
                 <button type="submit" class="w-full py-3.5 rounded-xl font-bold text-base text-white shadow-lg active:scale-[0.98] transition-transform" style="background: linear-gradient(135deg, rgb(var(--c-primary-2)) 0%, rgb(var(--c-primary)) 100%);">

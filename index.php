@@ -16,10 +16,10 @@ $siteName = get_setting('site_name', 'EduCenter');
 
 // হোমপেজ "সংখ্যায় সাফল্য" স্ট্যাট — অ্যাডমিন সেটিংস থেকে (খালি হলে ডিফল্ট)। [value, label, icon, color]
 $statDefaults = [
-    ['৫০০+', 'সফল শিক্ষার্থী',    'users',           'blue'],
-    ['৫০+',  'কোর্স সমূহ',         'book-open',       'green'],
-    ['২০+',  'অভিজ্ঞ শিক্ষক',     'graduation-cap',  'purple'],
-    ['৯৮%',  'সন্তুষ্ট শিক্ষার্থী', 'heart-handshake', 'red'],
+    ['500+', 'সফল শিক্ষার্থী',    'users',           'blue'],
+    ['50+',  'কোর্স সমূহ',         'book-open',       'green'],
+    ['20+',  'অভিজ্ঞ শিক্ষক',     'graduation-cap',  'purple'],
+    ['98%',  'সন্তুষ্ট শিক্ষার্থী', 'heart-handshake', 'red'],
 ];
 $stats = [];
 foreach ($statDefaults as $si => $sd) {
@@ -68,7 +68,7 @@ require __DIR__ . '/includes/site-header.php';
             <?php if ($openCourseCount > 0): ?>
                 <div class="inline-flex items-center gap-2 mt-5 bg-green-50 text-green-700 border border-green-200 px-4 py-2 rounded-full font-bold text-sm sm:text-base">
                     <span class="cro-dot" style="width:9px;height:9px;border-radius:50%;background:#16a34a;display:inline-block;"></span>
-                    এখন <?= strtr((string) $openCourseCount, ['0'=>'০','1'=>'১','2'=>'২','3'=>'৩','4'=>'৪','5'=>'৫','6'=>'৬','7'=>'৭','8'=>'৮','9'=>'৯']) ?> টি কোর্সে ভর্তি চলছে
+                    এখন <?= (int) $openCourseCount ?> টি কোর্সে ভর্তি চলছে
                 </div>
             <?php endif; ?>
         </div>
@@ -123,12 +123,13 @@ require __DIR__ . '/includes/site-header.php';
     </section>
 </div>
 
-<!-- স্ট্যাট সংখ্যা count-up অ্যানিমেশন — স্ক্রলে দৃশ্যমান হলে ০ থেকে গুনে গুনে ওঠে (বাংলা সংখ্যা সহ) -->
+<!-- স্ট্যাট সংখ্যা count-up অ্যানিমেশন — স্ক্রলে দৃশ্যমান হলে 0 থেকে গুনে গুনে ওঠে।
+     🔴 সংখ্যা English অঙ্কেই থাকে (বাংলা ১/৮/৯ পড়া যায় না — functions.php-এর bn_digits() দেখুন) -->
 <script>
 (function () {
+    // পুরনো লেখায় বাংলা অঙ্ক থেকে গেলেও যেন চলে — শুধু পড়ার জন্য রূপান্তর, দেখানো হয় English-এ
     var bn = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
-    function toBn(s) { return String(s).replace(/[0-9]/g, function (d) { return bn[d]; }); }
-    function toEn(s) { return s.replace(/[০-৯]/g, function (d) { return bn.indexOf(d); }); }
+    function toEn(s) { return String(s).replace(/[০-৯]/g, function (d) { return bn.indexOf(d); }); }
     function run(el) {
         var en = toEn(el.getAttribute('data-countup') || '');
         var m = en.match(/(\d[\d,]*)/);
@@ -140,9 +141,9 @@ require __DIR__ . '/includes/site-header.php';
             if (!start) start = ts;
             var p = Math.min((ts - start) / dur, 1);
             var eased = 1 - Math.pow(1 - p, 3);
-            el.textContent = toBn(prefix + Math.round(target * eased) + suffix);
+            el.textContent = prefix + Math.round(target * eased) + suffix;
             if (p < 1) requestAnimationFrame(step);
-            else el.textContent = toBn(prefix + target + suffix);
+            else el.textContent = prefix + target + suffix;
         }
         requestAnimationFrame(step);
     }
@@ -150,7 +151,7 @@ require __DIR__ . '/includes/site-header.php';
     // reduce-motion চালু থাকলে অ্যানিমেশন বাদ — HTML-এর চূড়ান্ত সংখ্যাগুলোই দেখায় (অ্যাক্সেসিবিলিটি)
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
     if (!('IntersectionObserver' in window)) { els.forEach(run); return; }
-    els.forEach(function (el) { if (/\d/.test(toEn(el.getAttribute('data-countup') || ''))) el.textContent = '০'; });
+    els.forEach(function (el) { if (/\d/.test(toEn(el.getAttribute('data-countup') || ''))) el.textContent = '0'; });
     var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (e) { if (e.isIntersecting) { run(e.target); io.unobserve(e.target); } });
     }, { threshold: 0.3 });

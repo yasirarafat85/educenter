@@ -56,7 +56,7 @@ require __DIR__ . '/includes/site-header.php';
                   // দিলে পুরোটা একটা মান হিসেবে পড়ে ("৫ এর মধ্যে ৪ তারা"), আর ভেতরের আইকনগুলো
                   // `aria-hidden` বলে আলাদা করে আবার পড়ে না। ?>
             <div class="flex items-center mb-6" role="img"
-                 aria-label="৫ এর মধ্যে <?= e(bn_digits((int) $r['rating'])) ?> তারা">
+                 aria-label="5 এর মধ্যে <?= e(bn_digits((int) $r['rating'])) ?> তারা">
                 <?php for ($i = 0; $i < (int) $r['rating']; $i++): ?>
                     <i data-lucide="star" class="w-5 h-5 sm:w-6 sm:h-6 text-amber-400 fill-current" aria-hidden="true"></i>
                 <?php endfor; ?>

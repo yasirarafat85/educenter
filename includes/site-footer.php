@@ -250,7 +250,7 @@
             var cap = pov.querySelector('.cm-cap');
             var count = pov.querySelector('.cm-count');
             var idx = 0;
-            var bn = function(n){ return String(n).replace(/[0-9]/g, function(d){ return '০১২৩৪৫৬৭৮৯'[d]; }); };
+            var bn = function(n){ return String(n); };   // 🔴 English অঙ্কেই — বাংলা ১/৮/৯ পড়া যায় না
 
             function paint(){
                 var t = thumbs[idx];

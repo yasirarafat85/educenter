@@ -136,7 +136,7 @@ require __DIR__ . '/includes/site-header.php';
     var unitPrice = <?= json_encode($unitPrice) ?>;
     if (!qty || !totalEl || !unitPrice) return;
 
-    var bnDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    var bnDigits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];   // 🔴 English — বাংলা ১/৮/৯ পড়া যায় না
     function toBengaliDigits(str) {
         return str.replace(/[0-9]/g, function (d) { return bnDigits[d]; });
     }

@@ -24,7 +24,7 @@ if ($phone === '' || $password === '') {
     login_fail('মোবাইল নাম্বার ও পাসওয়ার্ড দিন।', $phone);
 }
 if (user_login_rate_limited($phone)) {
-    login_fail('অনেকবার ভুল হয়েছে। ১৫ মিনিট পর আবার চেষ্টা করুন।', $phone);
+    login_fail('অনেকবার ভুল হয়েছে। 15 মিনিট পর আবার চেষ্টা করুন।', $phone);
 }
 
 $reason = null;

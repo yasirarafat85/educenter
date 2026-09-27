@@ -44,7 +44,7 @@ require __DIR__ . '/includes/site-header.php';
                 </div>
                 <div>
                     <label class="block text-white font-semibold mb-1.5 text-sm">পাসওয়ার্ড *</label>
-                    <input type="password" name="password" required placeholder="কমপক্ষে ৬ অক্ষর"
+                    <input type="password" name="password" required placeholder="কমপক্ষে 6 অক্ষর"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none">
                 </div>
                 <div>

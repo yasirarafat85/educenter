@@ -94,7 +94,7 @@ require __DIR__ . '/includes/site-header.php';
         <p class="text-center text-gray-500 py-6">উপরের ঘরে কোর্স বা ওয়ার্কশিটের নাম লিখুন।</p>
 
     <?php elseif (mb_strlen($q, 'UTF-8') < 2): ?>
-        <p class="text-center text-gray-500 py-6">অন্তত ২টি অক্ষর লিখুন।</p>
+        <p class="text-center text-gray-500 py-6">অন্তত 2টি অক্ষর লিখুন।</p>
 
     <?php elseif ($total === 0): ?>
         <div class="max-w-xl mx-auto text-center py-8">

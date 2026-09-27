@@ -21,7 +21,7 @@ function handle_image_upload(string $fieldName, string $subDir, bool $pad = true
 
     $maxSize = 3 * 1024 * 1024; // 3MB
     if ($file['size'] > $maxSize) {
-        throw new RuntimeException('ছবির সাইজ ৩ মেগাবাইটের বেশি হতে পারবে না।');
+        throw new RuntimeException('ছবির সাইজ 3 মেগাবাইটের বেশি হতে পারবে না।');
     }
 
     $allowed = [
@@ -121,7 +121,7 @@ function upload_failure_reason(array $file, string $uploadRoot, string $subDir):
     // ১) tmp ফাইলটা কি আদৌ আছে? (PHP-র upload_tmp_dir ভুল হলে/সেশনের মাঝে মুছে গেলে)
     if ($tmp === '' || !is_file($tmp)) {
         return 'ছবি সেভ করা যায়নি — সার্ভারে সাময়িক ফাইলটাই পাওয়া যাচ্ছে না। '
-             . 'সাধারণত ছবিটা খুব বড় হলে (মোবাইলের ক্যামেরার ছবি প্রায়ই ৫-১০ MB) আপলোড অসম্পূর্ণ থেকে যায়। '
+             . 'সাধারণত ছবিটা খুব বড় হলে (মোবাইলের ক্যামেরার ছবি প্রায়ই 5-10 MB) আপলোড অসম্পূর্ণ থেকে যায়। '
              . 'ছবিটা ছোট করে (বা স্ক্রিনশট নিয়ে) আবার চেষ্টা করুন।';
     }
 
