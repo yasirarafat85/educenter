@@ -484,6 +484,9 @@ body { padding-bottom: 64px; }
 .cc-btn-go { background: rgb(var(--c-tint)); border-color: rgb(var(--c-border)); color: rgb(var(--c-deep)); }
 .cc-btn-go:hover { background: rgb(var(--c-border)); }
 .cc-btns + .cc-btns { margin-top: 8px; }
+/* `.cc-btn` মূলত `<a>`-র জন্য; "লিংক কপি করুন" একটা `<button>` — ব্রাউজারের নিজের
+   ফন্ট/প্রস্থ রিসেট না করলে বাকি বোতামের সাথে মেলে না (detail.php, ২০২৬-০৯-২৭)। */
+button.cc-btn { font-family: inherit; width: 100%; cursor: pointer; }
 
 /* 🖼️ কার্ডের ছবি ও নাম দুটোই এখন বিস্তারিত পেজের লিংক (২০২৬-০৯-২৭) — মানুষ স্বভাবতই
    ছবি/নামে ট্যাপ করে, আগে সেখানে কিছুই হতো না (ছবিতে শুধু লাইটবক্স খুলত)। */

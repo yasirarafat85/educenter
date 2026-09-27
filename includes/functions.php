@@ -1800,6 +1800,25 @@ function item_url(array $item, string $type, string $hash = ''): string
     return $seg . '-' . $id . ($slug !== '' ? '-' . rawurlencode($slug) : '') . $hash;
 }
 
+// 🔗 শেয়ার করার **ছোট** ঠিকানা — `https://সাইট/course-15` (২০২৬-০৯-২৭)।
+//
+// 🔴 কেন নামটা বাদ: URL-এ বাংলা অক্ষর সরাসরি বসে না, ব্রাউজার প্রতিটাকে `%E0%A6%AC`
+//    রূপে লেখে — **এক বাংলা অক্ষর = ৯ ক্যারেক্টার**। ফলে কপি করলে ইউজার একটা
+//    দৈত্যাকার লিংক পান (ইউজার নিজে ধরিয়ে দিয়েছেন)। আইডিই একমাত্র চাবি, নামের
+//    অংশটা `.htaccess`-এর রুল (C2)-তে ঐচ্ছিক — তাই নাম বাদ দিলেও ঠিক একই পাতা খোলে।
+// ⚠️ পাতার canonical/OG/JSON-LD-তে **নামসহ রূপটাই** থাকে (`item_url()`), তাই গুগলের
+//    কাছে ঠিকানা একটাই — এটা শুধু মানুষের শেয়ার করার জন্য।
+function item_share_url(array $item, string $type): string
+{
+    $id   = (int) ($item['id'] ?? 0);
+    $seg  = ['course' => 'course', 'worksheet' => 'worksheet', 'product' => 'product'][$type] ?? '';
+    $base = defined('SITE_URL') ? rtrim(SITE_URL, '/') : '';
+    if ($seg === '' || $id < 1) {
+        return $base . '/detail?type=' . rawurlencode($type) . '&id=' . $id;
+    }
+    return $base . '/' . $seg . '-' . $id;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 📄 পাবলিক তালিকার পেজিনেশন (২০২৬-০৯-২৭)
 //

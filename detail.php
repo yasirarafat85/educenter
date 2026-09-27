@@ -160,9 +160,58 @@ $relatedHeading = $type === 'course' ? '📚 আরও কোর্স'
 
 <?php // ⬅️ নিচেও একটা "ফিরে যান" (২০২৬-০৯-২৫, ইউজারের স্ক্রিনশট — কার্ডের নিচে ফাঁকা জায়গা
       // পড়ে থাকত, আর পুরো পেজ পড়ার পর আবার উপরে স্ক্রল করতে হতো)। স্টাইল `.cc-btn`
-      // (সাধারণ CSS, থিম-রঙ) — Tailwind রিবিল্ড লাগে না। ?>
-<div class="mt-8 mb-4 flex justify-center">
-    <a href="<?= e($backUrl) ?>" class="cc-btn cc-btn-plain" style="min-width:min(260px,100%)">← <?= e($backLabel) ?></a>
+      // (সাধারণ CSS, থিম-রঙ) — Tailwind রিবিল্ড লাগে না।
+      // 🔗 তার উপরে "লিংক কপি করুন" (২০২৬-০৯-২৭) — অ্যাড্রেস বার থেকে কপি করলে বাংলা
+      //    নামের অংশটা `%E0%A6%…` রূপে বিশাল লম্বা হয়ে যায় (ইউজারের প্রশ্ন থেকে);
+      //    এই বোতাম **ছোট রূপটা** (`…/course-15`) কপি করে, যেটা হুবহু একই পাতা খোলে। ?>
+<div class="cc-btns mt-8 mb-4 mx-auto" style="max-width:360px;grid-template-columns:minmax(0,1fr)">
+    <button type="button" class="cc-btn cc-btn-go" data-copy-url="<?= e(item_share_url($item, $type)) ?>">🔗 লিংক কপি করুন</button>
+    <a href="<?= e($backUrl) ?>" class="cc-btn cc-btn-plain">← <?= e($backLabel) ?></a>
 </div>
+
+<script>
+// 🔗 লিংক কপি — 🔴 ইচ্ছাকৃতভাবে site-footer.php-এর বড় স্ক্রিপ্টের **বাইরে** আলাদা ব্লকে:
+//    ওখানে কিছু ভাঙলে আইকন/মেনু/গ্যালারি সব একসাথে বন্ধ হয়ে যায় (CLAUDE.md-এর নিয়ম)।
+// 🔴 `navigator.clipboard` শুধু HTTPS-এ (ও কিছু পুরনো ব্রাউজারে একেবারেই) চলে না —
+//    তাই লুকানো <textarea> + execCommand ফলব্যাক, আর তাতেও না হলে ইউজারকে বলা হয়।
+(function () {
+    var btns = document.querySelectorAll('[data-copy-url]');
+    if (!btns.length) { return; }
+    Array.prototype.forEach.call(btns, function (b) {
+        var orig = b.textContent;                      // আসল লেখা একবারই ধরে রাখি
+        var timer = null;
+        function flash(ok) {
+            b.textContent = ok ? '✅ কপি হয়েছে' : '⚠️ কপি হলো না, হাতে নিন';
+            if (timer) { clearTimeout(timer); }
+            timer = setTimeout(function () { b.textContent = orig; }, 2200);
+        }
+        function fallback(url) {
+            try {
+                var ta = document.createElement('textarea');
+                ta.value = url;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.top = '-1000px';
+                document.body.appendChild(ta);
+                ta.select();
+                ta.setSelectionRange(0, url.length);   // iOS-এ select() একা যথেষ্ট নয়
+                var ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                flash(!!ok);
+            } catch (e) { flash(false); }
+        }
+        b.addEventListener('click', function () {
+            var url = b.getAttribute('data-copy-url') || '';
+            if (!url) { return; }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(function () { flash(true); },
+                                                       function () { fallback(url); });
+            } else {
+                fallback(url);
+            }
+        });
+    });
+})();
+</script>
 
 <?php require __DIR__ . '/includes/site-footer.php'; ?>
