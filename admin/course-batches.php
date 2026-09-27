@@ -43,6 +43,7 @@ $batchFields = [
     'duration' => ['label' => 'মেয়াদ (যেমন ৩ মাস)', 'type' => 'text'],
     'instructor' => ['label' => 'প্রশিক্ষক', 'type' => 'text'],
     'description' => ['label' => 'বিবরণ', 'type' => 'textarea'],
+    'card_excerpt' => ['label' => 'কার্ডে যা দেখাবে (ঐচ্ছিক)', 'type' => 'textarea', 'help' => 'কোর্স/ওয়ার্কশিট তালিকার কার্ডে নামের নিচে এই লেখাটাই দেখাবে — এক-দুই লাইনে সারকথা লিখুন। খালি রাখলে আগের মতোই "বিবরণ"-এর শুরুর অংশ নিজে থেকে দেখাবে (পূর্ণ বাক্য/শব্দ পর্যন্ত)। বিবরণ যদি সালাম বা ভূমিকা দিয়ে শুরু হয়, তাহলে এই ঘরটা ভরে দিলে কার্ডে সুন্দর দেখাবে।'],
     'fb_group_url' => ['label' => 'প্রাইভেট Facebook গ্রুপ লিংক', 'type' => 'text', 'help' => 'এই কোর্স কেনা অভিভাবক তাঁর অ্যাকাউন্টে এই গ্রুপ লিংক দেখবেন (ঐচ্ছিক)।'],
     'messenger_group_url' => ['label' => 'প্রাইভেট Messenger গ্রুপ লিংক', 'type' => 'text', 'help' => 'এই কোর্স কেনা অভিভাবক তাঁর অ্যাকাউন্টে এই গ্রুপ লিংক দেখবেন (ঐচ্ছিক)।'],
     'total_parcels' => ['label' => 'মোট কয়বার পার্সেল যাবে', 'type' => 'number', 'default' => 0, 'help' => 'কোর্স ট্র্যাকিং পেজে প্রতি শিক্ষার্থীর এই কয়টা পার্সেল-স্লট দেখাবে (যেমন ৬)। ০ দিলে ট্র্যাকিং পেজ থেকেও সেট করা যায়।'],
@@ -55,10 +56,11 @@ $batchFields = [
 
 // মাইগ্রেশন (migrate-payment-split.sql) এখনো চালানো না থাকলে নতুন ঘরটা ফর্ম থেকেই বাদ যায় —
 // নাহলে INSERT/UPDATE-এ "Unknown column" এসে ব্যাচ সেভ করাই ভেঙে যেত।
-try {
-    $db->query('SELECT tuition_split_mode FROM course_batches LIMIT 0');
-} catch (PDOException $ex) {
-    unset($batchFields['tuition_split_mode']);
+foreach (['tuition_split_mode' => 'migrate-payment-split.sql',
+          'card_excerpt'      => 'migrate-card-excerpt.sql'] as $bfCol => $bfMigration) {
+    if (!db_has_column($db, 'course_batches', $bfCol)) {
+        unset($batchFields[$bfCol]);
+    }
 }
 
 // ------------------------------------------------------------

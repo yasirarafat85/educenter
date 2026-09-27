@@ -147,6 +147,8 @@ CREATE TABLE course_batches (
     duration VARCHAR(100),
     instructor VARCHAR(100),
     description TEXT,
+    -- 📝 কার্ডে নামের নিচে দেখানোর নিজের লেখা (খালি হলে description থেকে অটো নেওয়া হয়)
+    card_excerpt VARCHAR(300) NOT NULL DEFAULT '',
     fb_group_url VARCHAR(500) DEFAULT NULL,        -- এই কোর্স কেনা অভিভাবক অ্যাকাউন্টে দেখবেন (প্রাইভেট FB গ্রুপ)
     messenger_group_url VARCHAR(500) DEFAULT NULL, -- একইভাবে Messenger গ্রুপ
     total_parcels INT NOT NULL DEFAULT 0, -- এই কোর্স-ব্যাচে মোট কয়বার পার্সেল যাবে (কোর্স ট্র্যাকিং স্লট-সংখ্যা)
@@ -217,6 +219,8 @@ CREATE TABLE worksheets (
     pages VARCHAR(100),
     level VARCHAR(100),
     description TEXT,
+    -- 📝 কার্ডে নামের নিচে দেখানোর নিজের লেখা (খালি হলে description থেকে অটো নেওয়া হয়)
+    card_excerpt VARCHAR(300) NOT NULL DEFAULT '',
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -238,6 +242,8 @@ CREATE TABLE products (
     price VARCHAR(50),
     old_price VARCHAR(50),
     description TEXT,
+    -- 📝 কার্ডে নামের নিচে দেখানোর নিজের লেখা (খালি হলে description থেকে অটো নেওয়া হয়)
+    card_excerpt VARCHAR(300) NOT NULL DEFAULT '',
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

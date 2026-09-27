@@ -597,6 +597,33 @@ function render_fee_box(?string $price, ?string $secLabel, ?string $secAmount, s
 // কোর্স/ওয়ার্কশিট/প্রোডাক্ট কার্ড রেন্ডার — courses.php, worksheets.php, products.php, index.php এ ব্যবহার হয়
 // AI Master Bangladesh সাইটের মতো প্রাইসিং-কার্ড স্টাইল: প্রমিনেন্ট দাম, ✓ ফিচার লিস্ট, ফুল-উইডথ CTA
 // ─────────────────────────────────────────────────────────────────────────────
+// 🔎 কোনো কলাম DB-তে আছে কিনা (২০২৬-০৯-২৭) — মাইগ্রেশনের আগেও কোড যেন না ভাঙে।
+//
+// এই প্রজেক্টে ফাইল আগে ডিপ্লয় হয়, SQL মাইগ্রেশন ইউজার পরে phpMyAdmin-এ চালান —
+// তাই "কলামটা এখনো নেই" অবস্থাটা স্বাভাবিক, ব্যতিক্রম নয়। চেকটা আগে
+// `admin/course-batches.php`-এ হাতে লেখা ছিল, এখন শেয়ার্ড।
+//
+// 🔴 টেবিল/কলামের নাম **সবসময় কোডে লেখা ধ্রুবক** — কখনো GET/POST থেকে নয়
+//    (নামদুটো সরাসরি SQL-এ বসে, প্রিপেয়ার করা যায় না)।
+// 🔴 `SHOW COLUMNS` নয়, `SELECT <col> … LIMIT 0` — MySQL ও SQLite দুটোতেই চলে
+//    (isolated টেস্টের কপি SQLite-এ চলে), আর কোনো সারি পড়ে না বলে খরচও নেই।
+// ফল স্ট্যাটিক ক্যাশে — এক রিকোয়েস্টে একবারই কোয়েরি হয়।
+function db_has_column(?PDO $db, string $table, string $column): bool
+{
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+    try {
+        ($db ?: get_db())->query("SELECT `$column` FROM `$table` LIMIT 0");
+        return $cache[$key] = true;
+    } catch (Throwable $e) {
+        return $cache[$key] = false;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ✂️ কার্ড/তালিকায় দেখানোর জন্য বিবরণের সংক্ষিপ্ত রূপ (২০২৬-০৯-২৭)
 //
 // আগে `mb_strimwidth($desc, 0, 90, '...')` ছিল — ওটা **ঠিক ৯০ প্রস্থে কাঁচি চালায়**,
@@ -650,6 +677,16 @@ function render_item_card(array $item, string $type): string
 {
     [$grad, $solid, $tint, $deep, $border] = item_accent($type);
     $id = (int) $item['id'];
+
+    // 📝 কার্ডে নামের নিচে যে লেখাটা দেখাবে (২০২৬-০৯-২৭)
+    // অ্যাডমিন চাইলে আইটেমের "কার্ডে যা দেখাবে" ঘরটা ভরে নিজের মতো দুই লাইন লিখতে পারেন।
+    // 🔴 খালি রাখলে আগের মতোই বিবরণের শুরু থেকে `text_excerpt()` নেয় — তাই পুরনো সব
+    //    আইটেম অপরিবর্তিত, আর মাইগ্রেশনের আগে কী-টাই থাকে না বলে `?? ''`-ই যথেষ্ট।
+    // ⚠️ নিজের লেখা হলেও এক লাইনে আনা ও লম্বা হলে ছাঁটা হয় (সীমা একটু বড়, ১৬০) —
+    //    নাহলে কেউ পুরো অনুচ্ছেদ বসিয়ে দিলে কার্ডের উচ্চতা এলোমেলো হয়ে গ্রিড ভাঙত।
+    $cardText = trim((string) ($item['card_excerpt'] ?? '')) !== ''
+        ? text_excerpt($item['card_excerpt'], 160)
+        : text_excerpt($item['description'] ?? '');
 
     // মেটা চিপ (কোর্স: মেয়াদ/প্রশিক্ষক · ওয়ার্কশিট: পৃষ্ঠা/লেভেল)
     $meta = '';
@@ -750,7 +787,7 @@ function render_item_card(array $item, string $type): string
                 <h3 class="text-lg font-black text-gray-900 leading-snug">' . e($item['title']) . '</h3>
                 ' . $openBadge . '
             </div>
-            <p class="text-gray-500 text-sm mb-3 leading-relaxed">' . e(text_excerpt($item['description'] ?? '')) . '</p>
+            <p class="text-gray-500 text-sm mb-3 leading-relaxed">' . e($cardText) . '</p>
             ' . ($meta ? '<div class="flex flex-wrap gap-1.5 mb-4">' . $meta . '</div>' : '') . '
             ' . $featuresHtml . '
             <div class="mt-auto pt-2">

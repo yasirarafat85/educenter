@@ -4,6 +4,25 @@
 
 function get_entities(): array
 {
+    // ⚠️ মাইগ্রেশন (migrate-card-excerpt.sql) এখনো চালানো না থাকলে নতুন ঘরটা ফর্ম থেকেই
+    //    বাদ যায় — নাহলে manage.php-এর INSERT/UPDATE-এ "Unknown column" এসে ওয়ার্কশিট/
+    //    প্রোডাক্ট সেভ করাই ভেঙে যেত (ফাইল আগে ডিপ্লয় হয়, SQL ইউজার পরে চালান)।
+    // ⚠️ `function_exists` গার্ড — অ্যাডমিন পেজে auth.php সবসময় functions.php লোড করে,
+    //    কিন্তু এই ফাইলটা একা (টুল/টেস্ট থেকে) require করলেও যেন না ভাঙে। হেল্পার না
+    //    থাকলে ঘরটা **বাদই যায়** (নিরাপদ দিক — দেখিয়ে দিলে সেভে Unknown column হতো)।
+    $ents = get_entities_raw();
+    $hasHelper = function_exists('db_has_column');
+    foreach (['worksheets', 'products'] as $e) {
+        if (isset($ents[$e]['fields']['card_excerpt'])
+            && (!$hasHelper || !db_has_column(null, $ents[$e]['table'], 'card_excerpt'))) {
+            unset($ents[$e]['fields']['card_excerpt']);
+        }
+    }
+    return $ents;
+}
+
+function get_entities_raw(): array
+{
     return [
         // কোর্স এখন parent/child — এই entity শুধু কোর্সের "নাম/আইডেন্টিটি" (title), আসল বিক্রয়যোগ্য
         // তথ্য (দাম/ইনস্ট্রাক্টর/ছবি/বিবরণ/ফিচার/hide_parcel/registration_open/is_active) প্রতিটা
@@ -38,6 +57,7 @@ function get_entities(): array
                 'pages'       => ['label' => 'পৃষ্ঠা সংখ্যা', 'type' => 'text'],
                 'level'       => ['label' => 'লেভেল/ক্লাস', 'type' => 'text'],
                 'description' => ['label' => 'বিবরণ', 'type' => 'textarea'],
+                'card_excerpt' => ['label' => 'কার্ডে যা দেখাবে (ঐচ্ছিক)', 'type' => 'textarea', 'help' => 'কোর্স/ওয়ার্কশিট তালিকার কার্ডে নামের নিচে এই লেখাটাই দেখাবে — এক-দুই লাইনে সারকথা লিখুন। খালি রাখলে আগের মতোই "বিবরণ"-এর শুরুর অংশ নিজে থেকে দেখাবে (পূর্ণ বাক্য/শব্দ পর্যন্ত)। বিবরণ যদি সালাম বা ভূমিকা দিয়ে শুরু হয়, তাহলে এই ঘরটা ভরে দিলে কার্ডে সুন্দর দেখাবে।'],
                 'is_active'   => ['label' => 'সাইটে দেখাবে?', 'type' => 'checkbox', 'default' => 1, 'warn_off' => true, 'toggle_label' => 'ওয়ার্কশিটটি সাইটে দেখানো'],
                 'sort_order'  => ['label' => 'ক্রম নম্বর (অটো বসে, চাইলে বদলানো যাবে)', 'type' => 'number', 'default' => 0, 'auto_next' => true],
             ],
@@ -58,6 +78,7 @@ function get_entities(): array
                 'price'       => ['label' => 'মূল্য (বর্তমান/বিক্রয় দাম)', 'type' => 'text'],
                 'old_price'   => ['label' => 'আগের দাম (ঐচ্ছিক — ডিসকাউন্ট দেখাতে)', 'type' => 'text', 'help' => 'ডিসকাউন্ট দেখাতে চাইলে এখানে আগের (বেশি) দাম দিন — সাইটে এটা কাটা দাগ দিয়ে দেখাবে ও কত% ছাড় হিসাব করে দেখাবে। খালি রাখলে ডিসকাউন্ট দেখাবে না।'],
                 'description' => ['label' => 'বিবরণ', 'type' => 'textarea'],
+                'card_excerpt' => ['label' => 'কার্ডে যা দেখাবে (ঐচ্ছিক)', 'type' => 'textarea', 'help' => 'কোর্স/ওয়ার্কশিট তালিকার কার্ডে নামের নিচে এই লেখাটাই দেখাবে — এক-দুই লাইনে সারকথা লিখুন। খালি রাখলে আগের মতোই "বিবরণ"-এর শুরুর অংশ নিজে থেকে দেখাবে (পূর্ণ বাক্য/শব্দ পর্যন্ত)। বিবরণ যদি সালাম বা ভূমিকা দিয়ে শুরু হয়, তাহলে এই ঘরটা ভরে দিলে কার্ডে সুন্দর দেখাবে।'],
                 'features'    => ['label' => 'বৈশিষ্ট্য (প্রতি লাইনে একটি)', 'type' => 'lines', 'child_table' => 'product_features', 'child_fk' => 'product_id', 'child_col' => 'feature_text'],
                 'is_active'   => ['label' => 'সাইটে দেখাবে?', 'type' => 'checkbox', 'default' => 1, 'warn_off' => true, 'toggle_label' => 'প্রোডাক্টটি সাইটে দেখানো'],
                 'sort_order'  => ['label' => 'ক্রম নম্বর (অটো বসে, চাইলে বদলানো যাবে)', 'type' => 'number', 'default' => 0, 'auto_next' => true],
