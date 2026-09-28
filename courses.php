@@ -10,8 +10,10 @@ $courses = get_db()->query(
 )->fetchAll();
 
 // খোলা (চলমান) ও বন্ধ ("আসছে শীঘ্রই") আলাদা করা — বন্ধগুলো আলাদা সেকশনে দেখানো হয়
-$openCourses   = array_filter($courses, fn($c) => !empty($c['registration_open']));
-$closedCourses = array_filter($courses, fn($c) => empty($c['registration_open']));
+// 🔴 course_reg_open() — হাতের সুইচ **ও** ভর্তির শেষ সময় (registration_deadline) দুটোই দেখে,
+// তাই কাউন্টডাউন শেষ হওয়া ব্যাচ নিজে থেকেই "আসছে শীঘ্রই" সেকশনে নেমে যায়
+$openCourses   = array_filter($courses, fn($c) => course_reg_open($c));
+$closedCourses = array_filter($courses, fn($c) => !course_reg_open($c));
 
 $pageJsonLd = jsonld_breadcrumb([['name' => 'কোর্স', 'url' => 'courses']]);
 

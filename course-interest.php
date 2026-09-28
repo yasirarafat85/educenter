@@ -53,7 +53,7 @@ if (!$selectedCourse):
         <?php foreach ($courses as $c): ?>
         <a href="course-interest?course_id=<?= $c['id'] ?>" class="colorful-card rounded-2xl shadow-lg overflow-hidden card-hover border border-white/30 block relative">
             <img src="<?= e($c['image'] ?: placeholder_img()) ?>" alt="<?= e($c['title']) ?>" class="w-full h-36 sm:h-40 object-cover" loading="lazy">
-            <?php $isOpen = !empty($c['registration_open']); ?>
+            <?php $isOpen = course_reg_open($c); ?>
             <div class="absolute top-3 left-3 <?= $isOpen ? 'bg-green-600/90' : 'bg-gray-800/80' ?> text-white px-3 py-1 rounded-full font-semibold text-xs"><?= $isOpen ? '▶ এখন খোলা' : '🔜 আসছে শীঘ্রই' ?></div>
             <div class="p-4 sm:p-5">
                 <h3 class="font-bold text-gray-900 text-base sm:text-lg mb-1"><?= e($c['title']) ?></h3>
@@ -76,7 +76,7 @@ if (!$selectedCourse):
         <div class="absolute inset-0 bg-black/10 pointer-events-none"></div>
         <div class="relative z-10">
         <div class="text-center mb-6 sm:mb-8">
-            <?php $courseOpen = !empty($selectedCourse['registration_open']); ?>
+            <?php $courseOpen = course_reg_open($selectedCourse); ?>
             <div class="inline-block bg-white/20 text-white text-xs font-bold px-3 py-1 rounded-full mb-3"><?= $courseOpen ? '▶ এখন খোলা' : '🔜 আসছে শীঘ্রই' ?></div>
             <h1 class="text-xl sm:text-3xl font-black text-white mb-2 leading-snug"><?= e($selectedCourse['title']) ?></h1>
             <p class="text-fuchsia-100 text-sm sm:text-base"><?= $courseOpen

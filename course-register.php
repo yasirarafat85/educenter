@@ -41,7 +41,7 @@ if (!$selectedCourse):
         <p class="text-center text-gray-500">এই মুহূর্তে কোনো কোর্স উপলব্ধ নেই।</p>
     <?php else: ?>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-        <?php foreach ($courses as $c): $courseClosed = !$c['registration_open']; ?>
+        <?php foreach ($courses as $c): $courseClosed = !course_reg_open($c); ?>
         <a href="course-register?course_id=<?= $c['id'] ?>" class="colorful-card rounded-2xl shadow-lg overflow-hidden card-hover border border-white/30 block relative">
             <img src="<?= e($c['image'] ?: placeholder_img()) ?>" alt="<?= e($c['title']) ?>" class="w-full h-36 sm:h-40 object-cover" loading="lazy">
             <?php if ($courseClosed): ?>
@@ -84,12 +84,15 @@ if (!$selectedCourse):
             </div>
         <?php endif; ?>
 
-        <?php if (!$selectedCourse['registration_open']): ?>
+        <?php if (!course_reg_open($selectedCourse)): ?>
             <div class="bg-white/15 border border-white/30 rounded-xl p-6 text-center">
                 <i data-lucide="lock" class="w-10 h-10 text-white mx-auto mb-3"></i>
                 <p class="text-white font-bold text-lg mb-1">এই ব্যাচের রেজিস্ট্রেশন বর্তমানে বন্ধ</p>
-                <p class="text-fuchsia-100 text-sm">নতুন ব্যাচ খোলা হলে জানিয়ে দেওয়া হবে। ততক্ষণে অন্য কোর্স দেখতে পারেন।</p>
-                <a href="course-register" class="inline-block mt-4 bg-white/20 hover:bg-white/30 text-white px-5 py-2.5 rounded-xl font-semibold text-sm">অন্য কোর্স বেছে নিন</a>
+                <p class="text-fuchsia-100 text-sm">নতুন ব্যাচ খোলা হলে জানিয়ে দেওয়া হবে — আগ্রহ জানিয়ে রাখলে আমরা আপনাকে জানাবো।</p>
+                <div class="flex flex-wrap justify-center gap-2 mt-4">
+                    <a href="course-interest?course_id=<?= (int) $selectedCourse['id'] ?>" class="inline-block bg-white text-purple-700 px-5 py-2.5 rounded-xl font-bold text-sm">আগ্রহ জানিয়ে রাখুন</a>
+                    <a href="course-register" class="inline-block bg-white/20 hover:bg-white/30 text-white px-5 py-2.5 rounded-xl font-semibold text-sm">অন্য কোর্স বেছে নিন</a>
+                </div>
             </div>
         <?php else: ?>
 
@@ -102,7 +105,8 @@ if (!$selectedCourse):
         <?php // 📸 কোর্সের ছবি ও ভিডিও — ফর্ম পূরণের আগে দেখে নেওয়ার জন্য (detail.php-এর মতোই ফাংশন) ?>
         <?= render_course_media($db, (int) $selectedCourse['id']) ?>
 
-        <form method="post" action="course-register-submit.php" class="space-y-4 mt-4" id="course-register-form">
+        <?= render_countdown_html($selectedCourse, 'course', 'lg') ?>
+        <form method="post" action="course-register-submit.php" class="space-y-4 mt-4" id="course-register-form" data-countdown-lock>
             <?= csrf_field() ?>
             <?= spam_protection_fields() ?>
             <input type="hidden" name="course_id" value="<?= $selectedCourse['id'] ?>">

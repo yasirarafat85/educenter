@@ -673,6 +673,123 @@ function text_excerpt(?string $text, int $maxChars = 110): string
     return rtrim($cut, " \t\n,;:-") . '…';
 }
 
+// ------------------------------------------------------------
+// ⏳ ভর্তির কাউন্টডাউন — `course_batches.registration_deadline` (২০২৬-০৯-২৮)
+// ------------------------------------------------------------
+// 🔴 টাইমজোন ইচ্ছাকৃতভাবে **গ্লোবালি সেট করা হয়নি** (`date_default_timezone_set()`) — তাতে
+// সাইটের বাকি সব তারিখ (অর্ডার/আয়/লগ/ব্যাকআপের নাম) ৬ ঘণ্টা সরে যেত। বদলে শুধু এই
+// হিসাবটাই ঢাকার সময়ে বাঁধা। হোস্টিং সার্ভার সাধারণত UTC-তে চলে, তাই এটা না করলে
+// অ্যাডমিনের দেওয়া "রাত ১২টা" আসলে বাংলাদেশ সময় **সকাল ৬টায়** কার্যকর হতো।
+const COURSE_DEADLINE_TZ = 'Asia/Dhaka';
+
+/** "2026-10-15 23:59:00" (ঢাকার সময়) → ইউনিক্স টাইমস্ট্যাম্প; খালি/অবৈধ হলে null */
+function course_deadline_ts($raw): ?int
+{
+    $raw = trim((string) ($raw ?? ''));
+    // খালি, MySQL-এর zero-date, বা '0' — কিছুই সেট করা নেই ধরে নেওয়া হয়
+    if ($raw === '' || $raw === '0' || strncmp($raw, '0000', 4) === 0) {
+        return null;
+    }
+    $raw = str_replace('T', ' ', $raw);   // datetime-local ইনপুট "Y-m-dTH:i" ফরম্যাটে পাঠায়
+    try {
+        $dt = new DateTime($raw, new DateTimeZone(COURSE_DEADLINE_TZ));
+    } catch (Exception $e) {
+        return null;   // আজেবাজে মান সেভ থাকলেও পেজ ভাঙবে না — ডেডলাইন নেই ধরে নেওয়া হয়
+    }
+    return $dt->getTimestamp();
+}
+
+/**
+ * অ্যাডমিন ফর্মের datetime-local মান ("2026-10-15T23:59") → DB-তে সেভ করার "Y-m-d H:i:s";
+ * খালি/অবৈধ হলে **null** (কলামটা NULL, অর্থাৎ কোনো ডেডলাইন নেই)।
+ * 🔴 কাঁচা POST মান সরাসরি DATETIME কলামে দেবেন না — 'T' সেপারেটর নিয়ে MySQL গোলমাল করে।
+ */
+function course_deadline_sql($raw): ?string
+{
+    $ts = course_deadline_ts($raw);
+    if ($ts === null) {
+        return null;
+    }
+    $dt = new DateTime('@' . $ts);
+    $dt->setTimezone(new DateTimeZone(COURSE_DEADLINE_TZ));
+    return $dt->format('Y-m-d H:i:s');
+}
+
+/**
+ * অ্যাডমিনে দেখানোর জন্য ("15 Oct 2026, 11:59 pm")।
+ * 🔴 সাধারণ `date()` ব্যবহার করবেন না — সার্ভার UTC-তে চললে ৬ ঘণ্টা কম দেখাবে।
+ */
+function course_deadline_display(?int $ts): string
+{
+    if ($ts === null) {
+        return '';
+    }
+    $dt = new DateTime('@' . $ts);
+    $dt->setTimezone(new DateTimeZone(COURSE_DEADLINE_TZ));
+    return $dt->format('d M Y, g:i a');
+}
+
+/** ভর্তির সময় পেরিয়ে গেছে কিনা। ডেডলাইন সেট না থাকলে **কখনো** true নয় (backward-compatible) */
+function course_deadline_passed(array $item): bool
+{
+    $ts = course_deadline_ts($item['registration_deadline'] ?? '');
+    return $ts !== null && $ts <= time();
+}
+
+/**
+ * এই ব্যাচে এখন ভর্তি নেওয়া যাবে কিনা — 🔴 পাবলিক সাইটে "রেজিস্ট্রেশন খোলা?" যাচাইয়ের
+ * **একমাত্র জায়গা** (কার্ড · কোর্স পাতা · বিস্তারিত · ফর্ম · সাবমিট · JSON-LD সবগুলোই এটাই ডাকে)।
+ * 🔴 অ্যাডমিনের হাতের সুইচ সবসময় জেতে — ডেডলাইন শুধু **বন্ধ** করতে পারে, কখনো খুলতে পারে না।
+ */
+function course_reg_open(array $item): bool
+{
+    return !empty($item['registration_open']) && !course_deadline_passed($item);
+}
+
+/** কত সময় বাকি → "3 দিন 14 ঘণ্টা 22 মিনিট" (🔴 English অঙ্ক — পাবলিক সাইটের নিয়ম) */
+function course_deadline_remaining_text(int $seconds): string
+{
+    if ($seconds <= 0) {
+        return '';
+    }
+    $d = intdiv($seconds, 86400);
+    $h = intdiv($seconds % 86400, 3600);
+    $m = intdiv($seconds % 3600, 60);
+    $s = $seconds % 60;
+    if ($d > 0) {
+        return $d . ' দিন ' . $h . ' ঘণ্টা ' . $m . ' মিনিট';
+    }
+    if ($h > 0) {
+        return $h . ' ঘণ্টা ' . $m . ' মিনিট ' . $s . ' সেকেন্ড';
+    }
+    return $m . ' মিনিট ' . $s . ' সেকেন্ড';
+}
+
+/**
+ * কাউন্টডাউন চিপ — শুধু কোর্সে, শুধু ডেডলাইন সেট থাকলে এবং এখনো ভর্তি খোলা থাকলে।
+ * `data-countdown` = **মিলিসেকেন্ড epoch**; 🔴 এটা টাইমজোন-নিরপেক্ষ, তাই দর্শকের ফোনের ঘড়ি
+ * অন্য দেশে সেট থাকলেও ঠিক সময়ই গোনে (`site-footer.php`-এর আলাদা ছোট স্ক্রিপ্ট প্রতি সেকেন্ডে আপডেট করে)।
+ */
+function render_countdown_html(array $item, string $type = 'course', string $size = 'sm'): string
+{
+    if ($type !== 'course' || !course_reg_open($item)) {
+        return '';
+    }
+    $ts = course_deadline_ts($item['registration_deadline'] ?? '');
+    if ($ts === null) {
+        return '';
+    }
+    // 🔴 এই ফ্ল্যাগ দেখে `site-footer.php` কাউন্টডাউনের স্ক্রিপ্টটা বসায় — যে পাতায় কোনো ঘড়ি
+    // নেই (ওয়ার্কশিট/প্রোডাক্ট/বন্ধ কোর্স) সেখানে স্ক্রিপ্টটাই যায় না।
+    $GLOBALS['edu_has_countdown'] = true;
+    $left = $ts - time();
+    $urgent = $left <= 86400 ? ' cd-urgent' : '';   // শেষ ২৪ ঘণ্টায় লাল
+    $cls    = $size === 'lg' ? ' cd-lg' : '';
+    return '<div class="cd-chip' . $urgent . $cls . '" data-countdown="' . ($ts * 1000) . '">'
+        . '<span>⏳</span> <span class="cd-lbl">ভর্তির সময় বাকি</span> '
+        . '<b class="cd-val">' . e(course_deadline_remaining_text($left)) . '</b></div>';
+}
+
 function render_item_card(array $item, string $type): string
 {
     [$grad, $solid, $tint, $deep, $border] = item_accent($type);
@@ -722,13 +839,13 @@ function render_item_card(array $item, string $type): string
     }
     $featuresHtml = $featureList ? '<ul class="space-y-2 mb-5">' . $featureList . '</ul>' : '';
 
-    $registrationClosed = $type === 'course' && empty($item['registration_open']);
+    $registrationClosed = $type === 'course' && !course_reg_open($item);
     $actionLabel = $registrationClosed ? 'রেজিস্ট্রেশন বন্ধ' : ($type === 'course' ? 'রেজিস্ট্রেশন করুন' : 'অর্ডার করুন');
     $actionUrl = $type === 'course' ? 'course-register?course_id=' . $id : 'register?type=' . e($type) . '&id=' . $id;
     $image = $item['image'] ?: placeholder_img();
     $closedBadge = $registrationClosed ? '<div class="card-ribbon">🔜 আসছে</div>' : '';
     // চলমান কোর্সে সবুজ "ভর্তি চলছে" ব্যাজ — এখন কোর্সের নামের পাশে (ছবিতে না, ইউজারের চাওয়া)
-    $openBadge = ($type === 'course' && !empty($item['registration_open']))
+    $openBadge = ($type === 'course' && course_reg_open($item))
         ? '<span class="inline-flex items-center gap-1 text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full whitespace-nowrap"><span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block;"></span> ভর্তি চলছে</span>' : '';
     // মূল ফি + (থাকলে) দ্বিতীয় ফি — গোছানো ফি বক্স
     $feeBox = render_fee_box($item['price'] ?? '', $item['secondary_fee_label'] ?? '', $item['secondary_fee'] ?? '', $solid, $item['old_price'] ?? '');
@@ -801,6 +918,7 @@ function render_item_card(array $item, string $type): string
             ' . $featuresHtml . '
             <div class="mt-auto pt-2">
                 ' . $feeBox . '
+                ' . render_countdown_html($item, $type) . '
                 ' . $ctaBtn . '
                 ' . $cardBtns . '
                 ' . $interestLine . '
@@ -1680,7 +1798,8 @@ function jsonld_item(array $item, string $type, string $url): string
                 'priceCurrency' => 'BDT',
                 'category'      => 'Paid',
                 'url'           => $url,
-                'availability'  => empty($item['registration_open'])
+                // 🔴 ডেডলাইন পেরোলে গুগলের চোখেও কোর্সটা আর "কেনা যায়" নয় (course_reg_open())
+                'availability'  => (isset($item['registration_open']) && !course_reg_open($item))
                     ? 'https://schema.org/PreOrder' : 'https://schema.org/InStock',
             ];
         }

@@ -10,8 +10,16 @@ $db = get_db();
 $featuredCourses = $db->query(
     'SELECT cb.*, c.title FROM course_batches cb JOIN courses c ON c.id = cb.course_id WHERE cb.is_active = 1 ORDER BY cb.registration_open DESC, cb.sort_order ASC, cb.id ASC LIMIT 3'
 )->fetchAll();
-// এখন কয়টা কোর্সে ভর্তি চলছে — হোমপেজে হাইলাইট করার জন্য
-$openCourseCount = (int) $db->query('SELECT COUNT(*) FROM course_batches WHERE is_active = 1 AND registration_open = 1')->fetchColumn();
+// এখন কয়টা কোর্সে ভর্তি চলছে — হোমপেজে হাইলাইট করার জন্য।
+// 🔴 গণনা SQL-এ নয়, PHP-তে course_reg_open() দিয়ে — ভর্তির শেষ সময় (registration_deadline)
+// পেরিয়ে যাওয়া ব্যাচও SQL-এ registration_open = 1 থাকে, ওটা গুনলে সংখ্যাটা বেশি দেখাত।
+// (SQL-এ NOW() দিয়ে করা যেত না — MySQL সার্ভারের টাইমজোন ঢাকার সাথে না-ও মিলতে পারে।)
+$openCourseCount = 0;
+foreach ($db->query('SELECT * FROM course_batches WHERE is_active = 1 AND registration_open = 1')->fetchAll() as $ocRow) {
+    if (course_reg_open($ocRow)) {
+        $openCourseCount++;
+    }
+}
 // 🔴 ওয়ার্কশিট ও প্রোডাক্টও হোমপেজে (২০২৬-০৯-২৭, ইউজার: "প্রোডাক্ট পেইজে মেনু থেকে খুঁজতে
 //    হয়, যেটা অনেকেই করবে না")। নিচের স্টিকি বারে ঠিক ৫টা স্লট বলে ওখানে জায়গা নেই
 //    (CLAUDE.md-এর নিয়ম) — তাই স্ক্রল করলেই সামনে পড়ে, এভাবেই সমাধান।

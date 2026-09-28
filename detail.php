@@ -28,7 +28,7 @@ $activePage = $type === 'course' ? 'courses' : ($type === 'worksheet' ? 'workshe
 $backUrl = $type === 'course' ? 'courses' : ($type === 'worksheet' ? 'worksheets' : 'products');
 // নিচের ফিরে-যাওয়ার বোতামে টাইপ অনুযায়ী পরিষ্কার নাম (উপরেরটা ছোট, শুধু "ফিরে যান")
 $backLabel = $type === 'course' ? 'সব কোর্স দেখুন' : ($type === 'worksheet' ? 'সব ওয়ার্কশিট দেখুন' : 'সব প্রোডাক্ট দেখুন');
-$registrationClosed = $type === 'course' && empty($item['registration_open']);
+$registrationClosed = $type === 'course' && !course_reg_open($item);
 $actionLabel = $registrationClosed ? 'রেজিস্ট্রেশন বন্ধ' : ($type === 'course' ? 'Register Now - রেজিস্ট্রেশন করুন' : 'Order Now - অর্ডার করুন');
 $actionUrl = $type === 'course' ? ('course-register?course_id=' . (int) $item['id']) : ('register?type=' . urlencode($type) . '&id=' . (int) $item['id']);
 
@@ -121,6 +121,7 @@ require __DIR__ . '/includes/site-header.php';
                 <p class="text-center text-gray-500 text-sm mt-2">এই কোর্সের রেজিস্ট্রেশন এখন বন্ধ — আগ্রহ জানিয়ে রাখুন</p>
             </div>
             <?php else: ?>
+            <?= render_countdown_html($item, $type, 'lg') ?>
             <a href="<?= e($actionUrl) ?>" class="block w-full text-center py-4 px-6 rounded-xl font-bold text-lg shadow-lg btn-primary text-white">
                 <?= e($actionLabel) ?>
             </a>

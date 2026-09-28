@@ -325,5 +325,66 @@
         });
     })();
     </script>
+
+    <?php // ⏳ ভর্তির কাউন্টডাউন — 🔴 ইচ্ছাকৃতভাবে উপরের বড় স্ক্রিপ্টের **বাইরে** আলাদা ব্লকে।
+          // ওখানে কিছু ভাঙলে আইকন/মোবাইল মেনু/গ্যালারি সব একসাথে মরে (eduIcons() নিয়ম)।
+          // ফ্ল্যাগটা render_countdown_html() তোলে — ঘড়ি না থাকলে স্ক্রিপ্টটাই যায় না। ?>
+    <?php if (!empty($GLOBALS['edu_has_countdown'])): ?>
+    <script>
+    (function () {
+        var els = document.querySelectorAll('.cd-chip[data-countdown]');
+        if (!els.length) { return; }
+
+        // 🔴 English অঙ্ক — পাবলিক সাইটের নিয়ম (বাংলা ১/৮/৯ প্রায় একই দেখায়)।
+        // PHP-র course_deadline_remaining_text() এর সাথে ফরম্যাট হুবহু এক রাখুন।
+        function fmt(s) {
+            var d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600),
+                m = Math.floor((s % 3600) / 60), sec = s % 60;
+            if (d > 0) { return d + ' দিন ' + h + ' ঘণ্টা ' + m + ' মিনিট'; }
+            if (h > 0) { return h + ' ঘণ্টা ' + m + ' মিনিট ' + sec + ' সেকেন্ড'; }
+            return m + ' মিনিট ' + sec + ' সেকেন্ড';
+        }
+
+        function over(el) {
+            el.classList.remove('cd-urgent');
+            el.classList.add('cd-over');
+            var lbl = el.querySelector('.cd-lbl'), val = el.querySelector('.cd-val');
+            if (lbl) { lbl.textContent = 'এই ব্যাচে ভর্তির সময় শেষ'; }
+            if (val) { val.textContent = ''; }
+            // ফর্মের পাতায় থাকলে সাবমিট বন্ধ। 🔴 এটা নিছক আগেভাগে জানানো —
+            // আসল গার্ড সার্ভারে (course-register-submit.php), ব্রাউজারের ঘড়িতে ভরসা নেই।
+            var forms = document.querySelectorAll('[data-countdown-lock]');
+            for (var i = 0; i < forms.length; i++) {
+                var btns = forms[i].querySelectorAll('button[type=submit], input[type=submit]');
+                for (var j = 0; j < btns.length; j++) {
+                    btns[j].disabled = true;
+                    btns[j].style.opacity = '0.6';
+                    if (btns[j].tagName === 'INPUT') { btns[j].value = 'ভর্তির সময় শেষ'; }
+                    else { btns[j].textContent = 'ভর্তির সময় শেষ'; }
+                }
+            }
+        }
+
+        function tick() {
+            var live = 0;
+            for (var i = 0; i < els.length; i++) {
+                var el = els[i], end = parseInt(el.getAttribute('data-countdown'), 10);
+                if (!end) { continue; }
+                var left = Math.floor((end - Date.now()) / 1000);
+                if (left <= 0) {
+                    if (!el.classList.contains('cd-over')) { over(el); }
+                    continue;
+                }
+                live++;
+                var val = el.querySelector('.cd-val');
+                if (val) { val.textContent = fmt(left); }
+                if (left <= 86400) { el.classList.add('cd-urgent'); }
+            }
+            if (live) { setTimeout(tick, 1000); }
+        }
+        tick();
+    })();
+    </script>
+    <?php endif; ?>
 </body>
 </html>

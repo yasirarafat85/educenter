@@ -154,7 +154,8 @@ CREATE TABLE course_batches (
     messenger_group_url VARCHAR(500) DEFAULT NULL, -- একইভাবে Messenger গ্রুপ
     total_parcels INT NOT NULL DEFAULT 0, -- এই কোর্স-ব্যাচে মোট কয়বার পার্সেল যাবে (কোর্স ট্র্যাকিং স্লট-সংখ্যা)
     hide_parcel TINYINT(1) NOT NULL DEFAULT 0, -- Yes হলে রেজিস্ট্রেশন ফর্মে রিসিভার নাম/নম্বর/ঠিকানা হাইড থাকবে (ফুল অনলাইন ব্যাচের জন্য)
-    registration_open TINYINT(1) NOT NULL DEFAULT 1, -- এই নির্দিষ্ট ব্যাচের রেজিস্ট্রেশন চালু/বন্ধ (is_active থেকে আলাদা — বন্ধ হলে ব্যাচ সাইটে দেখাবে কিন্তু রেজিস্ট্রেশন ফর্ম আসবে না)
+    registration_open TINYINT(1) NOT NULL DEFAULT 1,
+    registration_deadline DATETIME DEFAULT NULL, -- ভর্তির শেষ সময় (ঢাকার সময়); খালি = কাউন্টডাউন নেই, সময় শেষে ঐ ব্যাচের রেজিস্ট্রেশন নিজে থেকেই বন্ধ হয় -- এই নির্দিষ্ট ব্যাচের রেজিস্ট্রেশন চালু/বন্ধ (is_active থেকে আলাদা — বন্ধ হলে ব্যাচ সাইটে দেখাবে কিন্তু রেজিস্ট্রেশন ফর্ম আসবে না)
     is_active TINYINT(1) NOT NULL DEFAULT 1, -- এই ব্যাচ সাইটে দেখাবে কিনা
     sort_order INT NOT NULL DEFAULT 0, -- এই কোর্সের ব্যাচগুলোর মধ্যে ক্রম (কোর্স-স্কোপড, গ্লোবাল না)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

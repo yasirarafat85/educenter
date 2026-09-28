@@ -51,6 +51,7 @@ $batchFields = [
     'features' => ['label' => 'বৈশিষ্ট্য (প্রতি লাইনে একটি)', 'type' => 'lines'],
     'hide_parcel' => ['label' => 'পার্সেল হাইড (Yes হলে রেজিস্ট্রেশন ফর্মে রিসিভার নাম/নম্বর/ঠিকানা হাইড থাকবে — ফুল অনলাইন ব্যাচের জন্য)', 'type' => 'checkbox', 'default' => 0, 'warn_off' => true, 'toggle_label' => 'পার্সেল হাইড'],
     'registration_open' => ['label' => 'রেজিস্ট্রেশন খোলা (Running)? — বন্ধ (No) করলে ব্যাচ সাইটে দেখাবে কিন্তু নতুন রেজিস্ট্রেশন নেওয়া যাবে না', 'type' => 'checkbox', 'default' => 1, 'warn_off' => true, 'toggle_label' => 'রেজিস্ট্রেশন খোলা রাখা'],
+    'registration_deadline' => ['label' => 'ভর্তির শেষ সময় (ঐচ্ছিক — কাউন্টডাউন ঘড়ি)', 'type' => 'datetime', 'help' => 'এখানে তারিখ ও সময় দিলে সাইটে "⏳ ভর্তির সময় বাকি — 3 দিন 14 ঘণ্টা" ঘড়ি দেখাবে (কার্ড, বিস্তারিত পাতা ও ভর্তি ফর্ম — তিন জায়গাতেই), আর শেষ ২৪ ঘণ্টায় লাল হয়ে যাবে। সময় শেষ হলে এই ব্যাচের রেজিস্ট্রেশন নিজে থেকেই বন্ধ হয়ে যাবে — কোর্সটা "আসছে শীঘ্রই" তালিকায় চলে যাবে আর বোতাম হয়ে যাবে "জানিয়ে রাখুন"। খালি রাখলে কোনো ঘড়ি দেখাবে না। সময় বাংলাদেশ সময় ধরে হিসাব হয়। উপরের সুইচ দিয়ে হাতে বন্ধ করলে সেটাই চূড়ান্ত।'],
     'is_active' => ['label' => 'সাইটে দেখাবে?', 'type' => 'checkbox', 'default' => 1, 'warn_off' => true, 'toggle_label' => 'ব্যাচটি সাইটে দেখানো'],
     'sort_order' => ['label' => 'ক্রম নম্বর (এই কোর্সের ব্যাচগুলোর মধ্যে, ছোট সংখ্যা আগে দেখাবে, অটো বসে)', 'type' => 'number', 'default' => 0],
 ];
@@ -59,7 +60,8 @@ $batchFields = [
 // নাহলে INSERT/UPDATE-এ "Unknown column" এসে ব্যাচ সেভ করাই ভেঙে যেত।
 foreach (['tuition_split_mode' => 'migrate-payment-split.sql',
           'card_excerpt'      => 'migrate-card-excerpt.sql',
-          'old_price'         => 'migrate-course-old-price.sql'] as $bfCol => $bfMigration) {
+          'old_price'         => 'migrate-course-old-price.sql',
+          'registration_deadline' => 'migrate-course-registration-deadline.sql'] as $bfCol => $bfMigration) {
     if (!db_has_column($db, 'course_batches', $bfCol)) {
         unset($batchFields[$bfCol]);
     }
@@ -109,6 +111,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'save') {
                 redirect('course-batches.php?course_id=' . $courseId . '&action=form' . ($batchId ? '&id=' . $batchId : ''));
             }
             $columns[$key] = $uploaded ?? trim($_POST[$key] ?? '');
+            continue;
+        }
+        if ($f['type'] === 'datetime') {
+            // 🔴 "Y-m-dTH:i" → "Y-m-d H:i:s", খালি হলে NULL (কাঁচা POST সরাসরি DATETIME-এ দেবেন না)
+            $columns[$key] = course_deadline_sql($_POST[$key] ?? '');
             continue;
         }
         $val = trim($_POST[$key] ?? '');
@@ -280,7 +287,17 @@ require __DIR__ . '/includes/layout-top.php';
                     </td>
                     <td class="py-2.5 px-4"><?= e($b['instructor'] ?: '-') ?></td>
                     <td class="py-2.5 px-4"><?= e($b['duration'] ?: '-') ?></td>
-                    <td class="py-2.5 px-4"><?= $b['registration_open'] ? '<span class="text-green-600 font-semibold">হ্যাঁ</span>' : '<span class="text-gray-400">না</span>' ?></td>
+                    <td class="py-2.5 px-4">
+                        <?= $b['registration_open'] ? '<span class="text-green-600 font-semibold">হ্যাঁ</span>' : '<span class="text-gray-400">না</span>' ?>
+                        <?php // ⏳ ভর্তির শেষ সময় — সময় পেরিয়ে গেলে সুইচ "হ্যাঁ" থাকলেও সাইটে বন্ধ, তাই এখানেই দেখানো
+                              $bDl = course_deadline_ts($b['registration_deadline'] ?? ''); ?>
+                        <?php if ($bDl !== null): ?>
+                            <?php $bOver = $bDl <= time(); ?>
+                            <div class="text-xs mt-0.5 <?= $bOver ? 'text-red-600 font-semibold' : 'text-gray-500' ?>">
+                                ⏳ <?= e(course_deadline_display($bDl)) ?><?= $bOver ? ' — সময় শেষ' : '' ?>
+                            </div>
+                        <?php endif; ?>
+                    </td>
                     <td class="py-2.5 px-4"><?= $b['hide_parcel'] ? '<span class="text-green-600 font-semibold">হ্যাঁ</span>' : '<span class="text-gray-400">না</span>' ?></td>
                     <td class="py-2.5 px-4"><?= $b['is_active'] ? '<span class="text-green-600 font-semibold">হ্যাঁ</span>' : '<span class="text-gray-400">না</span>' ?></td>
                     <td class="py-2.5 px-4">

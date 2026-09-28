@@ -84,6 +84,17 @@ function render_field_input(string $key, array $f, $value, array $suggestions = 
         case 'date':
             return $label . '<input type="date" name="' . e($key) . '" value="' . e($value) . '" required class="w-full border rounded-xl px-4 py-2.5">';
 
+        // তারিখ + সময় (ঐচ্ছিক, required নয়) — যেমন course_batches.registration_deadline।
+        // DB-তে "Y-m-d H:i:s" থাকে, কিন্তু datetime-local ইনপুট "Y-m-dTH:i" চায় — তাই রূপান্তর।
+        case 'datetime':
+            $dtVal = trim((string) $value);
+            if ($dtVal !== '' && strncmp($dtVal, '0000', 4) !== 0) {
+                $dtVal = substr(str_replace(' ', 'T', $dtVal), 0, 16);
+            } else {
+                $dtVal = '';
+            }
+            return $label . '<input type="datetime-local" name="' . e($key) . '" value="' . e($dtVal) . '" class="w-full border rounded-xl px-4 py-2.5">';
+
         case 'checkbox':
             $checked = $value ? 'checked' : '';
             $warnAttr = '';

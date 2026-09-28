@@ -43,9 +43,13 @@ if (!$course) {
 }
 
 // UI তে রেজিস্ট্রেশন বন্ধ থাকলে ফর্মই দেখানো হয় না, কিন্তু সরাসরি POST করলেও যেন আটকায় (defense in depth)
-if (!$course['registration_open']) {
-    set_flash('error', 'এই ব্যাচের রেজিস্ট্রেশন বর্তমানে বন্ধ।');
-    redirect('course-register.php');
+// 🔴 course_reg_open() হাতের সুইচ **ও** ভর্তির শেষ সময় দুটোই দেখে — কেউ ফর্ম খুলে বসে থাকতে
+// থাকতে সময় পেরিয়ে গেলে ব্রাউজারের ঘড়ির উপর ভরসা না করে এখানেই আটকানো হয়।
+if (!course_reg_open($course)) {
+    $closedMsg = course_deadline_passed($course)
+        ? 'দুঃখিত, এই ব্যাচে ভর্তির সময় শেষ হয়ে গেছে। নতুন ব্যাচ খুললে জানতে আগ্রহ জানিয়ে রাখুন।'
+        : 'এই ব্যাচের রেজিস্ট্রেশন বর্তমানে বন্ধ।';
+    course_register_fail($closedMsg, $backUrl);
 }
 
 $motherMobile = trim($_POST['mother_mobile'] ?? '');
