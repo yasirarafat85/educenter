@@ -317,6 +317,138 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'pay-save') {
     }
     redirect($returnUrl);
 }
+// ------------------------------------------------------------
+// 🔄 অন্য কোর্সে সরানো (২০২৬-০৯-২৮, ইউজার: "ভুলে এক কোর্সে রেজিস্ট্রেশন করেছে,
+//    আমি তাকে অন্য কোর্সে দিতে চাই")
+//
+// 🔴 টাকার সাথে জড়িত — তাই যা বদলায় আর যা বদলায় না সেটা এখানে স্পষ্ট করে রাখা:
+//    বদলায়   : item_id · item_title · batch (স্ন্যাপশট), আর চাইলে পেমেন্ট খাতার কিস্তির ছক
+//    বদলায় না: **জমা দেওয়া টাকা** (কখনো নয়) · পাঠানো পার্সেল/চালান (courier_batches —
+//               ইতিহাস, কুরিয়ারে চলে গেছে) · গ্রুপের টিক · নোট · অভিভাবকের অ্যাকাউন্ট
+// 🔴 খাতা না থাকলে আয় = আইটেমের **বর্তমান দাম**, তাই কোর্স বদলালে আয়ের অঙ্কও বদলাতে পারে —
+//    সেটা এখানেই (`sync_income_for_status()`) ঘটানো হয় ও ফ্ল্যাশে জানানো হয়, যাতে পরে
+//    কোনো স্ট্যাটাস-সেভে নীরবে না বদলায়।
+// ------------------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'move-course') {
+    $id      = (int) ($_POST['id'] ?? 0);
+    $editUrl = 'registrations.php?action=edit&id=' . $id;
+
+    if (!csrf_verify()) {
+        set_flash('error', 'ফর্ম টোকেন মিলছে না।');
+        redirect($editUrl);
+    }
+
+    $stmt = $db->prepare('SELECT * FROM registrations WHERE id = :id');
+    $stmt->execute(['id' => $id]);
+    $reg = $stmt->fetch();
+    if (!$reg) {
+        set_flash('error', 'রেজিস্ট্রেশনটি পাওয়া যায়নি।');
+        redirect('registrations.php');
+    }
+    if ($reg['type'] !== 'course') {
+        set_flash('error', 'শুধু কোর্সের রেজিস্ট্রেশন অন্য কোর্সে সরানো যায়।');
+        redirect($editUrl);
+    }
+
+    // 🔴 নতুন ব্যাচ DB থেকেই যাচাই — POST-এর নাম/ফি-র উপর কখনো ভরসা নয়
+    $newId = (int) ($_POST['new_item_id'] ?? 0);
+    $tgt = $db->prepare(
+        'SELECT cb.*, c.title FROM course_batches cb JOIN courses c ON c.id = cb.course_id
+         WHERE cb.id = :id AND cb.is_active = 1'
+    );
+    $tgt->execute(['id' => $newId]);
+    $target = $tgt->fetch();
+    if (!$target) {
+        set_flash('error', 'যে কোর্সে সরাতে চাইছেন সেটি পাওয়া গেল না (নিষ্ক্রিয় হয়ে থাকতে পারে)।');
+        redirect($editUrl);
+    }
+    if ((int) $reg['item_id'] === $newId) {
+        set_flash('error', 'এটি তো একই কোর্স-ব্যাচ — সরানোর কিছু নেই।');
+        redirect($editUrl);
+    }
+
+    $oldLabel = trim((string) $reg['item_title'] . ($reg['batch'] ? ' (' . $reg['batch'] . ')' : ''));
+    $newLabel = trim((string) $target['title'] . ($target['batch_name'] ? ' (' . $target['batch_name'] . ')' : ''));
+
+    $hadLedger = (bool) (pay_fetch_many($db, [$id])[$id] ?? []);
+    $doRebuild = $hadLedger && !empty($_POST['rebuild_ledger']);
+
+    // সরানোর একটা চিহ্ন অ্যাডমিনের নোটে — কোথা থেকে এসেছে পরে যেন খুঁজে পাওয়া যায়।
+    // 🔴 আগের লেখা কখনো মোছা হয় না, উপরে জোড়া লাগে (৫০০ অক্ষরের সীমা মেনে)।
+    $trail = '🔄 আগে ছিল: ' . $oldLabel . ' — সরানো হয়েছে ' . date('d M Y');
+    $note  = trim((string) ($reg['admin_note'] ?? ''));
+    $note  = $note === '' ? $trail : $trail . "\n" . $note;
+    if (function_exists('mb_substr')) {
+        $note = mb_substr($note, 0, 500);
+    }
+
+    try {
+        $db->beginTransaction();
+        $paidBefore   = pay_paid_total(pay_fetch_many($db, [$id])[$id] ?? []);
+        $incomeBefore = (float) ($reg['income_amount'] ?? 0);
+
+        $db->prepare(
+            'UPDATE registrations SET item_id = :item, item_title = :title, batch = :batch, admin_note = :note
+             WHERE id = :id'
+        )->execute([
+            'item'  => $newId,
+            'title' => $target['title'],
+            'batch' => $target['batch_name'],
+            'note'  => $note,
+            'id'    => $id,
+        ]);
+
+        // হাতের কাছের কপিটাও আপডেট — নিচের pay_build_plan()/sync_income দুটোই item_id পড়ে
+        $reg['item_id']    = $newId;
+        $reg['item_title'] = $target['title'];
+        $reg['batch']      = $target['batch_name'];
+        $reg['admin_note'] = $note;
+
+        if ($doRebuild) {
+            pay_rebuild_plan($db, $reg);
+            $rows = pay_fetch_many($db, [$id])[$id] ?? [];
+            // 🔴 নিরাপত্তা-জাল (pay-rebuild হ্যান্ডলারের মতোই): মোট জমা এক পয়সাও বদলালে পুরোটা বাতিল
+            if (round($paidBefore, 2) !== round(pay_paid_total($rows), 2)) {
+                $db->rollBack();
+                set_flash('error', 'সরানো বাতিল করা হলো — খাতার মোট জমা মিলছিল না, তাই কিছুই বদলানো হয়নি।');
+                redirect($editUrl);
+            }
+            $db->prepare('UPDATE registrations SET due_amount = :due WHERE id = :id')
+                ->execute(['due' => pay_summary($rows)['balance'], 'id' => $id]);
+        }
+
+        sync_income_for_status($db, $reg, $reg['status']);
+        $db->commit();
+    } catch (PDOException $ex) {
+        if ($db->inTransaction()) { $db->rollBack(); }
+        set_flash('error', 'সরানো যায়নি — আবার চেষ্টা করুন।');
+        redirect($editUrl);
+    }
+
+    // আয় বদলেছে কিনা দেখে নেওয়া (খাতাহীন রেজিস্ট্রেশনে কোর্সের দাম বদলালে এটা বদলায়)
+    $after = $db->prepare('SELECT income_amount, income_approved FROM registrations WHERE id = :id');
+    $after->execute(['id' => $id]);
+    $post = $after->fetch() ?: [];
+    $incomeAfter = (float) ($post['income_amount'] ?? 0);
+
+    $msg = '🔄 সরানো হলো: ' . $oldLabel . ' → ' . $newLabel . '।';
+    // নতুন কোর্সে পার্সেল যায় অথচ এই অর্ডারে ঠিকানা নেই (আগে ফুল-অনলাইন কোর্স ছিল) —
+    // কুরিয়ারে পাঠাতে গেলে আটকে যেত, তাই এখনই বলে দেওয়া
+    if (empty($target['hide_parcel']) && trim((string) ($reg['address'] ?? '')) === '') {
+        $msg .= ' 📦 নতুন কোর্সে পার্সেল যায়, কিন্তু এই অর্ডারে ঠিকানা নেই — "তথ্য সম্পাদনা" থেকে রিসিভারের নাম/নম্বর/ঠিকানা বসিয়ে দিন।';
+    }
+    if ($doRebuild) {
+        $msg .= ' নতুন কোর্সের ফি অনুযায়ী খাতা সাজানো হয়েছে — জমা ৳' . number_format($paidBefore, 2) . ' অপরিবর্তিত।';
+    } elseif ($hadLedger) {
+        $msg .= ' ⚠️ খাতা আগের কোর্সের ফি ধরেই আছে — দরকার হলে "🧩 কিস্তির ছকে সাজান" চাপুন।';
+    }
+    if (!empty($post['income_approved']) && round($incomeBefore, 2) !== round($incomeAfter, 2)) {
+        $msg .= ' 💰 আয় ৳' . number_format($incomeBefore, 2) . ' → ৳' . number_format($incomeAfter, 2) . '।';
+    }
+    set_flash('success', $msg);
+    redirect('registrations.php?action=view&id=' . $id);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'update-details') {
     $id = (int) ($_POST['id'] ?? 0);
     $editUrl = 'registrations.php?action=edit&id=' . $id;
@@ -1572,6 +1704,80 @@ require __DIR__ . '/includes/layout-top.php';
             </div>
         </form>
     </div>
+
+    <?php // 🔄 অন্য কোর্সে সরানো — শুধু কোর্সের রেজিস্ট্রেশনে (২০২৬-০৯-২৮)
+          // 🔴 ইচ্ছাকৃতভাবে উপরের ফর্মের **বাইরে** আলাদা কার্ড ও আলাদা <form> — নাহলে
+          //    "তথ্য সংরক্ষণ" চাপলেই কোর্সও বদলে যেত। HTML-এ নেস্টেড ফর্মও চলে না।
+          if ($viewRow['type'] === 'course'):
+        $mvBatches = [];
+        $mvLedger  = false;
+        $mvSent    = 0;
+        try {
+            $mvBatches = $db->query(
+                'SELECT cb.id, cb.batch_name, cb.price, c.title
+                   FROM course_batches cb JOIN courses c ON c.id = cb.course_id
+                  WHERE cb.is_active = 1
+                  ORDER BY c.title ASC, cb.sort_order ASC, cb.id ASC'
+            )->fetchAll();
+            $mvLedger = (bool) (pay_fetch_many($db, [(int) $viewRow['id']])[(int) $viewRow['id']] ?? []);
+            // আগে পাঠানো চালান — সরালেও এগুলো অপরিবর্তিত থাকে, তাই সংখ্যাটা দেখিয়ে দেওয়া
+            $mvSentQ = $db->prepare("SELECT COUNT(*) FROM courier_batches WHERE registration_id = :id AND send_status = 'sent'");
+            $mvSentQ->execute(['id' => (int) $viewRow['id']]);
+            $mvSent = (int) $mvSentQ->fetchColumn();
+        } catch (PDOException $mvEx) {
+            $mvBatches = [];   // কোনো কারণে না পারলে কার্ডটাই দেখাব না
+        }
+        if ($mvBatches):
+    ?>
+    <div class="max-w-2xl bg-white rounded-2xl shadow p-6 mt-6 border-2 border-amber-200">
+        <h3 class="text-lg font-bold text-gray-900">🔄 অন্য কোর্সে সরান</h3>
+        <p class="text-gray-500 text-sm mt-1">ভুল কোর্সে রেজিস্ট্রেশন হয়ে গেলে এখান থেকেই ঠিক কোর্সে সরিয়ে দিন — নতুন করে রেজিস্ট্রেশন করার দরকার নেই।</p>
+
+        <div class="mt-4 text-sm bg-gray-50 rounded-xl px-4 py-3">
+            <span class="text-gray-500">এখন আছে:</span>
+            <b class="text-gray-900"><?= e($viewRow['item_title']) ?></b><?= $viewRow['batch'] ? ' <span class="text-gray-600">(' . e($viewRow['batch']) . ')</span>' : '' ?>
+        </div>
+
+        <form method="post" action="registrations.php?action=move-course" class="mt-4 space-y-4"
+              onsubmit="return confirmSubmit(this, 'এই রেজিস্ট্রেশনটি সত্যিই অন্য কোর্সে সরাতে চান? জমা দেওয়া টাকা ও আগে পাঠানো পার্সেল অপরিবর্তিত থাকবে।', 'কোর্স পরিবর্তনের নিশ্চিতকরণ')">
+            <?= csrf_field() ?>
+            <input type="hidden" name="id" value="<?= $viewRow['id'] ?>">
+
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">যে কোর্সে সরাবেন</label>
+                <select name="new_item_id" required class="w-full border rounded-xl px-4 py-2.5">
+                    <option value="">নির্বাচন করুন</option>
+                    <?php foreach ($mvBatches as $mb): if ((int) $mb['id'] === (int) $viewRow['item_id']) { continue; } ?>
+                        <option value="<?= (int) $mb['id'] ?>">
+                            <?= e($mb['title']) ?><?= $mb['batch_name'] ? ' — ' . e($mb['batch_name']) : '' ?><?= trim((string) $mb['price']) !== '' ? ' · ' . e($mb['price']) : '' ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">শুধু সক্রিয় কোর্স-ব্যাচগুলো দেখাচ্ছে। রেজিস্ট্রেশন বন্ধ থাকলেও সরানো যাবে।</p>
+            </div>
+
+            <?php if ($mvLedger): ?>
+            <label class="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 cursor-pointer">
+                <input type="checkbox" name="rebuild_ledger" value="1" checked class="mt-0.5">
+                <span class="text-sm text-amber-900">
+                    <b>নতুন কোর্সের ফি অনুযায়ী টাকার খাতা নতুন করে সাজান</b>
+                    <span class="block text-xs mt-0.5">🔴 <b>জমা দেওয়া টাকা এক পয়সাও বদলাবে না</b> — শুধু প্রাপ্য ও কিস্তির ছক নতুন কোর্সের নিয়মে বসবে। টিক না দিলে খাতা আগের কোর্সের ফি ধরেই থেকে যাবে।</span>
+                </span>
+            </label>
+            <?php endif; ?>
+
+            <div class="text-xs text-gray-600 bg-gray-50 rounded-xl px-4 py-3 space-y-1">
+                <div>✅ <b>যা অপরিবর্তিত থাকবে</b>: জমা দেওয়া টাকা · আগে পাঠানো পার্সেল ও চালান · গ্রুপের টিক · নোট · অভিভাবকের অ্যাকাউন্ট</div>
+                <div>🔄 <b>যা বদলাবে</b>: কোর্সের নাম ও ব্যাচ — তালিকা, কোর্স পার্সেল ও অভিভাবকের ড্যাশবোর্ড সবখানেই নতুন কোর্সটাই দেখাবে</div>
+                <?php if ($mvSent > 0): ?>
+                    <div class="text-red-700">⚠️ এই অর্ডারে <b><?= (int) $mvSent ?> টি পার্সেল আগেই কুরিয়ারে পাঠানো হয়েছে</b> — ওগুলোর চালান আগের কোর্সের হিসাবেই থেকে যাবে (বদলানো যায় না)।</div>
+                <?php endif; ?>
+            </div>
+
+            <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white font-bold px-6 py-2.5 rounded-xl">এই কোর্সে সরিয়ে দিন</button>
+        </form>
+    </div>
+    <?php endif; endif; ?>
 <?php endif; ?>
 
 <script>
