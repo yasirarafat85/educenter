@@ -144,7 +144,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $wx   = !empty($row['wx']);
             $adj  = (float) ($row['adj'] ?? 0);
             $ledgerRows = $ledgerMap[$rid] ?? [];
-            $basis = $ledgerRows ? pay_row_outstanding(pay_row_for_month($ledgerRows, $month)) : $courseFee;
+            // 🔴 এই মাসে খাতার **সব** কিস্তির বাকি মিলিয়ে (রেজি ফি + বেতন একসাথে পড়তে পারে;
+            //    এক-কালীন/পুরনো সারি প্রথম পার্সেলে) — নিচের কার্ডের `data-due`-তেও হুবহু এই সংখ্যা
+            $basis = $ledgerRows ? pay_month_outstanding($ledgerRows, $month) : $courseFee;
             $amt  = courier_compute_collection($basis, 1, $zone, $wx, $adj); // মাল্টিপ্লায়ার সবসময় ১
             if (is_numeric($row['amt'] ?? null)) { $amt = max(0, round((float) $row['amt'])); } // সরাসরি লেখা পরিমাণই চূড়ান্ত
             $desc   = trim($row['desc'] ?? '') ?: null;
@@ -542,11 +544,13 @@ function cpPermZone(sel) {
                 $notes = $notesByReg[$rid] ?? [];
 
                 // 🔑 খাতা → এই মাসের কালেকশনের ভিত্তি
-                $lRows = $ledgerByReg[$rid] ?? [];
-                $lRow  = $lRows ? pay_row_for_month($lRows, $selMonth) : null;
-                $lDue  = $lRows ? pay_row_outstanding($lRow) : (float) $courseFee;   // খাতা না থাকলে পুরনো নিয়ম
-                $lSum  = $lRows ? pay_summary($lRows) : null;
-                $lSkip = $lRow && pay_is_skipped($lRow);
+                $lRows  = $ledgerByReg[$rid] ?? [];
+                // 🔴 এই মাসে একাধিক কিস্তি পড়তে পারে — সবগুলোর বাকি যোগ হয় (উপরের round-save-এ একই হিসাব)
+                $lMonth = $lRows ? pay_rows_for_month($lRows, $selMonth) : [];
+                $lDue   = $lRows ? pay_month_outstanding($lRows, $selMonth) : (float) $courseFee;   // খাতা না থাকলে পুরনো নিয়ম
+                $lSum   = $lRows ? pay_summary($lRows) : null;
+                // সব কিস্তিই ⊘ বাদ দেওয়া থাকলেই "বাদ" বার্তা
+                $lSkip  = $lMonth && count(array_filter($lMonth, 'pay_is_skipped')) === count($lMonth);
             ?>
                 <div class="stu bg-white rounded-2xl shadow p-4 <?= $isNo ? 'opacity-60' : '' ?>" data-fee="<?= (int) $courseFee ?>" data-due="<?= (int) round($lDue) ?>" data-sent="<?= $isSent ? 1 : 0 ?>">
                     <input type="hidden" name="bd[<?= $rid ?>][present]" value="1">
@@ -594,14 +598,25 @@ function cpPermZone(sel) {
                             💰 <b>খাতা নেই</b> — মাসিক ফি ৳<?= e(number_format($courseFee)) ?> ধরা হয়েছে। অর্ডার তালিকার “খাতা” থেকে সেভ করলে এখানে আসল বাকি বসবে।
                         <?php elseif ($lSkip): ?>
                             💰 খাতায় এই মাস <b>⊘ বাদ</b> দেওয়া আছে — বাকি ৳0।
-                        <?php elseif (!$lRow): ?>
+                        <?php elseif (!$lMonth): ?>
                             💰 খাতায় এই মাসের কিস্তি নেই — বাকি ৳0 ধরা হয়েছে (দরকার হলে হাতে লিখুন)।
                         <?php else: ?>
-                            💰 খাতা — <b><?= e($lRow['label']) ?></b>: প্রাপ্য ৳<?= e(number_format((float) $lRow['amount_due'])) ?>
-                            <?php if ((float) $lRow['discount_amount'] > 0): ?> · ছাড় ৳<?= e(number_format((float) $lRow['discount_amount'])) ?><?php endif; ?>
-                            · জমা ৳<?= e(number_format((float) $lRow['amount_paid'])) ?>
-                            · <b class="<?= $lDue > 0 ? 'text-red-700' : 'text-green-700' ?>"><?= $lDue > 0 ? 'বাকি ৳' . e(number_format($lDue)) : '✅ এই মাসের টাকা পাওয়া হয়ে গেছে' ?></b>
-                            <?php if ($lSum && $lSum['balance'] > 0): ?><span class="text-gray-500"> · সব মিলিয়ে বাকি ৳<?= e(number_format($lSum['balance'])) ?></span><?php endif; ?>
+                            <?php // এই পার্সেলে যতগুলো কিস্তি পড়ে, প্রতিটা আলাদা লাইনে ?>
+                            <?php foreach ($lMonth as $lr): $lrDue = pay_row_outstanding($lr); ?>
+                                <div>
+                                    💰 <b><?= e($lr['label']) ?></b><?= pay_is_skipped($lr) ? ' <span class="text-gray-500">(⊘ বাদ)</span>' : '' ?>:
+                                    প্রাপ্য ৳<?= e(number_format((float) $lr['amount_due'])) ?>
+                                    <?php if ((float) $lr['discount_amount'] > 0): ?> · ছাড় ৳<?= e(number_format((float) $lr['discount_amount'])) ?><?php endif; ?>
+                                    · জমা ৳<?= e(number_format((float) $lr['amount_paid'])) ?>
+                                    · <b class="<?= $lrDue > 0 ? 'text-red-700' : 'text-green-700' ?>"><?= $lrDue > 0 ? 'বাকি ৳' . e(number_format($lrDue)) : '✅ পাওয়া হয়ে গেছে' ?></b>
+                                </div>
+                            <?php endforeach; ?>
+                            <?php if (count($lMonth) > 1): ?>
+                                <div class="mt-0.5 pt-0.5 border-t border-indigo-200">
+                                    এই পার্সেলে মোট <b class="<?= $lDue > 0 ? 'text-red-700' : 'text-green-700' ?>">৳<?= e(number_format($lDue)) ?></b> তুলতে হবে
+                                </div>
+                            <?php endif; ?>
+                            <?php if ($lSum && $lSum['balance'] > 0): ?><div class="text-gray-500">সব মিলিয়ে বাকি ৳<?= e(number_format($lSum['balance'])) ?></div><?php endif; ?>
                         <?php endif; ?>
                     </div>
                     <div class="builder <?= $isSent ? 'opacity-50 pointer-events-none' : '' ?>">

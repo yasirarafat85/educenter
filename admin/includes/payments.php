@@ -107,16 +107,46 @@ function pay_row_months(array $row): array
     return pay_label_months((string) ($row['label'] ?? ''));
 }
 
-// 🔑 কুরিয়ারের N-তম মাসের পার্সেল খাতার কোন কিস্তির সাথে মেলে
-// (বেতন কম কিস্তিতে নেওয়া হলে এক কিস্তি একাধিক মাস ঢাকে — তখন সেই কিস্তিটাই ফেরে)
-function pay_row_for_month(array $rows, int $month): ?array
+// 🔑 কুরিয়ারের N-তম পার্সেলে খাতার কোন কোন কিস্তির টাকা তোলার কথা।
+//
+// 🔴🔴 এক পার্সেলে **একাধিক** কিস্তি পড়তে পারে (যেমন রেজিস্ট্রেশন ফি + ঐ মাসের বেতন) —
+//    ২০২৬-০৯-২৮ পর্যন্ত এখানে শুধু **প্রথম** মিলে যাওয়া কিস্তিটাই ফেরত যেত, তাই বাকিগুলোর
+//    টাকা কুরিয়ারে কখনো তোলা হতো না।
+// 🔴🔴 আর যেসব কিস্তির কোনো মাস-পরিসর **নেই** — এক-কালীন ফি (`onetime`), রেজিস্ট্রেশন ফি,
+//    আর মাইগ্রেশনে বসানো পুরনো `legacy` সারি — সেগুলো একটাও মিলত না, ফলে ভিত্তি ০ হয়ে
+//    কালেকশনে শুধু ডেলিভারি চার্জটাই বসত (ইউজারের স্ক্রিনশটে ধরা: বাকি ৳৫০০ থাকা সত্ত্বেও
+//    কালেকশন ৳১৩০ দেখাচ্ছিল)। এখন সেগুলো **প্রথম পার্সেলের** সাথে ধরা হয় — একবারই
+//    নেওয়ার টাকা, প্রথমবারেই ওঠে।
+function pay_rows_for_month(array $rows, int $month): array
 {
+    $out = [];
     foreach ($rows as $r) {
-        if (in_array($month, pay_row_months($r), true)) {
-            return $r;
+        $months = pay_row_months($r);
+        // মাস-পরিসর জানা থাকলে সেটাই মানি; না জানলে প্রথম পার্সেল
+        if ($months ? in_array($month, $months, true) : $month === 1) {
+            $out[] = $r;
         }
     }
-    return null;
+    return $out;
+}
+
+// ঐ পার্সেলে খাতা অনুযায়ী মোট কত টাকা তোলার কথা (প্রতিটা কিস্তির নিট − জমা-র যোগফল)।
+// 🔴 কুরিয়ারের কালেকশনের **ভিত্তি এটাই** — course-parcel.php-এর সার্ভার ও ব্রাউজার
+//    দুই জায়গাতেই এই একই সংখ্যা বসে।
+function pay_month_outstanding(array $rows, int $month): float
+{
+    $sum = 0.0;
+    foreach (pay_rows_for_month($rows, $month) as $r) {
+        $sum += pay_row_outstanding($r);
+    }
+    return round($sum, 2);
+}
+
+// ঐ পার্সেলের প্রথম কিস্তি (শুধু লেবেল দেখানোর জন্য; টাকার হিসাবে
+// `pay_month_outstanding()` ব্যবহার করুন, এটা নয়)
+function pay_row_for_month(array $rows, int $month): ?array
+{
+    return pay_rows_for_month($rows, $month)[0] ?? null;
 }
 
 // ঐ কিস্তিতে আর কত টাকা পাওনা (নিট − জমা)। বাদ দেওয়া বা বেশি জমা থাকলে ০।
@@ -291,7 +321,7 @@ function pay_build_plan(PDO $db, array $reg): array
         $stmt = $db->prepare("SELECT price FROM `$table` WHERE id = :id");
         $stmt->execute(['id' => $reg['item_id']]);
         $due = parse_price_to_number((string) ($stmt->fetchColumn() ?: '0')) * max(1, (int) $reg['quantity']);
-        return [pay_blank_row(1, 'onetime', 'পুরো মূল্য', $due)];
+        return [pay_blank_row(1, 'onetime', 'পুরো মূল্য', $due, 1, 1)];
     }
 
     // `*` ইচ্ছাকৃত — নতুন কলাম (registration_fee/course_months) মাইগ্রেশনের আগে না থাকলেও
@@ -301,7 +331,7 @@ function pay_build_plan(PDO $db, array $reg): array
     $batch = $stmt->fetch();
     if (!$batch) {
         // ব্যাচ ডিলিট/আর্কাইভ হয়ে গেছে — সর্বশেষ জানা পরিমাণ দিয়ে একটা সারি
-        return [pay_blank_row(1, 'onetime', 'পুরো মূল্য', (float) ($reg['income_amount'] ?? 0))];
+        return [pay_blank_row(1, 'onetime', 'পুরো মূল্য', (float) ($reg['income_amount'] ?? 0), 1, 1)];
     }
 
     $mode   = pay_guess_fee_mode($batch);
@@ -312,14 +342,23 @@ function pay_build_plan(PDO $db, array $reg): array
     $seq    = 1;
 
     if ($mode === 'onetime') {
-        return [pay_blank_row(1, 'onetime', 'পুরো কোর্স ফি', $fee)];
+        return [pay_blank_row(1, 'onetime', 'পুরো কোর্স ফি', $fee, 1, 1)];
     }
     // রেজিস্ট্রেশন ফি — এক বা একাধিক কিস্তিতে (reg_installments)
     if ($mode === 'reg_monthly') {
         $label    = trim((string) ($batch['secondary_fee_label'] ?? '')) ?: 'রেজিস্ট্রেশন ফি';
         $regParts = pay_batch_reg_installments($batch);
+        // 🔴 রেজি ফি-র কিস্তিগুলোও **কালেকশন-স্লটে** বসে — নাহলে কুরিয়ারের কোন পার্সেলে এই
+        //    টাকাটা তোলা হবে সেটা জানার উপায় থাকত না, আর পুরোটাই বাদ পড়ত।
+        //    কিস্তি k → k-তম পার্সেল (পার্সেল কম হলে শেষটায়): একবারে নিলে ১ম পার্সেল,
+        //    ৩ বারে নিলে ১ম/২য়/৩য়।
+        // 🔴 বেতনের মতো **পরিসর (month_from..month_to) দেওয়া হয় না** — বেতনের এক কিস্তি
+        //    সত্যিই কয়েক মাসের টাকা, কিন্তু রেজি ফি একবারই নেওয়ার; পরিসর দিলে ঐ এক টাকাটাই
+        //    পরপর কয়েকটা পার্সেলে তোলার জন্য দেখাত (টেস্টে ধরা পড়েছিল)।
+        $regSlotCount = pay_collect_slots($batch, $months);
         foreach (pay_split_amount($regFee, $regParts) as $i => $part) {
-            $rows[] = pay_blank_row($seq++, 'registration', pay_part_label($label, $i + 1, $regParts), $part);
+            $slot   = min($i + 1, $regSlotCount);
+            $rows[] = pay_blank_row($seq++, 'registration', pay_part_label($label, $i + 1, $regParts), $part, $slot, $slot);
         }
     }
 
