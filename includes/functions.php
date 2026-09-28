@@ -765,10 +765,25 @@ function course_deadline_remaining_text(int $seconds): string
     return $m . ' মিনিট ' . $s . ' সেকেন্ড';
 }
 
+/** বাকি সেকেন্ড → ['d'=>, 'h'=>, 'm'=>, 's'=>] (ঋণাত্মক হলে সব শূন্য) */
+function course_deadline_parts(int $seconds): array
+{
+    $seconds = max(0, $seconds);
+    return [
+        'd' => intdiv($seconds, 86400),
+        'h' => intdiv($seconds % 86400, 3600),
+        'm' => intdiv($seconds % 3600, 60),
+        's' => $seconds % 60,
+    ];
+}
+
 /**
- * কাউন্টডাউন চিপ — শুধু কোর্সে, শুধু ডেডলাইন সেট থাকলে এবং এখনো ভর্তি খোলা থাকলে।
- * `data-countdown` = **মিলিসেকেন্ড epoch**; 🔴 এটা টাইমজোন-নিরপেক্ষ, তাই দর্শকের ফোনের ঘড়ি
+ * কাউন্টডাউন ঘড়ি — শুধু কোর্সে, ডেডলাইন সেট **ও** এখনো ভর্তি খোলা থাকলে।
+ * দিন/ঘণ্টা/মিনিট/সেকেন্ড আলাদা বাক্সে (২০২৬-০৯-২৮ সন্ধ্যায় রিডিজাইন — আগে এক লাইনের
+ * টেক্সট ছিল, ইউজার: "আরও সুন্দর করা যায় কিনা")। দিন ০ হলে ঐ বাক্সটা লুকানো থাকে।
+ * `data-countdown` = **মিলিসেকেন্ড epoch**; 🔴 টাইমজোন-নিরপেক্ষ, তাই দর্শকের ফোনের ঘড়ি
  * অন্য দেশে সেট থাকলেও ঠিক সময়ই গোনে (`site-footer.php`-এর আলাদা ছোট স্ক্রিপ্ট প্রতি সেকেন্ডে আপডেট করে)।
+ * 🔴 স্ক্রিন-রিডারের জন্য `aria-label`-এ পুরো বাক্য (আলগা সংখ্যাগুলো একা অর্থহীন শোনায়)।
  */
 function render_countdown_html(array $item, string $type = 'course', string $size = 'sm'): string
 {
@@ -782,12 +797,26 @@ function render_countdown_html(array $item, string $type = 'course', string $siz
     // 🔴 এই ফ্ল্যাগ দেখে `site-footer.php` কাউন্টডাউনের স্ক্রিপ্টটা বসায় — যে পাতায় কোনো ঘড়ি
     // নেই (ওয়ার্কশিট/প্রোডাক্ট/বন্ধ কোর্স) সেখানে স্ক্রিপ্টটাই যায় না।
     $GLOBALS['edu_has_countdown'] = true;
-    $left = $ts - time();
-    $urgent = $left <= 86400 ? ' cd-urgent' : '';   // শেষ ২৪ ঘণ্টায় লাল
+    $left   = $ts - time();
+    $parts  = course_deadline_parts($left);
+    $urgent = $left <= 86400 ? ' cd-urgent' : '';   // শেষ ২৪ ঘণ্টায় লাল + মৃদু স্পন্দন
     $cls    = $size === 'lg' ? ' cd-lg' : '';
-    return '<div class="cd-chip' . $urgent . $cls . '" data-countdown="' . ($ts * 1000) . '">'
-        . '<span>⏳</span> <span class="cd-lbl">ভর্তির সময় বাকি</span> '
-        . '<b class="cd-val">' . e(course_deadline_remaining_text($left)) . '</b></div>';
+
+    $boxes = '';
+    foreach (['d' => 'দিন', 'h' => 'ঘণ্টা', 'm' => 'মিনিট', 's' => 'সেকেন্ড'] as $unit => $label) {
+        // দিন বাকি না থাকলে ঐ বাক্সটা লুকানো (JS-ও এই ক্লাসটাই তোলে/বসায়)
+        $off = ($unit === 'd' && $parts['d'] === 0) ? ' cd-off' : '';
+        // 🔴 ঘণ্টা/মিনিট/সেকেন্ডে শূন্য বসানো (08) — নাহলে বাক্সের প্রস্থ বদলে নড়াচড়া করে
+        $val = $unit === 'd' ? (string) $parts['d'] : str_pad((string) $parts[$unit], 2, '0', STR_PAD_LEFT);
+        $boxes .= '<span class="cd-box' . $off . '" data-cd-box="' . $unit . '">'
+            . '<b data-cd="' . $unit . '">' . $val . '</b><i>' . $label . '</i></span>';
+    }
+
+    return '<div class="cd-chip' . $urgent . $cls . '" data-countdown="' . ($ts * 1000) . '"'
+        . ' role="timer" aria-label="ভর্তির সময় বাকি ' . e(course_deadline_remaining_text($left)) . '">'
+        . '<div class="cd-head"><span aria-hidden="true">⏳</span> <span class="cd-lbl">ভর্তির সময় বাকি</span></div>'
+        . '<div class="cd-boxes">' . $boxes . '</div>'
+        . '</div>';
 }
 
 function render_item_card(array $item, string $type): string

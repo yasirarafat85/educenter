@@ -335,22 +335,14 @@
         var els = document.querySelectorAll('.cd-chip[data-countdown]');
         if (!els.length) { return; }
 
-        // 🔴 English অঙ্ক — পাবলিক সাইটের নিয়ম (বাংলা ১/৮/৯ প্রায় একই দেখায়)।
-        // PHP-র course_deadline_remaining_text() এর সাথে ফরম্যাট হুবহু এক রাখুন।
-        function fmt(s) {
-            var d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600),
-                m = Math.floor((s % 3600) / 60), sec = s % 60;
-            if (d > 0) { return d + ' দিন ' + h + ' ঘণ্টা ' + m + ' মিনিট'; }
-            if (h > 0) { return h + ' ঘণ্টা ' + m + ' মিনিট ' + sec + ' সেকেন্ড'; }
-            return m + ' মিনিট ' + sec + ' সেকেন্ড';
-        }
+        function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
         function over(el) {
             el.classList.remove('cd-urgent');
             el.classList.add('cd-over');
-            var lbl = el.querySelector('.cd-lbl'), val = el.querySelector('.cd-val');
+            var lbl = el.querySelector('.cd-lbl');
             if (lbl) { lbl.textContent = 'এই ব্যাচে ভর্তির সময় শেষ'; }
-            if (val) { val.textContent = ''; }
+            el.setAttribute('aria-label', 'এই ব্যাচে ভর্তির সময় শেষ');
             // ফর্মের পাতায় থাকলে সাবমিট বন্ধ। 🔴 এটা নিছক আগেভাগে জানানো —
             // আসল গার্ড সার্ভারে (course-register-submit.php), ব্রাউজারের ঘড়িতে ভরসা নেই।
             var forms = document.querySelectorAll('[data-countdown-lock]');
@@ -365,6 +357,22 @@
             }
         }
 
+        function paint(el, left) {
+            var d = Math.floor(left / 86400),
+                h = Math.floor((left % 86400) / 3600),
+                m = Math.floor((left % 3600) / 60),
+                s = left % 60;
+            var vals = { d: '' + d, h: pad(h), m: pad(m), s: pad(s) };
+            for (var k in vals) {
+                var b = el.querySelector('[data-cd="' + k + '"]');
+                if (b && b.textContent !== vals[k]) { b.textContent = vals[k]; }
+            }
+            // দিন ফুরিয়ে গেলে বাক্সটা সরে যায় (সার্ভারের রেন্ডারের সাথে একই নিয়ম)
+            var dBox = el.querySelector('[data-cd-box="d"]');
+            if (dBox) { dBox.classList.toggle('cd-off', d === 0); }
+            if (left <= 86400) { el.classList.add('cd-urgent'); }
+        }
+
         function tick() {
             var live = 0;
             for (var i = 0; i < els.length; i++) {
@@ -376,9 +384,7 @@
                     continue;
                 }
                 live++;
-                var val = el.querySelector('.cd-val');
-                if (val) { val.textContent = fmt(left); }
-                if (left <= 86400) { el.classList.add('cd-urgent'); }
+                paint(el, left);
             }
             if (live) { setTimeout(tick, 1000); }
         }

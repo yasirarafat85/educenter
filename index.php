@@ -6,20 +6,51 @@ $activePage = 'home';
 $pageDescription = get_setting('site_meta_description') ?: (get_setting('site_name', 'EduCenter') . ' — উন্নতমানের কোর্স, ওয়ার্কশিট ও শিক্ষা উপকরণ। বিশেষজ্ঞ শিক্ষকদের তত্ত্বাবধানে আধুনিক শিক্ষা পদ্ধতি।');
 
 $db = get_db();
-// চলমান (registration_open) কোর্স আগে দেখানো হয় — ভিজিটর হোমপেজেই যেন খোলা ভর্তি সামনে পায়
-$featuredCourses = $db->query(
-    'SELECT cb.*, c.title FROM course_batches cb JOIN courses c ON c.id = cb.course_id WHERE cb.is_active = 1 ORDER BY cb.registration_open DESC, cb.sort_order ASC, cb.id ASC LIMIT 3'
+// 🔴 সব সক্রিয় ব্যাচ একবারেই তোলা হয় — নিচের তিনটা জিনিস (গণনা · "সময় শেষ হয়ে আসছে" পট্টি ·
+//    হোমপেজের ৩টা কার্ড) এই একটা ফলাফল থেকেই হয়, তিনটা আলাদা কোয়েরি নয়।
+//    `cb.*` রাখা হয়েছে যাতে registration_deadline মাইগ্রেশনের আগেও কোয়েরিটা না ভাঙে।
+$allBatches = $db->query(
+    'SELECT cb.*, c.title FROM course_batches cb JOIN courses c ON c.id = cb.course_id
+     WHERE cb.is_active = 1 ORDER BY cb.sort_order ASC, cb.id ASC'
 )->fetchAll();
+
 // এখন কয়টা কোর্সে ভর্তি চলছে — হোমপেজে হাইলাইট করার জন্য।
 // 🔴 গণনা SQL-এ নয়, PHP-তে course_reg_open() দিয়ে — ভর্তির শেষ সময় (registration_deadline)
 // পেরিয়ে যাওয়া ব্যাচও SQL-এ registration_open = 1 থাকে, ওটা গুনলে সংখ্যাটা বেশি দেখাত।
 // (SQL-এ NOW() দিয়ে করা যেত না — MySQL সার্ভারের টাইমজোন ঢাকার সাথে না-ও মিলতে পারে।)
 $openCourseCount = 0;
-foreach ($db->query('SELECT * FROM course_batches WHERE is_active = 1 AND registration_open = 1')->fetchAll() as $ocRow) {
-    if (course_reg_open($ocRow)) {
-        $openCourseCount++;
+// ⏳ যেসব ব্যাচে ঘড়ি চলছে — হোমপেজের উপরের পট্টিতে (ইউজার: "কাউন্টডাউন চলছে এমন কোর্স
+//    ওয়েবসাইটে এসেই যেন নজরে পড়ে")। শেষ হওয়ার সময় যত কাছে, তত আগে।
+$deadlineCourses = [];
+foreach ($allBatches as $cbRow) {
+    if (!course_reg_open($cbRow)) {
+        continue;
+    }
+    $openCourseCount++;
+    $cbTs = course_deadline_ts($cbRow['registration_deadline'] ?? '');
+    if ($cbTs !== null) {
+        $cbRow['_deadline_ts'] = $cbTs;
+        $deadlineCourses[] = $cbRow;
     }
 }
+usort($deadlineCourses, fn($a, $b) => $a['_deadline_ts'] <=> $b['_deadline_ts']);
+$deadlineCourses = array_slice($deadlineCourses, 0, 3);   // পট্টিতে সর্বোচ্চ ৩টা, নাহলে হিরোকেই ঢেকে দিত
+
+// হোমপেজের ৩টা কার্ড — 🔴 ঘড়ি-চলা ব্যাচ সবার আগে (সময় যত কাছে তত আগে), তারপর আগের
+// নিয়মেই খোলা ভর্তি আগে, তারপর অ্যাডমিনের নিজের ক্রম।
+$featuredCourses = $allBatches;
+usort($featuredCourses, function ($a, $b) {
+    $ad = course_reg_open($a) ? course_deadline_ts($a['registration_deadline'] ?? '') : null;
+    $bd = course_reg_open($b) ? course_deadline_ts($b['registration_deadline'] ?? '') : null;
+    if ($ad !== null && $bd !== null) { return $ad <=> $bd; }
+    if ($ad !== null) { return -1; }
+    if ($bd !== null) { return 1; }
+    $c = (int) !empty($b['registration_open']) <=> (int) !empty($a['registration_open']);
+    if ($c !== 0) { return $c; }
+    $c = (int) $a['sort_order'] <=> (int) $b['sort_order'];
+    return $c !== 0 ? $c : ((int) $a['id'] <=> (int) $b['id']);
+});
+$featuredCourses = array_slice($featuredCourses, 0, 3);
 // 🔴 ওয়ার্কশিট ও প্রোডাক্টও হোমপেজে (২০২৬-০৯-২৭, ইউজার: "প্রোডাক্ট পেইজে মেনু থেকে খুঁজতে
 //    হয়, যেটা অনেকেই করবে না")। নিচের স্টিকি বারে ঠিক ৫টা স্লট বলে ওখানে জায়গা নেই
 //    (CLAUDE.md-এর নিয়ম) — তাই স্ক্রল করলেই সামনে পড়ে, এভাবেই সমাধান।
@@ -71,6 +102,30 @@ require __DIR__ . '/includes/site-header.php';
             </div>
         </div>
     </section>
+
+    <?php // ⏳ "ভর্তির সময় শেষ হয়ে আসছে" — হিরোর ঠিক নিচে, স্ক্রল না করেই চোখে পড়ে।
+          // 🔴 কার্ড নয়, সরু সারি — নিচের কোর্স-গ্রিডে একই কোর্স আবার আসবে, পুরো কার্ড
+          //    দিলে হোমপেজে একই জিনিস দুইবার দেখাত। কিছু না থাকলে পুরো অংশটাই রেন্ডার হয় না। ?>
+    <?php if ($deadlineCourses): ?>
+    <section class="cd-strip">
+        <div class="cd-strip-head">⏳ ভর্তির সময় শেষ হয়ে আসছে</div>
+        <div class="cd-strip-sub">সময় শেষ হলে এই ব্যাচে আর ভর্তি নেওয়া যাবে না</div>
+        <div class="cd-strip-list">
+            <?php foreach ($deadlineCourses as $dc): ?>
+            <a href="course-register?course_id=<?= (int) $dc['id'] ?>" class="cd-row">
+                <span class="cd-row-main">
+                    <span class="cd-row-title"><?= e($dc['title']) ?></span>
+                    <?php if (!empty($dc['batch_name'])): ?>
+                        <span class="cd-row-batch"><?= e($dc['batch_name']) ?></span>
+                    <?php endif; ?>
+                </span>
+                <?= render_countdown_html($dc, 'course') ?>
+                <span class="cd-row-go">ভর্তি হন →</span>
+            </a>
+            <?php endforeach; ?>
+        </div>
+    </section>
+    <?php endif; ?>
 
     <section>
         <div class="text-center mb-14 sm:mb-16 section-heading">
