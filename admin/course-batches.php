@@ -31,6 +31,7 @@ $batchFields = [
     'batch_name' => ['label' => 'ব্যাচের নাম (যেমন: ৫ম ব্যাচ, July_26 — আগে ব্যবহৃত নাম থেকে বেছে নিতে পারবেন বা নতুন লিখতে পারবেন)', 'type' => 'text', 'required' => true],
     'image' => ['label' => 'ছবি', 'type' => 'image'],
     'price' => ['label' => 'মূল/মাসিক ফি (যেমন ৳২৯০ মাসিক)', 'type' => 'text'],
+    'old_price'   => ['label' => 'আগের দাম (ঐচ্ছিক — ডিসকাউন্ট দেখাতে)', 'type' => 'text', 'help' => 'ডিসকাউন্ট দেখাতে চাইলে এখানে আগের (বেশি) দাম দিন — সাইটে এটা কাটা দাগ দিয়ে দেখাবে ও কত% ছাড় হিসাব করে দেখাবে। খালি রাখলে ডিসকাউন্ট দেখাবে না।'],
     'secondary_fee_label' => ['label' => 'দ্বিতীয় ফি\'র নাম', 'type' => 'text', 'suggest' => true, 'help' => 'যেমন: উপকরণ ফি / রেজিস্ট্রেশন ফি। খালি রাখলে দ্বিতীয় ফি দেখাবে না।'],
     'secondary_fee' => ['label' => 'দ্বিতীয় ফি\'র পরিমাণ', 'type' => 'text', 'help' => 'যেমন: ৳৩৫০। উপরের নামসহ কার্ড ও রেজিস্ট্রেশন পেজে আলাদা লাইনে দেখাবে (আয়ে যোগ হয় না)।'],
     'registration_fee' => ['label' => 'রেজিস্ট্রেশন ফি — টাকার অঙ্কে (খাতার জন্য)', 'type' => 'number', 'default' => 0, 'help' => '🔑 অর্ডারের টাকার খাতায় "রেজিস্ট্রেশন ফি" কিস্তির প্রাপ্য এখান থেকেই বসবে। শুধু সংখ্যা লিখুন (যেমন 500)। ০ রাখলে উপরের দ্বিতীয় ফি-র পরিমাণ থেকে বুঝে নেওয়ার চেষ্টা করবে।'],
@@ -57,7 +58,8 @@ $batchFields = [
 // মাইগ্রেশন (migrate-payment-split.sql) এখনো চালানো না থাকলে নতুন ঘরটা ফর্ম থেকেই বাদ যায় —
 // নাহলে INSERT/UPDATE-এ "Unknown column" এসে ব্যাচ সেভ করাই ভেঙে যেত।
 foreach (['tuition_split_mode' => 'migrate-payment-split.sql',
-          'card_excerpt'      => 'migrate-card-excerpt.sql'] as $bfCol => $bfMigration) {
+          'card_excerpt'      => 'migrate-card-excerpt.sql',
+          'old_price'         => 'migrate-course-old-price.sql'] as $bfCol => $bfMigration) {
     if (!db_has_column($db, 'course_batches', $bfCol)) {
         unset($batchFields[$bfCol]);
     }
@@ -268,7 +270,14 @@ require __DIR__ . '/includes/layout-top.php';
                         <?php endif; ?>
                     </td>
                     <td class="py-2.5 px-4 font-semibold"><?= e($b['batch_name']) ?></td>
-                    <td class="py-2.5 px-4"><?= e($b['price'] ?: '-') ?></td>
+                    <td class="py-2.5 px-4">
+                        <?= e($b['price'] ?: '-') ?>
+                        <?php // 💸 আগের দাম থাকলে পাশে কাটা দাগে — তালিকা থেকেই বোঝা যায় কোন ব্যাচে ছাড় চলছে।
+                              //    ⚠️ inline style (Tailwind-এর line-through ক্লাস অ্যাডমিন CSS-এ নেই, রিবিল্ড এড়াতে) ?>
+                        <?php if (trim((string) ($b['old_price'] ?? '')) !== ''): ?>
+                            <span class="text-xs" style="color:#9ca3af;text-decoration:line-through"><?= e($b['old_price']) ?></span>
+                        <?php endif; ?>
+                    </td>
                     <td class="py-2.5 px-4"><?= e($b['instructor'] ?: '-') ?></td>
                     <td class="py-2.5 px-4"><?= e($b['duration'] ?: '-') ?></td>
                     <td class="py-2.5 px-4"><?= $b['registration_open'] ? '<span class="text-green-600 font-semibold">হ্যাঁ</span>' : '<span class="text-gray-400">না</span>' ?></td>

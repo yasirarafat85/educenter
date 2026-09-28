@@ -135,6 +135,7 @@ CREATE TABLE course_batches (
     slug VARCHAR(255) NOT NULL UNIQUE,
     image VARCHAR(500),
     price VARCHAR(50),
+    old_price VARCHAR(50), -- আগের (বেশি) দাম — দিলে সাইটে কাটা দাগ + কত% ছাড় দেখায়; খালি = ছাড় দেখায় না
     secondary_fee_label VARCHAR(100) NOT NULL DEFAULT '', -- দ্বিতীয় ফি'র নাম (যেমন উপকরণ/রেজিস্ট্রেশন ফি) — ডিসপ্লে-only
     secondary_fee VARCHAR(50) NOT NULL DEFAULT '',
     payment_schedule TEXT, -- পেমেন্ট সময়সূচি (কখন কত দিতে হবে) — রেজিস্ট্রেশন সফল কার্ডে দেখায়, ডিসপ্লে-only
