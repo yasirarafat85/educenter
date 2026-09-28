@@ -28,6 +28,10 @@ $activePage = $type === 'course' ? 'courses' : ($type === 'worksheet' ? 'workshe
 $backUrl = $type === 'course' ? 'courses' : ($type === 'worksheet' ? 'worksheets' : 'products');
 // নিচের ফিরে-যাওয়ার বোতামে টাইপ অনুযায়ী পরিষ্কার নাম (উপরেরটা ছোট, শুধু "ফিরে যান")
 $backLabel = $type === 'course' ? 'সব কোর্স দেখুন' : ($type === 'worksheet' ? 'সব ওয়ার্কশিট দেখুন' : 'সব প্রোডাক্ট দেখুন');
+// 🔗 কপি-বোতামের লেখাতেও টাইপ (২০২৬-০৯-২৮) — নিচে "আরও কোর্স" কার্ডগুলো থাকায়
+// শুধু "লিংক কপি করুন" লেখা থাকলে কোনটার লিংক কপি হচ্ছে বোঝা যেত না।
+$copyLabel = $type === 'course' ? 'এই কোর্সের লিংক কপি করুন'
+    : ($type === 'worksheet' ? 'এই ওয়ার্কশিটের লিংক কপি করুন' : 'এই প্রোডাক্টের লিংক কপি করুন');
 $registrationClosed = $type === 'course' && !course_reg_open($item);
 $actionLabel = $registrationClosed ? 'রেজিস্ট্রেশন বন্ধ' : ($type === 'course' ? 'Register Now - রেজিস্ট্রেশন করুন' : 'Order Now - অর্ডার করুন');
 $actionUrl = $type === 'course' ? ('course-register?course_id=' . (int) $item['id']) : ('register?type=' . urlencode($type) . '&id=' . (int) $item['id']);
@@ -138,6 +142,16 @@ require __DIR__ . '/includes/site-header.php';
         </div>
     </div>
 
+    <?php // 🔗 "লিংক কপি করুন" — 🔴 এই কার্ডের **ঠিক নিচে**, `max-w-3xl` মোড়কের ভেতরে
+          //    (২০২৬-০৯-২৮, ইউজার: "কোন কোর্সের কপি হচ্ছে বোঝা যাচ্ছে না")। আগে পেজের
+          //    একদম শেষে ছিল — কিন্তু তার আগে "আরও কোর্স" সেকশনের ৩টা কার্ড বসে, তাই
+          //    বোতামটা ঐ কার্ডগুলোর একটার বলে মনে হতো। লেখাতেও এখন টাইপ ($copyLabel)।
+          //    কপি হয় **ছোট রূপ** (`…/course-15`) — অ্যাড্রেস বার থেকে নিলে বাংলা নামের
+          //    অংশ `%E0%A6%…` হয়ে লিংক দৈত্যাকার দেখায়। ?>
+    <div class="cc-btns mt-5 mx-auto" style="max-width:360px;grid-template-columns:minmax(0,1fr)">
+        <button type="button" class="cc-btn cc-btn-go" data-copy-url="<?= e(item_share_url($item, $type)) ?>">🔗 <?= e($copyLabel) ?></button>
+    </div>
+
 </div>
 
 <?php
@@ -162,11 +176,10 @@ $relatedHeading = $type === 'course' ? '📚 আরও কোর্স'
 <?php // ⬅️ নিচেও একটা "ফিরে যান" (২০২৬-০৯-২৫, ইউজারের স্ক্রিনশট — কার্ডের নিচে ফাঁকা জায়গা
       // পড়ে থাকত, আর পুরো পেজ পড়ার পর আবার উপরে স্ক্রল করতে হতো)। স্টাইল `.cc-btn`
       // (সাধারণ CSS, থিম-রঙ) — Tailwind রিবিল্ড লাগে না।
-      // 🔗 তার উপরে "লিংক কপি করুন" (২০২৬-০৯-২৭) — অ্যাড্রেস বার থেকে কপি করলে বাংলা
-      //    নামের অংশটা `%E0%A6%…` রূপে বিশাল লম্বা হয়ে যায় (ইউজারের প্রশ্ন থেকে);
-      //    এই বোতাম **ছোট রূপটা** (`…/course-15`) কপি করে, যেটা হুবহু একই পাতা খোলে। ?>
+      // 🔗 "লিংক কপি করুন" এখানে **নেই** — ২০২৬-০৯-২৮ থেকে সেটা কার্ডের ঠিক নিচে
+      //    (উপরে দেখুন)। এখানে শুধু নেভিগেশন, কারণ "আরও কোর্স" সেকশনের পরে যা থাকে
+      //    সেটা আর কোনো একটা নির্দিষ্ট আইটেমের বলে পড়া যায় না। ?>
 <div class="cc-btns mt-8 mb-4 mx-auto" style="max-width:360px;grid-template-columns:minmax(0,1fr)">
-    <button type="button" class="cc-btn cc-btn-go" data-copy-url="<?= e(item_share_url($item, $type)) ?>">🔗 লিংক কপি করুন</button>
     <a href="<?= e($backUrl) ?>" class="cc-btn cc-btn-plain">← <?= e($backLabel) ?></a>
 </div>
 
