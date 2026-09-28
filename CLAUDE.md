@@ -6,6 +6,7 @@
 - ব্যবসায়িক/ফিচার প্রেক্ষাপট → [PROJECT-NOTES.md](PROJECT-NOTES.md)
 - কী কী পরিবর্তন কবে হয়েছে → [CHANGELOG.md](CHANGELOG.md)
 - হোস্টিং এ ডিপ্লয় করার ধাপ → [SETUP-GUIDE.md](SETUP-GUIDE.md)
+- ব্যাকআপ নেওয়া ও লোকালে ফিরিয়ে যাচাই করা → [BACKUP-GUIDE.md](BACKUP-GUIDE.md)
 - পাবলিক সাইটে কী কী উন্নতি বাকি (অডিট + ৫ ধাপের চেকলিস্ট, ২০২৬-০৯-২৬) → [PUBLIC-SITE-IMPROVEMENT-PLAN.md](PUBLIC-SITE-IMPROVEMENT-PLAN.md)
 
 ---
