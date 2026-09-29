@@ -100,6 +100,7 @@ function admin_nav_groups(): array
     if (admin_can('orders')) {
         $orders[] = ['key' => 'registrations',    'href' => 'registrations.php',    'file' => 'registrations.php',    'icon' => 'clipboard-list',    'label' => 'রেজিস্ট্রেশন/অর্ডার'];
         $orders[] = ['key' => 'course-data',      'href' => 'course-data.php',      'file' => 'course-data.php',      'icon' => 'table',             'label' => 'ডেটা টেবিল'];
+        $orders[] = ['key' => 'income-fix',       'href' => 'income-fix.php',       'file' => 'income-fix.php',       'icon' => 'scale',             'label' => 'আয় মেলানো'];
         $orders[] = ['key' => 'course-interests', 'href' => 'course-interests.php', 'file' => 'course-interests.php', 'icon' => 'heart-handshake',   'label' => 'আগ্রহ তালিকা'];
         $orders[] = ['key' => 'legacy-students',  'href' => 'legacy-students.php',  'file' => 'legacy-students.php',  'icon' => 'user-round-search', 'label' => 'পুরাতন শিক্ষার্থী'];
     }

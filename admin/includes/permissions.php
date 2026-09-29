@@ -52,6 +52,8 @@ function admin_page_sections(): array
         'course-media.php'          => ['content:courses'],
         'registrations.php'         => ['orders'],
         'course-data.php'           => ['orders'],
+        // 💰 আয় মেলানো — অর্ডারের টাকার খাতা বসায় (registrations.php-এর "টাকা" ড্রয়ারের মতোই), তাই একই সেকশন
+        'income-fix.php'            => ['orders'],
         'course-interests.php'      => ['orders'],
         'legacy-students.php'       => ['orders'],
         'course-parcel.php'         => ['parcel'],

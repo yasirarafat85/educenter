@@ -140,6 +140,14 @@ $taskDefs = [
      'label' => 'পেন্ডিং অর্ডার', 'hint' => 'কনফার্ম করা বাকি', 'cls' => 'bg-orange-100 text-orange-500', 'num' => 'text-orange-500',
      'sql' => "SELECT COUNT(*) c FROM registrations WHERE status = 'pending'"],
 
+    // 💰 পুরনো নিয়মে (কনফার্ম করলেই আয়) বসে যাওয়া আয় — খাতা নেই বলে অঙ্কটা যাচাই করা হয়নি
+    ['page' => 'income-fix.php', 'url' => 'income-fix.php', 'icon' => 'scale',
+     'label' => 'আয় মেলানো বাকি', 'hint' => 'বইয়ে আয় আছে, টাকার খাতা নেই', 'cls' => 'bg-amber-100 text-amber-600', 'num' => 'text-amber-600',
+     'sql' => "SELECT COUNT(*) c FROM registrations r
+                 WHERE r.status IN ('confirmed', 'shipped', 'delivered')
+                   AND (r.income_approved = 1 OR EXISTS (SELECT 1 FROM income i WHERE i.registration_id = r.id))
+                   AND NOT EXISTS (SELECT 1 FROM registration_payments rp WHERE rp.registration_id = r.id)"],
+
     ['page' => 'users.php', 'url' => 'users.php?status=pending', 'icon' => 'user-plus',
      'label' => 'নতুন অভিভাবক অ্যাকাউন্ট', 'hint' => 'approve করা বাকি', 'cls' => 'bg-blue-100 text-blue-600', 'num' => 'text-blue-600',
      'sql' => "SELECT COUNT(*) c FROM users WHERE status = 'pending'"],
