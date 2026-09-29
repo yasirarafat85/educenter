@@ -107,6 +107,10 @@ function admin_nav_groups(): array
     if (admin_can('parcel')) {
         $orders[] = ['key' => 'course-parcel', 'href' => 'course-parcel.php', 'file' => 'course-parcel.php', 'icon' => 'package-check', 'label' => 'কোর্স পার্সেল'];
     }
+    // 👥 গ্রুপ মিলিয়ে দেখা — parcel বা orders, যেকোনো একটা থাকলেই (permissions.php-এর ম্যাপের সাথে মিল)
+    if (admin_can('parcel') || admin_can('orders')) {
+        $orders[] = ['key' => 'group-match', 'href' => 'group-match.php', 'file' => 'group-match.php', 'icon' => 'users-round', 'label' => 'গ্রুপ মিলিয়ে দেখা'];
+    }
     if (admin_can('users')) {
         $orders[] = ['key' => 'users', 'href' => 'users.php', 'file' => 'users.php', 'icon' => 'users', 'label' => 'অভিভাবক অ্যাকাউন্ট'];
         $orders[] = ['key' => 'user-requests', 'href' => 'user-requests.php', 'file' => 'user-requests.php', 'icon' => 'message-square', 'label' => 'অনুরোধ / মন্তব্য'];

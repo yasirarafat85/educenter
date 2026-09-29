@@ -57,6 +57,9 @@ function admin_page_sections(): array
         'course-interests.php'      => ['orders'],
         'legacy-students.php'       => ['orders'],
         'course-parcel.php'         => ['parcel'],
+        // 👥 গ্রুপ মিলিয়ে দেখা — শুধু পড়ে দেখায় (কিছু সেভ করে না), কিন্তু গ্রুপের
+        //    টিক parcel-এ আর রেজিস্ট্রেশনের নাম orders-এ — যেকোনো একটা থাকলেই চলবে।
+        'group-match.php'           => ['parcel', 'orders'],
         'course-tracking.php'       => ['parcel'],
         'courier-prepare.php'       => ['parcel'],
         'courier.php'               => ['courier'],

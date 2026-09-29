@@ -1,0 +1,30 @@
+# ══════════════════════════════════════════════════════════════════════════
+#  OCR (tesseract.js) অ্যাসেট — ব্রাউজারে ছবি থেকে লেখা পড়ার লাইব্রেরি
+#  ব্যবহার: admin/group-match.php (গ্রুপ মিলিয়ে দেখা)
+# ══════════════════════════════════════════════════════════════════════════
+
+# 🔴🔴 `.gz` ফাইলটা (eng.traineddata.gz) **কাঁচা বাইট** হিসেবেই যেতে হবে।
+#    অনেক হোস্টের ডিফল্ট কনফিগে `AddEncoding x-gzip .gz` থাকে — তখন Apache
+#    হেডারে `Content-Encoding: gzip` বসায়, ব্রাউজার নিজেই খুলে ফেলে, আর
+#    tesseract.js সেই **খোলা** ডেটাকে আবার gunzip করতে গিয়ে ভেঙে পড়ে
+#    ("Error: incorrect header check")। তাই এনকোডিং সরিয়ে সাধারণ বাইনারি
+#    টাইপ বসানো হলো।
+<IfModule mod_mime.c>
+    RemoveEncoding .gz
+    AddType application/octet-stream .gz
+</IfModule>
+
+# ⚠️ mod_deflate দিয়ে এগুলো আবার চাপার দরকার নেই — .gz আগেই কম্প্রেসড,
+#    আর wasm.js একবার নামিয়ে ব্রাউজার এক বছর ক্যাশে রাখে।
+<IfModule mod_deflate.c>
+    SetEnvIfNoCase Request_URI \.gz$ no-gzip dont-vary
+</IfModule>
+
+# ক্যাশ: এই ফাইলগুলো লাইব্রেরির নির্দিষ্ট ভার্সন, কখনো বদলায় না (বদলালে
+# নতুন ভার্সন নামিয়ে `?v=` বাড়ানো হয় — group-match.php দেখুন)।
+# 🔴 রুট .htaccess-এ `ExpiresDefault "access plus 1 hour"` বলে .gz/.traineddata
+#    মাত্র ১ ঘণ্টা ক্যাশ হতো — ৩ MB ফাইল বারবার নামত। এখানে তাই ১ বছর।
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresDefault "access plus 1 year"
+</IfModule>
