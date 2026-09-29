@@ -1422,7 +1422,11 @@ require __DIR__ . '/includes/layout-top.php';
                 <h4 class="text-sm font-bold text-gray-700 mb-2">টাকার খাতা</h4>
                 <?php // তালিকার সাথে হুবহু একই প্যানেল (শেয়ার্ড ফাংশন) — একটা লুকানো টেবিলে মুড়ে, যাতে <tr> বৈধ থাকে ?>
                 <table class="w-full"><tbody>
-                    <?php reg_pay_panel($db, $viewRow, pay_fetch_many($db, [(int) $viewRow['id']])[(int) $viewRow['id']] ?? [], $viewUrlSelf, 1); ?>
+                    <?php
+                    // খাতাটা একবারই তোলা হয় — নিচের "আয়" বক্সের ইঙ্গিতেও এটাই লাগে
+                    $viewLedger = pay_fetch_many($db, [(int) $viewRow['id']])[(int) $viewRow['id']] ?? [];
+                    reg_pay_panel($db, $viewRow, $viewLedger, $viewUrlSelf, 1);
+                    ?>
                 </tbody></table>
                 <script>document.getElementById('pay-<?= (int) $viewRow['id'] ?>').hidden = false;</script>
             </div>
@@ -1484,7 +1488,25 @@ require __DIR__ . '/includes/layout-top.php';
                     </form>
                 </div>
             <?php else: ?>
-                <p class="text-sm text-gray-500 italic">এই অর্ডারটি এখনো আয় হিসেবে গণনা হয়নি। স্ট্যাটাস "কনফার্ম" করলে অটোমেটিক যোগ হয়ে যাবে।</p>
+                <?php
+                // 🔴 আগে এখানে লেখা ছিল "স্ট্যাটাস কনফার্ম করলে অটোমেটিক যোগ হয়ে যাবে" — ২০২৬-০৯-২৯
+                // থেকে সেটা আর সত্যি নয় (কনফার্ম করলে আয় বসে না, আয় আসে খাতার মোট জমা থেকে)।
+                // ইউজার ঐ লেখাটা পড়ে অপেক্ষা করছিলেন, অথচ অর্ডারটা আগেই কনফার্ম করা ছিল।
+                $viewPaid = pay_paid_total($viewLedger ?? []);
+                ?>
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+                    <p class="font-bold mb-1">এই অর্ডারটি এখনো আয় হিসেবে গণনা হয়নি</p>
+                    <?php if (!$viewLedger): ?>
+                        <p>উপরের <strong>💰 টাকার খাতা</strong>-য় কিস্তিগুলো মিলিয়ে নিয়ে, যে কিস্তিতে টাকা এসেছে তার
+                           <strong>“জমা”</strong> ঘরে অঙ্কটা লিখে <strong>“সংরক্ষণ করুন”</strong> চাপুন — ততটুকুই আয়ে যাবে।</p>
+                    <?php elseif ($viewPaid <= 0): ?>
+                        <p>খাতা বসানো আছে, কিন্তু কোনো কিস্তিতে <strong>জমা 0</strong>। উপরের খাতায় যে কিস্তিতে টাকা এসেছে
+                           (যেমন রেজিস্ট্রেশন ফি) তার <strong>“জমা”</strong> ঘরে অঙ্কটা লিখে <strong>“সংরক্ষণ করুন”</strong> চাপলেই আয়ে যোগ হবে।</p>
+                    <?php else: ?>
+                        <p>স্ট্যাটাস কনফার্ম/পাঠানো/ডেলিভার্ড না হলে জমা থাকলেও আয় বইয়ে ওঠে না — উপরে স্ট্যাটাসটা দেখুন।</p>
+                    <?php endif; ?>
+                    <p class="text-xs mt-2">🔴 শুধু “কনফার্ম” করলে আয় বসে না — যত টাকা সত্যিই হাতে এসেছে, ততটুকুই খাতা থেকে আয়ে যায়।</p>
+                </div>
             <?php endif; ?>
         </div>
 
@@ -1696,7 +1718,7 @@ require __DIR__ . '/includes/layout-top.php';
             <?php if ($mvLedger): ?>
             <label class="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 cursor-pointer">
                 <input type="checkbox" name="rebuild_ledger" value="1" checked class="mt-0.5">
-                <span class="text-sm text-amber-900">
+                <span class="text-sm text-amber-800">
                     <b>নতুন কোর্সের ফি অনুযায়ী টাকার খাতা নতুন করে সাজান</b>
                     <span class="block text-xs mt-0.5">🔴 <b>জমা দেওয়া টাকা এক পয়সাও বদলাবে না</b> — শুধু প্রাপ্য ও কিস্তির ছক নতুন কোর্সের নিয়মে বসবে। টিক না দিলে খাতা আগের কোর্সের ফি ধরেই থেকে যাবে।</span>
                 </span>

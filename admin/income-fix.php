@@ -30,6 +30,7 @@ const IFX_MAX_AMOUNT = 1000000;   // টাইপো-গার্ড (ফোন 
 
 $groupLabels = [
     'orphan'   => '⚠️ খাতা নেই, অথচ আয় বসানো',
+    'nopaid'   => '📥 খাতা আছে, জমা বসানো হয়নি',
     'noledger' => '📒 খাতা এখনো বসানো হয়নি',
     'mismatch' => '↔️ খাতা ও বইয়ে গরমিল',
 ];
@@ -98,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'fix') 
     }
 
     $before = (float) $db->query('SELECT COALESCE(SUM(amount), 0) FROM income')->fetchColumn();
-    $done = $resynced = $skipped = 0;
+    $done = $filled = $resynced = $skipped = $locked = 0;
     $err = '';
 
     try {
@@ -110,20 +111,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'fix') 
             $rid    = (int) $reg['id'];
             $ledger = pay_fetch_many($db, [$rid])[$rid] ?? [];
 
+            $amount = $want[$rid] ?? null;
+            if ($amount !== null && ($amount < 0 || $amount > IFX_MAX_AMOUNT)) {
+                $skipped++;   // অসম্ভব অঙ্ক (টাইপো) — ছোঁয়া হয় না
+                $amount = null;
+            }
+
             if ($ledger) {
-                // 🔴 খাতা থাকলে খাতাই সত্য — সারি ছোঁয়া হয় না, শুধু বইয়ের আয় মিলিয়ে দেওয়া হয়
+                // 🔴🔴 সেভ করা খাতার কিস্তি কখনো নতুন করে বসানো হয় না — একটাই ব্যতিক্রম:
+                //    **মোট জমা ০** (তখন হারানোর মতো কিছুই নেই, শুধু জমার ঘরগুলো ভরে)।
+                //    জমা থাকলে অ্যাডমিন অর্ডারের "টাকা" ড্রয়ারে গিয়ে নিজে বদলাবেন।
+                if ($amount !== null) {
+                    if (pay_paid_total($ledger) >= 0.01) {
+                        $locked++;
+                        continue;
+                    }
+                    // বিদ্যমান সারিগুলোতেই জমা বসে (id সহ যায় বলে UPDATE হয়, নাম/প্রাপ্য/ছাড় অক্ষত)
+                    pay_save_rows($db, $rid, pay_allocate_paid($ledger, $amount));
+                    sync_income_for_status($db, $reg, (string) $reg['status']);
+                    $filled++;
+                    continue;
+                }
+                // খাতা আছে, টাকা লেখা হয়নি → শুধু বই মেলানো (চেকবক্স দিলে)
                 if (in_array($rid, $syncIds, true)) {
                     sync_income_for_status($db, $reg, (string) $reg['status']);
                     $resynced++;
                 }
                 continue;
             }
-            if (!array_key_exists($rid, $want)) {
-                continue;
-            }
-            $amount = $want[$rid];
-            if ($amount < 0 || $amount > IFX_MAX_AMOUNT) {
-                $skipped++;   // অসম্ভব অঙ্ক (টাইপো) — ছোঁয়া হয় না
+            if ($amount === null) {
                 continue;
             }
 
@@ -147,13 +163,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'fix') 
     }
 
     $after = (float) $db->query('SELECT COALESCE(SUM(amount), 0) FROM income')->fetchColumn();
-    $msg = $done . ' টি অর্ডারের খাতা বসানো হয়েছে';
-    if ($resynced > 0) {
-        $msg .= ', ' . $resynced . ' টির বই খাতার সাথে মেলানো হয়েছে';
-    }
-    $msg .= '। বইয়ে মোট আয় ৳' . number_format($before, 2) . ' → ৳' . number_format($after, 2) . '।';
+    $parts = [];
+    if ($done > 0)     { $parts[] = $done . ' টি অর্ডারের খাতা বসানো হয়েছে'; }
+    if ($filled > 0)   { $parts[] = $filled . ' টির খাতায় জমা বসানো হয়েছে'; }
+    if ($resynced > 0) { $parts[] = $resynced . ' টির বই খাতার সাথে মেলানো হয়েছে'; }
+    $msg = ($parts ? implode(', ', $parts) : 'কিছু বদলানো হয়নি')
+        . '। বইয়ে মোট আয় ৳' . number_format($before, 2) . ' → ৳' . number_format($after, 2) . '।';
     if ($skipped > 0) {
         $msg .= ' ⚠️ ' . $skipped . ' টি ঘরে অস্বাভাবিক অঙ্ক (০-এর কম বা ১০ লাখের বেশি) থাকায় বাদ দেওয়া হয়েছে।';
+    }
+    if ($locked > 0) {
+        $msg .= ' ⚠️ ' . $locked . ' টিতে খাতায় আগে থেকেই জমা আছে বলে এখান থেকে বদলানো হয়নি — অর্ডারের "টাকা" ড্রয়ারে গিয়ে ঠিক করুন।';
     }
     set_flash('success', $msg);
     redirect($back);
@@ -162,8 +182,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'fix') 
 // ---------------- তালিকা ----------------
 // ⚠️ খাতার টেবিল না থাকলে (migrate-payment-ledger.sql চালানো হয়নি) পেজ ভাঙবে না
 $ready    = true;
-$counts   = ['orphan' => 0, 'noledger' => 0, 'mismatch' => 0];
-$byGroup  = ['orphan' => [], 'noledger' => [], 'mismatch' => []];
+$counts   = ['orphan' => 0, 'nopaid' => 0, 'noledger' => 0, 'mismatch' => 0];
+$byGroup  = ['orphan' => [], 'nopaid' => [], 'noledger' => [], 'mismatch' => []];
 $itemOpts = [];
 
 try {
@@ -201,8 +221,12 @@ try {
             $g = ($bk > 0 || !empty($row['income_approved'])) ? 'orphan' : 'noledger';
         } elseif (abs($lp - $bk) >= 0.01) {
             $g = 'mismatch';
+        } elseif ($lp < 0.01) {
+            // খাতা বসানো আছে কিন্তু কোনো কিস্তিতে জমা ০ — তাই আয়ও ০। টাকা সত্যিই এসে থাকলে
+            // এখান থেকে বসানো যায় (ইউজারের ধরা কেস: রেজি ফি ৳500 এসেছে, কিন্তু কোথাও লেখা হয়নি)।
+            $g = 'nopaid';
         } else {
-            continue;   // খাতা আছে, বইও মিলছে — এখানে দেখানোর কিছু নেই
+            continue;   // খাতা আছে, জমাও আছে, বইও মিলছে — এখানে দেখানোর কিছু নেই
         }
         $counts[$g]++;
         $byGroup[$g][] = $row;
@@ -245,6 +269,30 @@ if ($batchIds) {
     }
 }
 
+// এই পাতার যেসব সারিতে খাতা আছে, তাদের খাতা একবারেই (N+1 এড়াতে) — চিপে ঐ খাতার
+// **নিজের** প্রথম কিস্তিটাই দেখানো হয় (ব্যাচের সেটিংসের চেয়ে সেটাই সত্য)
+$ledgerChip = [];
+$withLedger = [];
+foreach ($rows as $row) {
+    if ((int) $row['ledger_rows'] > 0) {
+        $withLedger[] = (int) $row['id'];
+    }
+}
+if ($withLedger) {
+    foreach (pay_fetch_many($db, $withLedger) as $rid => $lrows) {
+        foreach ($lrows as $lr) {
+            if (pay_is_skipped($lr)) {
+                continue;
+            }
+            $net = pay_net($lr);
+            if ($net > 0) {
+                $ledgerChip[$rid] = [mb_substr((string) $lr['label'], 0, 22), $net];
+                break;
+            }
+        }
+    }
+}
+
 $curReturn = ifx_url();
 require __DIR__ . '/includes/layout-top.php';
 ?>
@@ -262,6 +310,11 @@ require __DIR__ . '/includes/layout-top.php';
         বইয়ে ৳790 (মাসিক বেতন) বসে গেছে যদিও হাতে এসেছিল শুধু রেজিস্ট্রেশন ফি। এখন আয়ের একমাত্র উৎস
         <b>টাকার খাতা</b>। নিচের ঘরে <b>আসলে কত টাকা হাতে এসেছে</b> লিখে একবারে সেভ করলে খাতা বসে যাবে
         আর বইয়ের আয়ও ঠিক হয়ে যাবে।
+    </p>
+    <p class="text-gray-700 text-sm leading-relaxed mt-2">
+        খাতা বসানো আছে অথচ <b>কোনো কিস্তিতে জমা ০</b> — এমন অর্ডারও এখানে আসে
+        (<b>📥 খাতা আছে, জমা বসানো হয়নি</b> ট্যাব)। ওখানে টাকা লিখলে <b>খাতার কিস্তিগুলো অপরিবর্তিত থাকে</b>,
+        শুধু জমার ঘর ভরে যায়।
     </p>
     <p class="text-gray-500 text-xs mt-2">🔴 অনুমান করে লিখবেন না — যত টাকা সত্যিই পেয়েছেন ততটুকুই। মনে না থাকলে ঘরটা খালি রাখুন, পরে ঠিক করা যাবে।</p>
 </div>
@@ -385,7 +438,9 @@ require __DIR__ . '/includes/layout-top.php';
                             <input type="number" step="0.01" min="0" name="amt[<?= $rid ?>]" class="ifx-amt w-full px-3 py-2 rounded-xl border border-gray-200 text-sm"
                                    style="min-width:0" placeholder="টাকা" inputmode="decimal">
                             <div class="flex flex-wrap gap-1 mt-1">
-                                <?php if ($regFee > 0): ?>
+                                <?php if (isset($ledgerChip[$rid])): ?>
+                                    <button type="button" onclick="ifxSet(this, <?= (float) $ledgerChip[$rid][1] ?>)" class="text-xs px-2 py-1 rounded-lg bg-gray-100 text-gray-600 font-semibold"><?= e($ledgerChip[$rid][0]) ?> <?= e($money($ledgerChip[$rid][1])) ?></button>
+                                <?php elseif ($regFee > 0): ?>
                                     <button type="button" onclick="ifxSet(this, <?= (float) $regFee ?>)" class="text-xs px-2 py-1 rounded-lg bg-gray-100 text-gray-600 font-semibold">রেজি ফি <?= e($money($regFee)) ?></button>
                                 <?php endif; ?>
                                 <?php if ($booked > 0): ?>
@@ -452,7 +507,7 @@ function ifxConfirm(form) {
         return false;
     }
     var msg = '';
-    if (n > 0) { msg += n + ' টি অর্ডারের খাতা বসবে, মোট জমা ৳' + sum.toLocaleString('en-US') + '। '; }
+    if (n > 0) { msg += n + ' টি অর্ডারে জমা বসবে, মোট ৳' + sum.toLocaleString('en-US') + '। '; }
     if (syncs > 0) { msg += syncs + ' টির বই খাতার সাথে মেলানো হবে। '; }
     msg += 'বইয়ের আয় এই অনুযায়ী বদলে যাবে। ঠিক আছে?';
     return confirmSubmit(form, msg, 'টাকার হিসাব বদলাচ্ছে');
