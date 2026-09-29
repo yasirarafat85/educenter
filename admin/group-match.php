@@ -73,10 +73,97 @@ if ($selItemId > 0) {
     }
 }
 
-// ── POST: মেলানো (কোনো কিছু সংরক্ষণ করা হয় না, তাই redirect-ও নেই — ফলাফল এখানেই দেখানো হয়)
+function gm_url(string $b, array $extra = []): string
+{
+    $q = $b !== '' ? ['b' => $b] : [];
+    $q = array_merge($q, array_filter($extra, fn($v) => $v !== null && $v !== ''));
+    return 'group-match.php' . ($q ? '?' . http_build_query($q) : '');
+}
+
+// ── 🕘 হিস্ট্রি (২০২৬-০৯-২৯, ইউজারের চাওয়া: "মিলালাম সেটা একটা হিস্ট্রি থাকবে")
+//
+// 🔴 এই পাতা এখন **একটাই জিনিস লেখে — নিজের রিপোর্টের রেকর্ড** (`group_match_runs`)।
+//    রেজিস্ট্রেশন · গ্রুপের টিক · স্ট্যাটাস · টাকার খাতা — কিচ্ছু আগের মতোই ছোঁয়া হয় না।
+// 🔴 টেবিল না থাকলে (মাইগ্রেশন চালানো হয়নি) পুরো হিস্ট্রি **চুপচাপ বাদ যায়**, মেলানো
+//    আগের মতোই চলে — এই কোডবেসের প্রতিষ্ঠিত প্যাটার্ন (course_media/user-auth-এর মতো)।
+const GM_KEEP_RUNS = 100;   // এর বেশি পুরনো রান ছেঁটে ফেলা হয়
+
+function gm_history_ready(?PDO $db): bool
+{
+    static $ok = null;
+    if ($ok !== null) { return $ok; }
+    try {
+        ($db ?? get_db())->query('SELECT id FROM group_match_runs LIMIT 0');
+        $ok = true;
+    } catch (PDOException $ex) {
+        $ok = false;
+    }
+    return $ok;
+}
+
+/**
+ * একটা মেলানো সংরক্ষণ করে। ব্যর্থ হলে চুপচাপ false — রিপোর্ট দেখানো কখনো আটকায় না।
+ *
+ * 🔴 হুবহু একই লেখা পরপর দুইবার মেলালে **নতুন সারি বসে না**, আগেরটার সময় হালনাগাদ হয় —
+ *    OCR-এর লেখা ঠিক করতে করতে কেউ ৫ বার চাপলে হিস্ট্রি আবর্জনায় ভরে যেত।
+ */
+function gm_history_save(PDO $db, array $ctx, string $raw, array $snap): bool
+{
+    if (!gm_history_ready($db)) { return false; }
+    try {
+        $st = $db->prepare(
+            'SELECT id FROM group_match_runs
+             WHERE item_id = :i AND batch = :b AND raw_names = :r
+             ORDER BY id DESC LIMIT 1'
+        );
+        $st->execute(['i' => $ctx['item_id'], 'b' => $ctx['batch'], 'r' => $raw]);
+        $dupe = (int) ($st->fetchColumn() ?: 0);
+        $json = json_encode($snap, JSON_UNESCAPED_UNICODE);
+        if ($json === false) { return false; }
+
+        if ($dupe > 0) {
+            $db->prepare('UPDATE group_match_runs SET result_json = :j, n_group = :g, n_matched = :m,
+                          n_unmatched = :u, n_missing = :x, created_at = NOW() WHERE id = :id')
+               ->execute([
+                   'j' => $json, 'g' => $snap['stats']['group'], 'm' => $snap['stats']['matched'],
+                   'u' => $snap['stats']['unmatched'], 'x' => $snap['stats']['missing'], 'id' => $dupe,
+               ]);
+            return true;
+        }
+
+        $db->prepare(
+            'INSERT INTO group_match_runs
+             (item_id, item_title, batch, admin_id, admin_name, raw_names, result_json,
+              n_group, n_matched, n_unmatched, n_missing)
+             VALUES (:i, :t, :b, :aid, :an, :r, :j, :g, :m, :u, :x)'
+        )->execute([
+            'i' => $ctx['item_id'], 't' => $ctx['item_title'], 'b' => $ctx['batch'],
+            'aid' => $ctx['admin_id'] ?: null, 'an' => $ctx['admin_name'],
+            'r' => $raw, 'j' => $json,
+            'g' => $snap['stats']['group'], 'm' => $snap['stats']['matched'],
+            'u' => $snap['stats']['unmatched'], 'x' => $snap['stats']['missing'],
+        ]);
+
+        // পুরনো রান ছাঁটাই — সবচেয়ে নতুন GM_KEEP_RUNS টা রেখে বাকিগুলো
+        // (🔴 LIMIT ইচ্ছাকৃতভাবে int-কাস্ট করে সরাসরি SQL-এ — কোডে লেখা ধ্রুবক,
+        //  আর MySQL-এর DELETE ... LIMIT-এ প্লেসহোল্ডার চলে না)
+        $keep = (int) GM_KEEP_RUNS;
+        $cut  = (int) ($db->query("SELECT id FROM group_match_runs ORDER BY id DESC LIMIT 1 OFFSET {$keep}")->fetchColumn() ?: 0);
+        if ($cut > 0) {
+            $db->prepare('DELETE FROM group_match_runs WHERE id <= :c')->execute(['c' => $cut]);
+        }
+        return true;
+    } catch (PDOException $ex) {
+        return false;
+    }
+}
+
+// ── POST: মেলানো (ফলাফল এখানেই দেখানো হয়, redirect নেই — রিপোর্ট POST থেকেই তৈরি)
 $raw    = '';
 $result = null;
 $parsed = null;
+$snap   = null;
+$saved  = false;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'scan') {
     if (!csrf_verify()) {
         set_flash('error', 'ফর্ম টোকেন মিলছে না।');
@@ -84,12 +171,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'scan')
         $raw    = mb_substr((string) ($_POST['names'] ?? ''), 0, GM_MAX_CHARS);
         $parsed = gm_parse_names($raw);
         $result = gm_match_names($parsed['names'], $regs);
+        $snap   = gm_snapshot($result, $parsed);
+        if ($selItemId > 0 && trim($raw) !== '') {
+            $me    = admin_current();
+            $saved = gm_history_save($db, [
+                'item_id'    => $selItemId,
+                'item_title' => $selLabel !== '' ? explode(' — ', $selLabel)[0] : '',
+                'batch'      => $selBatch,
+                'admin_id'   => (int) ($me['id'] ?? 0),
+                'admin_name' => (string) ($me['name'] ?? ''),
+            ], $raw, $snap);
+        }
     }
 }
 
-function gm_url(string $b): string
-{
-    return 'group-match.php' . ($b !== '' ? '?b=' . rawurlencode($b) : '');
+// ── 🗑 পুরনো রান মোছা (action-মার্কার `delete` — কেন্দ্রীয় গার্ডে delete cap লাগে)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'delete') {
+    if (!csrf_verify()) {
+        set_flash('error', 'ফর্ম টোকেন মিলছে না।');
+    } else {
+        $rid = (int) ($_POST['run_id'] ?? 0);
+        try {
+            $db->prepare('DELETE FROM group_match_runs WHERE id = :i')->execute(['i' => $rid]);
+            set_flash('success', 'রেকর্ডটি মুছে ফেলা হয়েছে।');
+        } catch (PDOException $ex) {
+            set_flash('error', 'মোছা গেল না।');
+        }
+    }
+    header('Location: ' . gm_url($sel));
+    exit;
+}
+
+// ── 🔍 একটা পুরনো রান দেখা (?run=<id>)
+$viewRun = null;
+$viewSnap = null;
+if (($_GET['run'] ?? '') !== '' && gm_history_ready($db)) {
+    try {
+        $st = $db->prepare('SELECT * FROM group_match_runs WHERE id = :i');
+        $st->execute(['i' => (int) $_GET['run']]);
+        $viewRun = $st->fetch() ?: null;
+        if ($viewRun) {
+            $viewSnap = json_decode((string) $viewRun['result_json'], true);
+            if (!is_array($viewSnap)) { $viewSnap = null; }
+        }
+    } catch (PDOException $ex) {
+        $viewRun = null;
+    }
+}
+
+// ── 📜 এই ব্যাচের আগের মেলানোগুলো
+$runs = [];
+if ($selItemId > 0 && gm_history_ready($db)) {
+    try {
+        $st = $db->prepare(
+            'SELECT id, admin_name, n_group, n_matched, n_unmatched, n_missing, created_at
+             FROM group_match_runs WHERE item_id = :i AND batch = :b
+             ORDER BY id DESC LIMIT 20'
+        );
+        $st->execute(['i' => $selItemId, 'b' => $selBatch]);
+        $runs = $st->fetchAll();
+    } catch (PDOException $ex) {
+        $runs = [];
+    }
 }
 
 $ocrVer = @filemtime(__DIR__ . '/assets/ocr/tesseract.min.js') ?: time();
@@ -139,8 +282,12 @@ require __DIR__ . '/includes/layout-top.php';
             <span class="text-xs text-gray-400"><?= e($selLabel) ?> · <?= count($regs) ?> টি রেজিস্ট্রেশন</span>
         </div>
 
+        <?php
+        // পুরনো রান খুলে থাকলে ঐ লেখাটাই বাক্সে বসে — "আবার মিলিয়ে দেখুন" এক ক্লিকে
+        $gmBoxText = $raw !== '' ? $raw : (string) ($viewRun['raw_names'] ?? '');
+        ?>
         <textarea name="names" id="gmNames" rows="9" placeholder="AyeSha Siddika&#10;Elora Parvin&#10;Israt Jahan"
-                  class="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm" style="min-width:0"><?= e($raw) ?></textarea>
+                  class="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm" style="min-width:0"><?= e($gmBoxText) ?></textarea>
         <p class="text-gray-400 text-xs mt-1">
             “Joined with invite link” / “Added by you” জাতীয় লাইন থাকলেও সমস্যা নেই — নিজে থেকেই বাদ যাবে।
         </p>
@@ -164,9 +311,70 @@ require __DIR__ . '/includes/layout-top.php';
 
 <?php endif; ?>
 
-<?php if ($result !== null): ?>
+<?php // ── 🕘 আগের মেলানোগুলো ─────────────────────────────────────────────── ?>
+<?php if ($selItemId > 0 && !gm_history_ready($db)): ?>
+    <div class="bg-white rounded-2xl shadow p-4 mb-6" style="box-shadow:inset 4px 0 0 0 #d97706">
+        <p class="text-gray-700 text-sm">
+            🕘 <b>হিস্ট্রি এখনো চালু হয়নি</b> — মেলানোর রেকর্ড জমা রাখতে
+            <code class="bg-gray-100 px-1 rounded">database/migrate-group-match-runs.sql</code>
+            ফাইলের SQL একবার phpMyAdmin-এ চালাতে হবে (লাইভ ও লোকাল দুই জায়গায়)।
+            ততক্ষণ মেলানো আগের মতোই কাজ করবে, শুধু জমা থাকবে না।
+        </p>
+    </div>
+<?php elseif ($runs): ?>
+    <div class="bg-white rounded-2xl shadow p-4 mb-6">
+        <p class="font-bold text-gray-800 text-sm mb-1">🕘 আগে যতবার মিলিয়েছেন (<?= count($runs) ?>)</p>
+        <p class="text-gray-500 text-xs mb-3">“দেখুন” চাপলে সেদিন কী নাম দিয়েছিলেন আর কী পাওয়া গিয়েছিল — দুটোই দেখা যাবে।</p>
+        <?php foreach ($runs as $r): ?>
+            <div class="flex flex-wrap items-center gap-2 py-2 border-b last:border-0">
+                <span class="text-gray-800 text-sm font-semibold"><?= e(date('d M Y, g:i a', strtotime((string) $r['created_at']))) ?></span>
+                <?php if (trim((string) $r['admin_name']) !== ''): ?>
+                    <span class="text-gray-400 text-xs"><?= e($r['admin_name']) ?></span>
+                <?php endif; ?>
+                <span class="inline-block px-2 py-1 rounded-lg text-xs bg-gray-100 text-gray-600">গ্রুপে <?= (int) $r['n_group'] ?></span>
+                <span class="inline-block px-2 py-1 rounded-lg text-xs bg-green-100 text-green-800">মিলেছে <?= (int) $r['n_matched'] ?></span>
+                <?php if ((int) $r['n_unmatched'] > 0): ?>
+                    <span class="inline-block px-2 py-1 rounded-lg text-xs bg-red-100 text-red-700">পাইনি <?= (int) $r['n_unmatched'] ?></span>
+                <?php endif; ?>
+                <span class="flex-1"></span>
+                <a href="<?= e(gm_url($sel, ['run' => (int) $r['id']])) ?>" class="text-indigo-600 font-semibold text-sm">দেখুন</a>
+                <?php if (admin_can('orders', 'delete') || admin_can('parcel', 'delete')): ?>
+                    <form method="post" action="<?= e(gm_url($sel)) ?>&amp;action=delete" class="inline"
+                          onsubmit="return confirmSubmit(this, 'এই রেকর্ডটি মুছে ফেলবেন?', 'মেলানোর এই ইতিহাসটা আর দেখা যাবে না। রেজিস্ট্রেশনের কোনো তথ্য বদলাবে না।');">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="run_id" value="<?= (int) $r['id'] ?>">
+                        <button type="submit" class="text-red-600 text-sm">মুছুন</button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+    </div>
+<?php endif; ?>
+
+<?php // ── পুরনো একটা রান দেখা হচ্ছে ──────────────────────────────────────── ?>
+<?php if ($viewRun && $viewSnap && $result === null): ?>
+    <div class="bg-white rounded-2xl shadow p-4 mb-4" style="box-shadow:inset 4px 0 0 0 #4f46e5">
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="font-bold text-gray-800">🕘 <?= e(date('d M Y, g:i a', strtotime((string) $viewRun['created_at']))) ?> — এই মেলানোটা</span>
+            <span class="text-gray-500 text-xs"><?= e($viewRun['item_title']) ?><?= trim((string) $viewRun['batch']) !== '' ? ' — ' . e($viewRun['batch']) : '' ?></span>
+            <span class="flex-1"></span>
+            <a href="<?= e(gm_url($sel)) ?>" class="text-indigo-600 text-sm font-semibold">✕ বন্ধ করুন</a>
+        </div>
+        <p class="text-gray-500 text-xs mt-1">
+            সেদিন যে নামগুলো দিয়েছিলেন সেগুলো <b>উপরের বাক্সেই বসানো আছে</b> — চাইলে “মিলিয়ে দেখুন” চেপে
+            <b>আজকের রেজিস্ট্রেশন দিয়ে আবার</b> মিলিয়ে নিতে পারেন।
+        </p>
+    </div>
+<?php endif; ?>
+
 <?php
-$s = $result['stats'];
+// 🔴 পুরনো রান আর এইমাত্রের মেলানো — **একই মার্কআপ** দিয়ে দেখানো হয়, শুধু উৎস আলাদা।
+//    (আলাদা টেমপ্লেট বানালে সময়ের সাথে দুটো আলাদা হয়ে যেত।)
+$showSnap = $snap ?? (($viewRun && $result === null) ? $viewSnap : null);
+?>
+<?php if ($showSnap !== null): ?>
+<?php
+$s = $showSnap['stats'];
 // 🔴 “গ্রুপে” = **আলাদা নাম**, লাইন-সংখ্যা নয় (একই নাম দুইবার থাকলে একটাই কার্ড হয়,
 //    তার ভেতরে “গ্রুপে ২ বার” লেখা থাকে) — লেবেলটা তাই স্পষ্ট করে লেখা।
 $cards = [
@@ -177,7 +385,25 @@ $cards = [
 ];
 // একই নাম একাধিকবার থাকলে লাইন-সংখ্যা আর নাম-সংখ্যা আলাদা হয় — সেটা বলে দেওয়া হয়
 $gmTotalLines = 0;
-foreach ($parsed['names'] as $pn) { $gmTotalLines += (int) $pn['count']; }
+foreach ($showSnap['entries'] as $pn) { $gmTotalLines += (int) $pn['count']; }
+
+// 🔴 স্ন্যাপশটে ফোন নম্বর রাখা হয় না (গোপনীয়তা) — তাই id দিয়ে **এখনকার** ফোন তোলা হয়,
+//    এক কোয়েরিতে। পুরনো রানে কেউ ডিলিট হয়ে থাকলে শুধু নামটাই দেখাবে, ভাঙবে না।
+$gmPhones = [];
+$gmIds = [];
+foreach ($showSnap['entries'] as $en) {
+    foreach ($en['matches'] as $mm) { $gmIds[] = (int) $mm['id']; }
+}
+foreach ($showSnap['missing'] as $ms) { $gmIds[] = (int) $ms['id']; }
+$gmIds = array_values(array_unique(array_filter($gmIds)));
+if ($gmIds) {
+    try {
+        $in = implode(',', array_map('intval', $gmIds));   // কোড-নিয়ন্ত্রিত int, ইউজার-ইনপুট নয়
+        foreach ($db->query("SELECT id, phone, father_mobile FROM registrations WHERE id IN ($in)") as $pr) {
+            $gmPhones[(int) $pr['id']] = $pr;
+        }
+    } catch (PDOException $ex) { $gmPhones = []; }
+}
 ?>
 <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 mb-6">
     <?php foreach ($cards as $c): ?>
@@ -187,15 +413,15 @@ foreach ($parsed['names'] as $pn) { $gmTotalLines += (int) $pn['count']; }
         </div>
     <?php endforeach; ?>
 </div>
-<?php if ($parsed['unreadable']): ?>
+<?php if ($showSnap['unreadable']): ?>
     <div class="bg-white rounded-2xl shadow p-4 mb-4" style="box-shadow:inset 4px 0 0 0 #d97706">
-        <p class="font-bold text-gray-800 text-sm">⚠️ এই লেখাগুলো ঠিকমতো পড়া যায়নি (<?= count($parsed['unreadable']) ?>)</p>
+        <p class="font-bold text-gray-800 text-sm">⚠️ এই লেখাগুলো ঠিকমতো পড়া যায়নি (<?= count($showSnap['unreadable']) ?>)</p>
         <p class="text-gray-500 text-xs mt-1">
             এগুলো নাম হিসেবে ধরা হয়নি। ছবিটা আরও বড় করে তুলে আবার চেষ্টা করুন,
             অথবা নামগুলো উপরের বাক্সে নিজে লিখে দিন।
         </p>
         <div class="mt-2 flex flex-wrap gap-2">
-            <?php foreach ($parsed['unreadable'] as $u): ?>
+            <?php foreach ($showSnap['unreadable'] as $u): ?>
                 <span class="inline-block px-2 py-1 rounded-lg text-xs bg-amber-100 text-amber-800"><?= e($u) ?></span>
             <?php endforeach; ?>
         </div>
@@ -206,8 +432,8 @@ foreach ($parsed['names'] as $pn) { $gmTotalLines += (int) $pn['count']; }
     <?php if ($gmTotalLines !== $s['group']): ?>
         গ্রুপের তালিকায় <?= (int) $gmTotalLines ?> টি নাম-লাইন, আলাদা নাম <?= (int) $s['group'] ?> টি।
     <?php endif; ?>
-    <?php if ($parsed['dropped'] > 0): ?>
-        <?= (int) $parsed['dropped'] ?> টি লাইন নাম নয় বলে বাদ দেওয়া হয়েছে (“যোগ দিয়েছেন”, সময়, সংখ্যা ইত্যাদি)।
+    <?php if ($showSnap['dropped'] > 0): ?>
+        <?= (int) $showSnap['dropped'] ?> টি লাইন নাম নয় বলে বাদ দেওয়া হয়েছে (“যোগ দিয়েছেন”, সময়, সংখ্যা ইত্যাদি)।
     <?php endif; ?>
 </p>
 
@@ -234,17 +460,22 @@ function gm_card(array $entry): void
 
         <?php foreach ($entry['matches'] as $m):
             [$lbl, $cls] = gm_how_label($m['how']);
-            $r = $m['reg']; ?>
+            // ফোন স্ন্যাপশটে নেই — id দিয়ে এখনকারটা (উপরে এক কোয়েরিতে তোলা)
+            $ph = $GLOBALS['gmPhones'][(int) $m['id']] ?? null; ?>
             <div class="mt-2 pl-3" style="border-left:1px solid rgb(var(--c-border))">
                 <div class="flex flex-wrap items-center gap-2">
-                    <a href="registrations.php?action=view&amp;id=<?= (int) $r['id'] ?>" target="_blank" rel="noopener"
-                       class="text-indigo-600 font-semibold text-sm"><?= e($r['customer_name']) ?></a>
+                    <a href="registrations.php?action=view&amp;id=<?= (int) $m['id'] ?>" target="_blank" rel="noopener"
+                       class="text-indigo-600 font-semibold text-sm"><?= e($m['name']) ?></a>
                     <span class="inline-block px-2 py-1 rounded-lg text-xs font-semibold <?= $cls ?>"><?= e($lbl) ?></span>
                 </div>
                 <div class="text-xs text-gray-500 mt-1">
-                    <?php if (trim((string) $r['facebook_id']) !== ''): ?>ফেসবুক: <?= e($r['facebook_id']) ?> · <?php endif; ?>
-                    <a href="tel:<?= e($r['phone']) ?>"><?= e($r['phone']) ?></a>
-                    <?php if (trim((string) ($r['father_mobile'] ?? '')) !== ''): ?> · বাবা: <?= e($r['father_mobile']) ?><?php endif; ?>
+                    <?php if (trim((string) $m['fb']) !== ''): ?>ফেসবুক: <?= e($m['fb']) ?> · <?php endif; ?>
+                    <?php if ($ph): ?>
+                        <a href="tel:<?= e($ph['phone']) ?>"><?= e($ph['phone']) ?></a>
+                        <?php if (trim((string) ($ph['father_mobile'] ?? '')) !== ''): ?> · বাবা: <?= e($ph['father_mobile']) ?><?php endif; ?>
+                    <?php else: ?>
+                        <span class="text-gray-400">(এই রেজিস্ট্রেশনটি আর নেই)</span>
+                    <?php endif; ?>
                 </div>
             </div>
         <?php endforeach; ?>
@@ -256,8 +487,8 @@ function gm_card(array $entry): void
     <?php
 }
 
-$matched = array_values(array_filter($result['entries'], fn($x) => (bool) $x['matches']));
-$noReg   = array_values(array_filter($result['entries'], fn($x) => !$x['matches']));
+$matched = array_values(array_filter($showSnap['entries'], fn($x) => (bool) $x['matches']));
+$noReg   = array_values(array_filter($showSnap['entries'], fn($x) => !$x['matches']));
 ?>
 
 <?php if ($noReg): ?>
@@ -266,19 +497,20 @@ $noReg   = array_values(array_filter($result['entries'], fn($x) => !$x['matches'
     <?php foreach ($noReg as $entry) { gm_card($entry); } ?>
 <?php endif; ?>
 
-<?php if ($result['missing']): ?>
-    <h3 class="font-bold text-gray-800 mt-6 mb-2">📋 রেজিস্ট্রেশন আছে, গ্রুপে পাইনি (<?= count($result['missing']) ?>)</h3>
+<?php if ($showSnap['missing']): ?>
+    <h3 class="font-bold text-gray-800 mt-6 mb-2">📋 রেজিস্ট্রেশন আছে, গ্রুপে পাইনি (<?= count($showSnap['missing']) ?>)</h3>
     <p class="text-gray-500 text-xs mb-3">এঁদের গ্রুপে যোগ করা বাকি থাকতে পারে (অথবা গ্রুপে নাম আলাদা)।</p>
     <div class="bg-white rounded-2xl shadow p-4 mb-3">
-        <?php foreach ($result['missing'] as $r): ?>
+        <?php foreach ($showSnap['missing'] as $r): $ph = $gmPhones[(int) $r['id']] ?? null; ?>
             <div class="py-2 border-b last:border-0">
                 <a href="registrations.php?action=view&amp;id=<?= (int) $r['id'] ?>" target="_blank" rel="noopener"
-                   class="text-indigo-600 font-semibold text-sm"><?= e($r['customer_name']) ?></a>
+                   class="text-indigo-600 font-semibold text-sm"><?= e($r['name']) ?></a>
                 <div class="text-xs text-gray-500 mt-1">
-                    <?php if (trim((string) $r['facebook_id']) !== ''): ?>ফেসবুক: <?= e($r['facebook_id']) ?> · <?php else: ?>
+                    <?php if (trim((string) $r['fb']) !== ''): ?>ফেসবুক: <?= e($r['fb']) ?> · <?php else: ?>
                         <span class="text-amber-600">ফেসবুক আইডি নাম দেওয়া নেই</span> ·
                     <?php endif; ?>
-                    <a href="tel:<?= e($r['phone']) ?>"><?= e($r['phone']) ?></a>
+                    <?php if ($ph): ?><a href="tel:<?= e($ph['phone']) ?>"><?= e($ph['phone']) ?></a>
+                    <?php else: ?><span class="text-gray-400">(এই রেজিস্ট্রেশনটি আর নেই)</span><?php endif; ?>
                 </div>
             </div>
         <?php endforeach; ?>
@@ -290,14 +522,14 @@ $noReg   = array_values(array_filter($result['entries'], fn($x) => !$x['matches'
     <?php foreach ($matched as $entry) { gm_card($entry); } ?>
 <?php endif; ?>
 
-<?php if (!$result['entries']): ?>
+<?php if (!$showSnap['entries']): ?>
     <div class="empty-state">
         <div class="empty-ic">📝</div>
         <p class="font-bold text-gray-700">কোনো নাম পাওয়া যায়নি</p>
         <p class="text-gray-500 text-sm mt-1">বাক্সে গ্রুপের সদস্যদের নাম বসিয়ে আবার চেষ্টা করুন।</p>
     </div>
 <?php endif; ?>
-<?php endif; /* $result */ ?>
+<?php endif; /* $showSnap */ ?>
 
 <script>
 // ── ছবি থেকে নাম পড়া — সম্পূর্ণ ব্রাউজারে (tesseract.js, নিজেদের সার্ভারে রাখা)

@@ -806,4 +806,41 @@ CREATE TABLE admin_activity_log (
     INDEX idx_page (page)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ------------------------------------------------------------
+-- GROUP MATCH HISTORY -- every scan on admin/group-match.php
+-- (pasted member names + what the matching found). Report only:
+-- it never changes a registration, group tick, status or payment.
+-- No phone numbers are stored -- see migrate-group-match-runs.sql
+-- ------------------------------------------------------------
+CREATE TABLE `group_match_runs` (
+    `id`          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+
+    -- which course batch was matched (snapshot, so renames never break history)
+    `item_id`     INT UNSIGNED NOT NULL DEFAULT 0,
+    `item_title`  VARCHAR(255) NOT NULL DEFAULT '',
+    `batch`       VARCHAR(100) NOT NULL DEFAULT '',
+
+    -- who ran it
+    `admin_id`    INT UNSIGNED DEFAULT NULL,
+    `admin_name`  VARCHAR(100) NOT NULL DEFAULT '',
+
+    -- exactly what was pasted into the textarea (capped in PHP at GM_MAX_CHARS)
+    `raw_names`   MEDIUMTEXT   NOT NULL,
+
+    -- compact snapshot of the report (see gm_snapshot() in
+    -- admin/includes/group-match.php). No phone numbers inside.
+    `result_json` MEDIUMTEXT   NOT NULL,
+
+    -- denormalised counters so the history list needs no JSON parsing
+    `n_group`     SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    `n_matched`   SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    `n_unmatched` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    `n_missing`   SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+
+    `created_at`  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX `idx_item` (`item_id`, `batch`),
+    INDEX `idx_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

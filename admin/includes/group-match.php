@@ -472,6 +472,61 @@ function gm_entry_notes(int $groupCount, array $matches): array
 }
 
 // মিলের ধরন → বাংলা লেবেল ও রঙ
+/**
+ * মেলানোর ফলাফল → হিস্ট্রিতে সংরক্ষণের জন্য ছোট স্ন্যাপশট (২০২৬-০৯-২৯, ইউজারের চাওয়া)।
+ *
+ * 🔴🔴 **ফোন নম্বর কখনো এখানে যাবে না** — রিপোর্টে ফোন দেখানো হয় ঠিকই, কিন্তু সেটা
+ *    `registrations` থেকে **তখনকার মতো** পড়া হয়। হিস্ট্রিতে ফোন জমালে একই তথ্য দুই
+ *    টেবিলে ছড়াত, আর অভিভাবক নম্বর বদলালে পুরনো রেকর্ডে ভুল নম্বর থেকে যেত।
+ *    পুরনো রান খুললে রেজিস্ট্রেশনের **id** দিয়ে বর্তমান ফোন তোলা হয় (অ্যাডমিন-নোটের মতোই)।
+ *    (একই নীতি `admin/includes/activity.php`-এ লেখা আছে — লগে ফোন/টাকা নয়।)
+ *
+ * 🔴 যা রাখা হয়: গ্রুপের নাম · গ্রুপে কতবার · কোন রেজিস্ট্রেশনে মিলেছে (id + নাম + স্তর)
+ *    · সতর্কবার্তা · "গ্রুপে পাইনি" তালিকা (id + নাম) · অপাঠ্য লাইন · গণনা।
+ * ⚠️ রেজিস্ট্রেশন পরে ডিলিট হলে id আর মিলবে না — তাই **নামটাও** রাখা হয়
+ *    (স্ন্যাপশট, `registrations.item_title`-এর মতোই নীতি)।
+ */
+function gm_snapshot(array $result, array $parsed): array
+{
+    $entries = [];
+    foreach ($result['entries'] as $e) {
+        $m = [];
+        foreach ($e['matches'] as $mt) {
+            $m[] = [
+                'id'   => (int) ($mt['reg']['id'] ?? 0),
+                'name' => (string) ($mt['reg']['customer_name'] ?? ''),
+                'fb'   => (string) ($mt['reg']['facebook_id'] ?? ''),
+                'how'  => (string) ($mt['how'] ?? ''),
+            ];
+        }
+        $entries[] = [
+            'name'    => (string) $e['name'],
+            'count'   => (int) $e['count'],
+            'matches' => $m,
+            'notes'   => array_values($e['notes']),
+        ];
+    }
+
+    $missing = [];
+    foreach ($result['missing'] as $r) {
+        $missing[] = [
+            'id'   => (int) ($r['id'] ?? 0),
+            'name' => (string) ($r['customer_name'] ?? ''),
+            'fb'   => (string) ($r['facebook_id'] ?? ''),
+        ];
+    }
+
+    return [
+        'v'          => 1,                       // ভার্সন — গঠন বদলালে পুরনো রান পড়তে কাজে লাগবে
+        'entries'    => $entries,
+        'missing'    => $missing,
+        'unreadable' => array_values($parsed['unreadable'] ?? []),
+        'dropped'    => (int) ($parsed['dropped'] ?? 0),
+        'lines'      => (int) ($parsed['lines'] ?? 0),
+        'stats'      => $result['stats'],
+    ];
+}
+
 function gm_how_label(string $how): array
 {
     return [
