@@ -26,6 +26,9 @@ const INCOME_STATUSES = ['confirmed', 'shipped', 'delivered'];
 // course-data.php ও এখান থেকে (একই action=delete/update-details ব্যবহার করে) রিটার্ন করতে পারে
 function safe_return_url(?string $url, string $fallback): string
 {
+    // 🔴 কন্ট্রোল-ক্যারেক্টার ছেঁটে ফেলা হয় — মানটা POST থেকে আসে আর সরাসরি
+    //    `Location:` হেডারে বসে (হেডার-ইনজেকশন গার্ড, `nav_safe_return()`-এর মতোই)।
+    $url = $url === null ? null : preg_replace('/[\x00-\x1F\x7F]/', '', $url);
     $allowedPrefixes = ['registrations.php', 'course-data.php'];
     foreach ($allowedPrefixes as $prefix) {
         if ($url && strpos($url, $prefix) === 0) {
@@ -33,6 +36,26 @@ function safe_return_url(?string $url, string $fallback): string
         }
     }
     return $fallback;
+}
+
+/**
+ * তালিকার URL-এ `#reg-<id>` নোঙর বসায় — কনফার্ম/সেভের পর ব্রাউজার ঠিক ঐ সারিতেই ফেরে।
+ *
+ * 🔴 কেন দরকার (২০২৬-০৯-২৯, ইউজারের ধরা সমস্যা): স্ট্যাটাস বদলালে POST → redirect হয়,
+ *    ব্রাউজার নতুন পাতা **উপর থেকে** দেখায়। ফোনে পরপর কয়েকজনকে কনফার্ম করতে গেলে
+ *    প্রতিবার আবার নিচে স্ক্রল করতে হতো। নোঙর থাকলে ঐ সারিতেই নেমে আসে।
+ * ⚠️ আগের fragment বাদ দেওয়া হয় — নাহলে `#reg-5#reg-7` জমতে থাকত।
+ */
+function reg_anchor_url(string $url, int $id): string
+{
+    if ($id <= 0) {
+        return $url;
+    }
+    $hash = strpos($url, '#');
+    if ($hash !== false) {
+        $url = substr($url, 0, $hash);
+    }
+    return $url . '#reg-' . $id;
 }
 
 // স্ট্যাটাস অনুযায়ী আয় অটোমেটিক যোগ/বাদ দেওয়া — status 'confirmed'/'shipped'/'delivered' হলে আয়, নাহলে আয় বাদ
@@ -78,56 +101,32 @@ function pay_write_income(PDO $db, array $reg, string $newStatus, float $paid): 
 
 function sync_income_for_status(PDO $db, array $reg, string $newStatus): void
 {
-    // 🔴 খাতা থাকলে আয় খাতা থেকেই হয় (ধাপ ২)। খাতা না থাকলে নিচের পুরনো নিয়ম চলে —
-    // তাই যেসব রেজিস্ট্রেশনে এখনো খাতা তৈরি হয়নি সেগুলোর হিসাব আগের মতোই অক্ষত থাকে।
+    // 🔴 আয় সবসময় টাকার খাতা থেকে — খাতা থাকলে আয় = মোট জমা (ধাপ ২)।
+    // খাতা না থাকলে নতুন আয় **তৈরি হয় না**, শুধু স্ট্যাটাস-গেট মানা হয় (নিচে দেখুন)।
     $ledger = pay_fetch_many($db, [(int) $reg['id']])[(int) $reg['id']] ?? [];
     if ($ledger) {
         pay_write_income($db, $reg, $newStatus, pay_paid_total($ledger));
         return;
     }
 
+    // 🔴🔴 খাতাহীন রেজিস্ট্রেশনে কনফার্ম করলে আর **অটো আয় বসে না** (২০২৬-০৯-২৯, ইউজারের ধরা বাগ)।
+    //
+    // আগে এখানে আয় = আইটেমের **বর্তমান দাম** × পরিমাণ বসত। কিন্তু "কনফার্ম" মানে ভর্তি নিশ্চিত,
+    // "পুরো টাকা হাতে এসেছে" নয় — বাস্তবে অভিভাবক তখন হয়তো শুধু রেজিস্ট্রেশন ফি ৳500 দিয়েছেন,
+    // অথচ ব্যাচের `price` (মাসিক বেতন ৳790) আয় হিসেবে বসে যেত। তারপর টাকার খাতা খুললে ঐ ভুল
+    // অঙ্কটাই `reg_pay_panel()`-এর `$prefill` হয়ে জমার ঘরে ছড়িয়ে পড়ত (৳500 রেজি ফি পুরো +
+    // ৳290 বেতনে আংশিক) — ইউজারের স্ক্রিনশটে ঠিক এটাই ধরা পড়ে; কে কখন কনফার্ম হয়েছে তার
+    // উপর নির্ভর করে একেকজনের একেক অঙ্ক দাঁড়াত (৳790 / ৳500 / ০)।
+    //
+    // **এখন আয়ের একমাত্র উৎস টাকার খাতার মোট জমা** — নগদ-ভিত্তিক নীতি, যেটা ২০২৬-০৯-২২ এ
+    // ধাপ ২-তেই ঠিক হয়েছিল; এই শাখাটাই ছিল তার শেষ ব্যতিক্রম।
+    //
+    // 🔴 আগে অনুমোদিত আয় এখানে **ছোঁয়া হয় না** — পুরনো (খাতাহীন) রেজিস্ট্রেশনের বইয়ের অঙ্ক
+    //    যেমন ছিল তেমনই থাকে। `reg_pay_panel()`-এর `$prefill`-ও তাই রাখতেই হবে, নাহলে ঐ
+    //    খাতা প্রথমবার সেভ করলে আয় নীরবে ০ হয়ে যেত।
     $shouldHaveIncome = in_array($newStatus, INCOME_STATUSES, true);
 
-    if ($shouldHaveIncome && !$reg['income_approved']) {
-        // কোর্সের দাম এখন course_batches-এ (courses parent টেবিলে শুধু title) — item_id (course) সরাসরি course_batches.id পয়েন্ট করে
-        $tableMap = ['course' => 'course_batches', 'worksheet' => 'worksheets', 'product' => 'products'];
-        $amount = 0.0;
-        if (isset($tableMap[$reg['type']])) {
-            $itemStmt = $db->prepare("SELECT price FROM `{$tableMap[$reg['type']]}` WHERE id = :id");
-            $itemStmt->execute(['id' => $reg['item_id']]);
-            $item = $itemStmt->fetch();
-            if ($item) {
-                $amount = parse_price_to_number($item['price']) * max(1, (int) $reg['quantity']);
-            }
-        }
-        // ⚠️ ফলব্যাক (২০২৬-০৭-২০ এ অডিটে ধরা পড়া বাগ): আইটেমটা (কোর্স-ব্যাচ/ওয়ার্কশিট/প্রোডাক্ট) যদি
-        // ইতিমধ্যে ডিলিট/আর্কাইভ হয়ে গিয়ে থাকে, তাহলে দাম খুঁজে পাওয়া যায় না → $amount = 0 → আগে
-        // **নীরবে কিছুই হতো না**: রেজিস্ট্রেশন "কনফার্ম" দেখাত কিন্তু আয় বইয়ে উঠত না, কোনো সতর্কতাও নয়।
-        // এখন আগের অনুমোদনে সেভ করা পরিমাণ (income_amount স্ন্যাপশট) থেকে হিসাব করা হয়।
-        if ($amount <= 0 && !empty($reg['income_amount'])) {
-            $amount = (float) $reg['income_amount'];
-        }
-        if ($amount <= 0) {
-            // এখনো ঠিক করা গেল না — নীরব না থেকে অ্যাডমিনকে জানানো হয়, যাতে হাতে যোগ করে নিতে পারেন
-            set_flash('error',
-                'স্ট্যাটাস বদলেছে, কিন্তু আয় যোগ করা যায়নি — এই অর্ডারের আইটেমটি ("' . $reg['item_title'] . '") '
-                . 'ডিলিট/আর্কাইভ হয়ে গেছে বলে দাম পাওয়া যাচ্ছে না। "আয়" পেজ থেকে পরিমাণটা হাতে যোগ করে নিন, '
-                . 'অথবা আর্কাইভ পেজ থেকে আইটেমটি ফিরিয়ে এনে আবার চেষ্টা করুন।');
-        }
-        if ($amount > 0) {
-            $categoryId = find_or_create_finance_category('income', registration_type_to_category_name($reg['type']));
-            $db->prepare(
-                'INSERT INTO income (category_id, registration_id, amount, description, income_date) VALUES (:cat, :reg, :amt, :desc, CURDATE())'
-            )->execute([
-                'cat' => $categoryId,
-                'reg' => $reg['id'],
-                'amt' => $amount,
-                'desc' => $reg['item_title'] . ' - ' . $reg['customer_name'],
-            ]);
-            $db->prepare('UPDATE registrations SET income_approved = 1, income_amount = :amt, approved_at = NOW() WHERE id = :id')
-                ->execute(['amt' => $amount, 'id' => $reg['id']]);
-        }
-    } elseif (!$shouldHaveIncome && $reg['income_approved']) {
+    if (!$shouldHaveIncome && $reg['income_approved']) {
         $db->prepare('DELETE FROM income WHERE registration_id = :id')->execute(['id' => $reg['id']]);
         // ⚠️ income_amount ইচ্ছাকৃতভাবে **মোছা হয় না** (আগে NULL করা হতো) — এটা "সর্বশেষ জানা পরিমাণ"
         // হিসেবে থেকে যায়, যাতে আইটেম ডিলিট হয়ে গেলেও পরে আবার কনফার্ম করলে আয় ঠিক পরিমাণে ফিরে আসে।
@@ -154,10 +153,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'update-status') {
         if ($reg) {
             $db->prepare('UPDATE registrations SET status = :s WHERE id = :id')->execute(['s' => $status, 'id' => $id]);
             sync_income_for_status($db, $reg, $status);
-            set_flash('success', 'স্ট্যাটাস আপডেট হয়েছে।');
+
+            // 🔔 কনফার্ম করলে আয় আর নিজে থেকে বসে না (উপরে `sync_income_for_status()` দেখুন) —
+            //    তাই খাতাও নেই, আয়ও অনুমোদিত নয় এমন হলে অ্যাডমিনকে মনে করিয়ে দেওয়া হয়,
+            //    নাহলে "কনফার্ম করলাম, আয়ে কিছু এল না কেন" বলে মনে হতো।
+            $needsLedger = in_array($status, INCOME_STATUSES, true)
+                && empty($reg['income_approved'])
+                && !(pay_fetch_many($db, [$id])[$id] ?? []);
+            set_flash('success', $needsLedger
+                ? 'স্ট্যাটাস আপডেট হয়েছে। 💰 কত টাকা হাতে এসেছে সেটা "টাকা" চিপে ক্লিক করে খাতায় বসিয়ে সেভ করুন — আয় ওখান থেকেই বইয়ে যাবে।'
+                : 'স্ট্যাটাস আপডেট হয়েছে।');
         }
     }
-    redirect($returnUrl);
+    redirect(reg_anchor_url($returnUrl, $id));
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'unapprove-income') {
@@ -224,7 +232,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'quick-group') {
 
     $label = $column === 'messenger_group_added' ? 'মেসেঞ্জার' : 'ফেসবুক';
     set_flash('success', $value ? ($label . ' গ্রুপে যোগ — টিক দেওয়া হলো।') : ($label . ' গ্রুপের টিক তুলে নেওয়া হলো।'));
-    redirect($returnUrl);
+    redirect(reg_anchor_url($returnUrl, $id));
 }
 
 // পুরনো (মাইগ্রেশনে বসানো "পুরনো হিসাব") খাতাকে কোর্সের বর্তমান সেটিংস দেখে
@@ -273,7 +281,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'pay-rebuild') {
         if ($db->inTransaction()) { $db->rollBack(); }
         set_flash('error', 'খাতা সাজানো যায়নি — ডাটাবেস মাইগ্রেশন চালানো আছে কিনা দেখুন।');
     }
-    redirect($returnUrl);
+    redirect(reg_anchor_url($returnUrl, $id));
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'pay-save') {
@@ -315,7 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'pay-save') {
         set_flash('error', 'টাকার খাতা সংরক্ষণ করা যায়নি — ডাটাবেসে "registration_payments" টেবিলটি এখনো তৈরি হয়নি। '
             . 'phpMyAdmin-এ database/migrate-payment-ledger.sql ফাইলের SQL একবার চালিয়ে নিন।');
     }
-    redirect($returnUrl);
+    redirect(reg_anchor_url($returnUrl, $id));
 }
 // ------------------------------------------------------------
 // 🔄 অন্য কোর্সে সরানো (২০২৬-০৯-২৮, ইউজার: "ভুলে এক কোর্সে রেজিস্ট্রেশন করেছে,
@@ -897,9 +905,11 @@ function reg_more_cell(array $row): void
 
 // ── তথ্য-ড্রয়ার। 🔴 ভেতরে নেস্টেড <table> দেবেন না — মোবাইল কার্ড-CSS
 // (main .overflow-x-auto > table td) ভেঙে দেবে; grid/flex ব্যবহার করুন (খাতার প্যানেলের মতোই)।
-function reg_more_panel(array $row, int $colspan): void
+function reg_more_panel(array $row, int $colspan, string $returnUrl = ''): void
 {
     $rid = (int) $row['id'];
+    $viewHref = 'registrations.php?action=view&id=' . $rid
+        . ($returnUrl !== '' ? '&return=' . rawurlencode($returnUrl) : '');
     if (($row['type'] ?? '') === 'course') {
         $fields = [
             'জন্ম তারিখ'            => !empty($row['date_of_birth']) ? format_date_bn((string) $row['date_of_birth']) : '',
@@ -935,7 +945,7 @@ function reg_more_panel(array $row, int $colspan): void
                     <?php endforeach; ?>
                 </div>
                 <div class="mt-3">
-                    <a href="registrations.php?action=view&id=<?= $rid ?>" class="text-indigo-600 font-semibold text-sm">সম্পূর্ণ বিস্তারিত পাতায় যান →</a>
+                    <a href="<?= e($viewHref) ?>" class="text-indigo-600 font-semibold text-sm">সম্পূর্ণ বিস্তারিত পাতায় যান →</a>
                 </div>
             </div>
         </td>
@@ -1303,7 +1313,7 @@ require __DIR__ . '/includes/layout-top.php';
                 <tr><td colspan="10" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
             <?php endif; ?>
             <?php foreach ($rows as $row): ?>
-                <tr class="border-b last:border-0" style="<?= e(reg_row_style($row)) ?>">
+                <tr id="reg-<?= (int) $row['id'] ?>" class="border-b last:border-0" style="<?= e(reg_row_style($row)) ?>">
                     <td class="py-2.5 px-4"><?php reg_person_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_item_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_fb_cell($row); ?></td>
@@ -1313,10 +1323,10 @@ require __DIR__ . '/includes/layout-top.php';
                     <td class="py-2.5 px-4"><?php reg_income_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_date_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_more_cell($row); ?></td>
-                    <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
+                    <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>&return=<?= rawurlencode($currentListUrl) ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
                 </tr>
                 <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 10); ?>
-                <?php reg_more_panel($row, 10); ?>
+                <?php reg_more_panel($row, 10, $currentListUrl); ?>
             <?php endforeach; ?>
             </tbody>
             <?php elseif ($filterType === 'worksheet' || $filterType === 'product'): ?>
@@ -1338,7 +1348,7 @@ require __DIR__ . '/includes/layout-top.php';
                 <tr><td colspan="8" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
             <?php endif; ?>
             <?php foreach ($rows as $row): ?>
-                <tr class="border-b last:border-0" style="<?= e(reg_row_style($row)) ?>">
+                <tr id="reg-<?= (int) $row['id'] ?>" class="border-b last:border-0" style="<?= e(reg_row_style($row)) ?>">
                     <td class="py-2.5 px-4"><?php reg_person_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_item_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_status_cell($row, $statusLabels, $currentListUrl); ?></td>
@@ -1346,10 +1356,10 @@ require __DIR__ . '/includes/layout-top.php';
                     <td class="py-2.5 px-4"><?php reg_income_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_date_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_more_cell($row); ?></td>
-                    <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
+                    <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>&return=<?= rawurlencode($currentListUrl) ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
                 </tr>
                 <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 8); ?>
-                <?php reg_more_panel($row, 8); ?>
+                <?php reg_more_panel($row, 8, $currentListUrl); ?>
             <?php endforeach; ?>
             </tbody>
             <?php else: ?>
@@ -1373,7 +1383,7 @@ require __DIR__ . '/includes/layout-top.php';
                 <tr><td colspan="10" class="py-6 px-4 text-center text-gray-400"><?= $hasActiveFilters ? 'এই ফিল্টারে কোনো ফলাফল পাওয়া যায়নি।' : 'কোনো ডেটা নেই।' ?></td></tr>
             <?php endif; ?>
             <?php foreach ($rows as $row): ?>
-                <tr class="border-b last:border-0" style="<?= e(reg_row_style($row)) ?>">
+                <tr id="reg-<?= (int) $row['id'] ?>" class="border-b last:border-0" style="<?= e(reg_row_style($row)) ?>">
                     <td class="py-2.5 px-4"><?php reg_person_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_item_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_fb_cell($row); ?></td>
@@ -1383,10 +1393,10 @@ require __DIR__ . '/includes/layout-top.php';
                     <td class="py-2.5 px-4"><?php reg_income_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_date_cell($row); ?></td>
                     <td class="py-2.5 px-4"><?php reg_more_cell($row); ?></td>
-                    <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
+                    <td class="py-2.5 px-4"><a href="registrations.php?action=view&id=<?= $row['id'] ?>&return=<?= rawurlencode($currentListUrl) ?>" class="text-indigo-600 font-semibold">বিস্তারিত</a></td>
                 </tr>
                 <?php reg_pay_panel($db, $row, $ledgerByReg[$row['id']] ?? [], $currentListUrl, 10); ?>
-                <?php reg_more_panel($row, 10); ?>
+                <?php reg_more_panel($row, 10, $currentListUrl); ?>
             <?php endforeach; ?>
             </tbody>
             <?php endif; ?>
@@ -1587,7 +1597,12 @@ require __DIR__ . '/includes/layout-top.php';
         </div>
 
         <div class="flex items-center justify-between pt-2">
-            <a href="registrations.php" class="inline-block text-gray-500 text-sm">← তালিকায় ফিরে যান</a>
+            <?php // 🔴 ফিল্টার ধরে রেখে ফেরা (২০২৬-০৯-২৯) — আগে হার্ডকোড `registrations.php` ছিল, তাই
+      //    বিস্তারিতে ঢুকে ফিরলে সার্চ/স্ট্যাটাস/পাতা সব হারিয়ে যেত। তালিকার "বিস্তারিত"
+      //    লিংক এখন `&return=<তালিকার URL>` বয়ে আনে; `safe_return_url()` সেটা যাচাই করে
+      //    (registrations.php/course-data.php ছাড়া কিছু মানে না), আর `#reg-<id>` নোঙরে
+      //    ঠিক ঐ সারিতেই নামে। ?>
+<a href="<?= e(reg_anchor_url(safe_return_url($_GET['return'] ?? null, 'registrations.php'), (int) $viewRow['id'])) ?>" class="inline-block text-gray-500 text-sm">← তালিকায় ফিরে যান</a>
             <form method="post" action="registrations.php?action=delete" onsubmit="return confirmSubmit(this, 'এই রেজিস্ট্রেশন/অর্ডারটি আর্কাইভে সরাতে চান? আয়ের এন্ট্রি ও কুরিয়ার ব্যাচ সহ পুরোটা আর্কাইভে যাবে — পরে আর্কাইভ পেজ থেকে ফিরিয়ে আনা যাবে।', 'আর্কাইভ নিশ্চিতকরণ');">
                 <?= csrf_field() ?>
                 <input type="hidden" name="id" value="<?= $viewRow['id'] ?>">
