@@ -154,7 +154,8 @@ require __DIR__ . '/includes/layout-top.php';
             <span id="gmOcrMsg" class="text-xs text-gray-500 ml-1"></span>
             <p class="text-gray-400 text-xs mt-2">
                 ছবিটা <b>কোথাও আপলোড হয় না</b>, আপনার ব্রাউজারেই পড়া হয় (প্রথমবার ~৭ MB নামবে, পরে আর নামবে না)।
-                ⚠️ <b>ইংরেজি নামে ভালো কাজ করে; বাংলা নাম হলে পেস্ট করাই ভরসা</b>। পড়ার পর লেখাটা নিজে একবার দেখে নিন।
+                ইংরেজি ও <b>বাংলা</b> দুই রকম নামই পড়ে। প্রোফাইল ছবির অংশটা নিজে থেকেই বাদ যায়।
+                ⚠️ তবু <b>পড়ার পর লেখাটা একবার চোখ বুলিয়ে নিন</b> — কিছু ভুল এলে ঠিক করে দিন।
             </p>
         </div>
     </div>
@@ -186,6 +187,21 @@ foreach ($parsed['names'] as $pn) { $gmTotalLines += (int) $pn['count']; }
         </div>
     <?php endforeach; ?>
 </div>
+<?php if ($parsed['unreadable']): ?>
+    <div class="bg-white rounded-2xl shadow p-4 mb-4" style="box-shadow:inset 4px 0 0 0 #d97706">
+        <p class="font-bold text-gray-800 text-sm">⚠️ এই লেখাগুলো ঠিকমতো পড়া যায়নি (<?= count($parsed['unreadable']) ?>)</p>
+        <p class="text-gray-500 text-xs mt-1">
+            এগুলো নাম হিসেবে ধরা হয়নি। ছবিটা আরও বড় করে তুলে আবার চেষ্টা করুন,
+            অথবা নামগুলো উপরের বাক্সে নিজে লিখে দিন।
+        </p>
+        <div class="mt-2 flex flex-wrap gap-2">
+            <?php foreach ($parsed['unreadable'] as $u): ?>
+                <span class="inline-block px-2 py-1 rounded-lg text-xs bg-amber-100 text-amber-800"><?= e($u) ?></span>
+            <?php endforeach; ?>
+        </div>
+    </div>
+<?php endif; ?>
+
 <p class="text-gray-400 text-xs mb-6">
     <?php if ($gmTotalLines !== $s['group']): ?>
         গ্রুপের তালিকায় <?= (int) $gmTotalLines ?> টি নাম-লাইন, আলাদা নাম <?= (int) $s['group'] ?> টি।
@@ -308,17 +324,62 @@ $noReg   = array_values(array_filter($result['entries'], fn($x) => !$x['matches'
         });
     }
 
+    // 🔴 প্রোফাইল ছবির কলাম কোথায় শেষ — বাঁ পাশ থেকে মেপে বের করা (২০২৬-০৯-২৯)
+    //
+    // কেন দরকার: তালিকার বাঁ পাশে গোল প্রোফাইল ছবি থাকে, OCR সেগুলোকেও অক্ষর ভেবে
+    // পড়ে ফেলে আর নামের সামনে জঞ্জাল জোড়ে (`LU Nahida Akter`, `9? Yasir Arafat`)।
+    // ছবিগুলো **রঙিন**, আর লেখা প্রায় সাদাকালো — তাই কলাম ধরে "রঙের তীব্রতা" মেপে
+    // যেখানে রঙ থেমে যায় সেখান থেকেই লেখা শুরু ধরা হয়।
+    // 🔴 নিরাপত্তা: সর্বোচ্চ ২৫% পর্যন্ত কাটা যায়, আর স্পষ্ট সীমানা না পেলে কিছুই কাটে না
+    //    (সাদাকালো/ছবিহীন স্ক্রিনশটে যেন নামই কেটে না যায়)।
+    function avatarCut(x, w, h) {
+        try {
+            var d = x.getImageData(0, 0, w, h).data;
+            var maxCut = Math.floor(w * 0.25);
+            var colorful = new Array(maxCut).fill(0);
+            var step = Math.max(1, Math.floor(h / 400));         // প্রতিটা সারি না মেপে নমুনা
+            var rows = 0;
+            for (var y = 0; y < h; y += step) {
+                rows++;
+                for (var cx = 0; cx < maxCut; cx++) {
+                    var i = (y * w + cx) * 4;
+                    var r = d[i], g = d[i + 1], b = d[i + 2];
+                    if (Math.max(r, g, b) - Math.min(r, g, b) > 40) { colorful[cx]++; }
+                }
+            }
+            if (!rows) { return 0; }
+            // ডান দিক থেকে বাঁয়ে হেঁটে প্রথম যেখানে রঙ ৮%-এর বেশি — সেটাই ছবির শেষ প্রান্ত
+            for (var cx2 = maxCut - 1; cx2 >= 0; cx2--) {
+                if (colorful[cx2] / rows > 0.08) {
+                    return Math.min(maxCut, cx2 + Math.round(w * 0.01));
+                }
+            }
+        } catch (e) { /* ক্যানভাস পড়া না গেলে কাটা নয় */ }
+        return 0;
+    }
+
     // ছোট স্ক্রিনশটে লেখা ছোট থাকে — বড় করে সাদাকালো করলে পড়া অনেক ভালো হয়
     function prep(file) {
         return new Promise(function (res, rej) {
             var img = new Image();
             img.onload = function () {
-                var scale = Math.min(3, Math.max(1, 1400 / img.width));
+                // ১ম ধাপ: আসল মাপে এঁকে প্রোফাইল-ছবির কলামটা মেপে নেওয়া
+                var m = document.createElement('canvas');
+                m.width = img.width; m.height = img.height;
+                var mx = m.getContext('2d', { willReadFrequently: true });
+                mx.drawImage(img, 0, 0);
+                var cut = avatarCut(mx, img.width, img.height);
+                var srcW = img.width - cut;
+
+                // ২য় ধাপ: ছবির কলাম বাদ দিয়ে বাকিটা বড় করে সাদাকালো
+                var scale = Math.min(3, Math.max(1, 1400 / srcW));
                 var c = document.createElement('canvas');
-                c.width = Math.round(img.width * scale);
+                c.width = Math.round(srcW * scale);
                 c.height = Math.round(img.height * scale);
-                var x = c.getContext('2d');
-                x.drawImage(img, 0, 0, c.width, c.height);
+                var x = c.getContext('2d', { willReadFrequently: true });
+                x.fillStyle = '#fff';
+                x.fillRect(0, 0, c.width, c.height);
+                x.drawImage(img, cut, 0, srcW, img.height, 0, 0, c.width, c.height);
                 try {
                     var d = x.getImageData(0, 0, c.width, c.height);
                     for (var i = 0; i < d.data.length; i += 4) {
@@ -344,8 +405,12 @@ $noReg   = array_values(array_filter($result['entries'], fn($x) => !$x['matches'
 
         loadLib().then(function () {
             say('প্রস্তুত হচ্ছে…');
+            // 🔴 'eng+ben' — বাংলা নামও পড়া হয় (২০২৬-০৯-২৯ সন্ধ্যা)। আগে শুধু 'eng'
+            //    ছিল, তাতে "প্রকৌশলী তানজিন আরা" → "ACSA OAS Say" জাতীয় আবর্জনা আসত।
+            //    প্রোফাইল-ছবির কলাম কাটা শুরু করার পর বাংলাও নিখুঁত পড়ে (আসল
+            //    স্ক্রিনশটে যাচাই করা)। ben = tessdata 4.0.0_fast (~538 KB)।
             // oem 1 = LSTM — আমরা lstm-only core রেখেছি, তাই এটাই দিতে হবে
-            return Tesseract.createWorker('eng', 1, {
+            return Tesseract.createWorker('eng+ben', 1, {
                 workerPath: base + 'worker.min.js?v=' + v,
                 corePath: base + 'core/tesseract-core-lstm.wasm.js?v=' + v,
                 langPath: base + 'lang',
@@ -354,7 +419,10 @@ $noReg   = array_values(array_filter($result['entries'], fn($x) => !$x['matches'
                 }
             });
         }).then(function (worker) {
+            // PSM 4 = "একটাই কলামে নানা মাপের লেখা" — মেম্বার-তালিকার গঠন ঠিক এটাই
+            // (ডিফল্ট PSM 3 পুরো পাতাকে অনুচ্ছেদ ভেবে লাইন জোড়া লাগিয়ে দিত)।
             var out = [];
+            try { worker.setParameters({ tessedit_pageseg_mode: '4' }); } catch (e) { /* পুরনো ভার্সনে নেই */ }
             var step = files.reduce(function (chain, f, i) {
                 return chain.then(function () {
                     say('ছবি ' + (i + 1) + '/' + files.length + ' পড়ছে…');

@@ -40,14 +40,142 @@ function gm_noise_regex(): array
         '~\b\d+\s*(m|h|d|w|mo|y|min|mins|minute|minutes|hour|hours|day|days|week|weeks|month|months|year|years)\s+ago\b~iu',
         '~^active\b~iu',                                   // "Active now" / "Active 5m ago"
         '~^\d+\s*(members|people|জন)\b~iu',                // "12 members"
-        '~(https?://|www\.|@)~iu',                         // লিংক/ইমেইল
+        // 🔴 `@` একা দেখে ইমেইল ধরা যাবে না — প্রোফাইল-ছবি থেকে আসা `S'@` জঞ্জাল
+        //    `S'@ Jannatul Ferdaus` লাইনটাকেই "ইমেইল" বলে বাদ দিয়ে দিত (ইউজারের
+        //    স্ক্যানে ধরা — একটা আসল নাম হারিয়েছিল)। তাই দুই পাশে অক্ষর/সংখ্যা চাই।
+        '~(https?://|www\.|[\w.+-]+@[\w-]+\.[a-z]{2,})~iu',   // লিংক/ইমেইল
     ];
+}
+
+/**
+ * OCR-এ যেসব শব্দ ভেঙে আসে তার মূল রূপ (২০২৬-০৯-২৯ সন্ধ্যা, ইউজারের আসল স্ক্যান থেকে)।
+ *
+ * 🔴 কেন লাগল: ছবি থেকে পড়া লেখায় "Joined with invite link" বাস্তবে আসে
+ *    **"Joired with invite lirk"** / "Jared with invite lirk" / "loired with invite lirk"
+ *    / "We aired with imate lirk" — অর্থাৎ `n`↔`r`, `n`↔`i` গুলিয়ে যায়। হুবহু-মিল
+ *    (`gm_noise_contains()`) তখন একটাও ধরতে পারে না, আর প্রতিটা লাইন **নাম হিসেবে**
+ *    তালিকায় ঢুকে পড়ে (ইউজারের স্ক্যানে ১৮টা ভুয়া "নাম" এসেছিল)।
+ * 🔴 তাই শব্দ ধরে **কাছাকাছি** মিল দেখা হয়, কিন্তু **অন্তত দুটো শব্দ** মিলতে হবে —
+ *    একটা মিললেই বাদ দিলে "Link Ahmed"/"Adda Rahman" জাতীয় আসল নামও হারাত।
+ */
+function gm_noise_words(): array
+{
+    return ['joined', 'invite', 'link', 'added', 'admin', 'member', 'members',
+            'active', 'online', 'group', 'with', 'you', 'creator', 'moderator'];
+}
+
+const GM_NOISE_WORD_MIN = 0.72;   // এর বেশি কাছাকাছি হলে ঐ শব্দটা "আবর্জনা" ধরা হয়
+const GM_NOISE_WORD_HITS = 2;     // কমপক্ষে এতগুলো শব্দ মিললে পুরো লাইন বাদ
+
+/**
+ * লাইনটা কি (ভাঙা বানান সহ) UI-র লেখা?
+ * 🔴 ৩ অক্ষরের কম শব্দ গোনা হয় না — "by"/"a" যেকোনো নামে মিলে যেত।
+ */
+function gm_is_fuzzy_noise(string $line): bool
+{
+    $tokens = gm_tokens($line);
+    if (count($tokens) < 2) {
+        return false;
+    }
+    $words = gm_noise_words();
+    $hits  = 0;
+    foreach ($tokens as $t) {
+        if (mb_strlen($t, 'UTF-8') < 3) {
+            continue;
+        }
+        foreach ($words as $w) {
+            if ($t === $w || gm_similarity($t, $w) >= GM_NOISE_WORD_MIN) {
+                $hits++;
+                break;
+            }
+        }
+        if ($hits >= GM_NOISE_WORD_HITS) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * নামের **সামনে** বসা প্রোফাইল-ছবির আবর্জনা ছেঁটে ফেলে।
+ *
+ * 🔴 কেন (ইউজারের আসল স্ক্যান): তালিকার বাঁ পাশে গোল প্রোফাইল ছবি থাকে, OCR সেটাকেও
+ *    অক্ষর ভেবে পড়ে ফেলে — `1. AyeSha Siddika` · `y/ Elora Parvin` · `» Farjana Lucky`
+ *    · `LU Nahida Akter` · `47, Sarmin Rima` · `9? Yasir Arafat` · `: Trisha Alam`।
+ *    এই জঞ্জাল নামের সাথে জুড়ে থাকলে রেজিস্ট্রেশনের নামের সাথে আর মিলত না।
+ * 🔴 শুধু **সামনের** টোকেনই ছাঁটা হয়, আর প্রথম আসল-নামের-মতো টোকেন পেলেই থেমে যায় —
+ *    নামের ভেতরের কিছু (`Prima Mn Dey`-র `Mn`) কখনো হারায় না।
+ * ⚠️ একটাও নাম-সদৃশ টোকেন না থাকলে **আসল লাইনটাই** ফেরত যায় (সব ছেঁটে খালি করা নয়)।
+ */
+function gm_strip_lead_junk(string $line): string
+{
+    $parts = preg_split('~\s+~u', trim($line), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $i = 0;
+    $n = count($parts);
+    while ($i < $n && !gm_looks_like_name_token($parts[$i])) {
+        $i++;
+    }
+    if ($i === 0 || $i >= $n) {
+        return $line;
+    }
+    return implode(' ', array_slice($parts, $i));
+}
+
+// টোকেনটা কি নামের অংশ হতে পারে? (ছবি থেকে আসা জঞ্জাল নয়)
+function gm_looks_like_name_token(string $t): bool
+{
+    // যতিচিহ্ন/সংখ্যা/প্রতীক মেশানো থাকলে নাম নয় — `1.` `y/` `S'@` `47,` `9?` `{]`
+    if (!preg_match('~^[\p{L}\x{0980}-\x{09FF}]+$~u', $t)) {
+        return false;
+    }
+    $len = mb_strlen($t, 'UTF-8');
+    if ($len < 2) {
+        return false;                       // একক অক্ষর — `A` `y` `\`
+    }
+    // ৩ অক্ষরের কম **সম্পূর্ণ বড় হাতের** — `LU` `AN` `YT` (ছবির আবর্জনা)।
+    // ⚠️ `Md`/`Mn` ঠিকই থাকে (ওগুলোয় ছোট হাতের অক্ষর আছে)।
+    if ($len <= 2 && preg_match('~^\p{Lu}+$~u', $t)) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * লাইনটা কি পড়াই যায়নি? (সম্ভবত বাংলা নাম — OCR ইংরেজি ছাড়া পড়ে না)
+ *
+ * 🔴 ইউজারের স্ক্যানে "প্রকৌশলী তানজিন আরা" → **`ATI! OIG ST`** আর
+ *    "ফারহানা আফরোজ" → **`PIFRAANT HELIS`** হয়েছে। এগুলো দেখতে নামের মতো, তাই চুপচাপ
+ *    "রেজিস্ট্রেশন পাইনি" তালিকায় বসে অ্যাডমিনকে বিভ্রান্ত করত। এখন আলাদা করে দেখিয়ে
+ *    বলা হয় — "এগুলো নিজে লিখে দিন"।
+ * ধরার নিয়ম **দুটো শর্তই** লাগে: (১) লেখায় একটাও ছোট হাতের অক্ষর নেই, **আর**
+ * (২) অন্তত একটা শব্দে একটাও স্বরবর্ণ নেই (`ST`, `NGKR`)।
+ * 🔴 দুটো শর্ত কেন — শুধু "বড় হাতের" দেখলেই বাদ দিলে কেউ **ইচ্ছে করে বড় হাতে**
+ *    নাম লিখলে (`ISRAT JAHAN`, `MD RAKIB`) সেটাও ধরা পড়ত, আর পেস্ট করা পুরো
+ *    তালিকা বড় হাতের হলে সবই অপাঠ্য দেখাত (টেস্টে ধরা পড়েছিল)। আসল নামে
+ *    স্বরবর্ণ থাকেই; OCR-এর আবর্জনায় প্রায়ই থাকে না।
+ * ⚠️ এটা **বাদ দেওয়া নয়** — শুধু আলাদা বাক্সে দেখানো, অ্যাডমিন নিজে ঠিক করে দেবেন।
+ * ⚠️ সব বাংলা-জনিত আবর্জনা এতে ধরা পড়বে না (`PIFRAANT HELIS`-এ স্বরবর্ণ আছে) —
+ *    তাই পাতায় আলাদা করে লেখা আছে যে বাংলা নাম হাতে লিখে দিতে হবে।
+ */
+function gm_looks_unreadable(string $line): bool
+{
+    if (preg_match('~\p{Ll}~u', $line) || !preg_match('~\p{Lu}~u', $line)) {
+        return false;
+    }
+    foreach (preg_split('~\s+~u', $line, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $t) {
+        $letters = preg_replace('~[^\p{L}]~u', '', $t);
+        if (mb_strlen((string) $letters, 'UTF-8') >= 2 && !preg_match('~[AEIOUY]~iu', (string) $letters)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
  * পেস্ট/স্ক্যান করা কাঁচা লেখা → নামের তালিকা।
  *
- * ফেরে: ['names' => [ ['name' => 'Ayesha Siddika', 'count' => 2], … ], 'dropped' => int, 'lines' => int]
+ * ফেরে: ['names' => [ ['name' => 'Ayesha Siddika', 'count' => 2], … ], 'dropped' => int,
+ *        'lines' => int, 'unreadable' => ['ATI! OIG ST', …]]
  * একই নাম একাধিকবার এলে **একটাই এন্ট্রি**, সাথে `count` — ইউজার এটাই চেয়েছেন
  * ("মেসেঞ্জারে এই নামে দুই জন")।
  */
@@ -56,20 +184,33 @@ function gm_parse_names(string $raw): array
     $raw   = str_replace(["\r\n", "\r"], "\n", $raw);
     $lines = explode("\n", $raw);
 
-    $out     = [];   // norm => ['name'=>..., 'count'=>...]
-    $dropped = 0;
-    $seen    = 0;
+    $out        = [];   // norm => ['name'=>..., 'count'=>...]
+    $dropped    = 0;
+    $seen       = 0;
+    $unreadable = [];
 
     foreach ($lines as $line) {
         // ZWSP/ZWNJ/BOM ইত্যাদি — কপি-পেস্টে প্রায়ই ঢোকে, নাহলে মিল ভেঙে যেত
         $line = preg_replace('~[\x{200B}-\x{200F}\x{FEFF}\x{00AD}]~u', '', $line);
-        $line = trim((string) $line, " \t\v\0.,·•|-–—*");
-        $line = trim(preg_replace('~\s+~u', ' ', $line));
+        // 🔴🔴 `trim()`-এর চরিত্র-তালিকা **বাইট ধরে** কাজ করে — এখানে আগে `·•–—` ছিল,
+        //    ফলে `» Farjana Lucky`-র `»` (0xC2 0xBB)-এর প্রথম বাইটটা ছেঁটে গিয়ে
+        //    একটা **অবৈধ UTF-8 বাইট** পড়ে থাকত; তারপর `/u` রেগেক্স সব ব্যর্থ হয়ে
+        //    নামটা নীরবে হারিয়ে যেত (ইউজারের আসল স্ক্যানে ধরা)। তাই তালিকায়
+        //    **শুধু ASCII**, আর ইউনিকোড যতিচিহ্ন আলাদা `/u` রেগেক্সে।
+        //    (এই নিয়মটা CLAUDE.md-এ `text_excerpt()`-এর ঘরেও লেখা আছে।)
+        $line = trim((string) $line, " \t\v\0.,|-*");
+        $line = preg_replace('~^[\p{P}\p{S}\s]+~u', '', (string) $line);
+        $line = preg_replace('~[\p{P}\p{S}\s]+$~u', '', (string) $line);
+        $line = trim((string) preg_replace('~\s+~u', ' ', (string) $line));
         if ($line === '') {
             continue;
         }
         $seen++;
-        if (gm_is_noise($line)) {
+        // 🔴 ক্রম জরুরি: **আগে** সামনের জঞ্জাল ছাঁটা, **তারপর** আবর্জনা-যাচাই।
+        //    উল্টো করলে ছবির জঞ্জালই যাচাইটা ভুল পথে নিত (`S'@ Jannatul Ferdaus`
+        //    "ইমেইল" বলে বাদ পড়ত, `YY Added by you` আবর্জনা বলে ধরা পড়ত না)।
+        $line = gm_strip_lead_junk($line);
+        if (gm_is_noise($line) || gm_is_fuzzy_noise($line)) {
             $dropped++;
             continue;
         }
@@ -78,13 +219,24 @@ function gm_parse_names(string $raw): array
             $dropped++;
             continue;
         }
+        if (gm_looks_unreadable($line)) {
+            if (!in_array($line, $unreadable, true)) {
+                $unreadable[] = $line;
+            }
+            continue;
+        }
         if (isset($out[$key])) {
             $out[$key]['count']++;
         } else {
             $out[$key] = ['name' => $line, 'count' => 1];
         }
     }
-    return ['names' => array_values($out), 'dropped' => $dropped, 'lines' => $seen];
+    return [
+        'names'      => array_values($out),
+        'dropped'    => $dropped,
+        'lines'      => $seen,
+        'unreadable' => $unreadable,
+    ];
 }
 
 // লাইনটা কি নাম নয় (UI-র লেখা / আবর্জনা)?
