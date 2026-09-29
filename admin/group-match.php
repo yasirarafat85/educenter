@@ -173,13 +173,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'scan')
         $result = gm_match_names($parsed['names'], $regs);
         $snap   = gm_snapshot($result, $parsed);
         if ($selItemId > 0 && trim($raw) !== '') {
-            $me    = admin_current();
+            // 🔴 কে চালাচ্ছেন সেটা **সেশন থেকে** — এই কোডবেসে `admin_current()` বলে
+            //    কোনো ফাংশন নেই (auth.php-এ আছে `current_admin_name()` আর
+            //    `$_SESSION['admin_id']`)। একবার ভুল করে ওটা ডাকা হয়েছিল, লাইভে
+            //    "মিলিয়ে দেখুন" চাপলেই HTTP 500 হতো।
             $saved = gm_history_save($db, [
                 'item_id'    => $selItemId,
                 'item_title' => $selLabel !== '' ? explode(' — ', $selLabel)[0] : '',
                 'batch'      => $selBatch,
-                'admin_id'   => (int) ($me['id'] ?? 0),
-                'admin_name' => (string) ($me['name'] ?? ''),
+                'admin_id'   => (int) ($_SESSION['admin_id'] ?? 0),
+                'admin_name' => (string) ($_SESSION['admin_name'] ?? ($_SESSION['admin_username'] ?? '')),
             ], $raw, $snap);
         }
     }
