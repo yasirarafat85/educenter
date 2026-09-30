@@ -746,6 +746,61 @@ function course_reg_open(array $item): bool
     return !empty($item['registration_open']) && !course_deadline_passed($item);
 }
 
+// ── 🔑 বিশেষ (গোপন) রেজিস্ট্রেশন লিংক (২০২৬-০৯-৩০, ইউজারের চাওয়া) ────────────────
+//
+// সাইটে ভর্তি বন্ধ, অথচ দু-একজনের রেজিস্ট্রেশন বাকি (যেমন গ্রুপে আছেন কিন্তু ফর্ম পূরণ করেননি)।
+// তাঁদের এই লিংকটা পাঠালে **শুধু ঐ লিংক দিয়েই** ফর্মটা খোলে — সাইট সবার জন্য বন্ধই থাকে।
+//
+// 🔴 চাবিটা `settings` টেবিলে key-value হিসেবে রাখা, তাই **কোনো মাইগ্রেশন লাগে না**
+//    (`admin_nav_pins_<admin_id>`-এর মতোই প্রতিষ্ঠিত প্যাটার্ন)।
+// 🔴 চাবি **শুধু "ভর্তি খোলা/বন্ধ" সুইচ ও ভর্তির শেষ সময়** — এই দুটো গেটই খোলে।
+//    ব্যাচ নিষ্ক্রিয় (`is_active = 0`) হলে কোনো লিংকেই কিছু খুলবে না (কোয়েরিতেই আটকায়),
+//    আর CSRF/স্প্যাম/রেট-লিমিট সব গার্ড আগের মতোই বহাল থাকে।
+const COURSE_REG_KEY_PREFIX = 'course_reg_key_';
+
+function course_reg_key_name(int $batchId): string
+{
+    return COURSE_REG_KEY_PREFIX . $batchId;
+}
+
+/** এই ব্যাচের চালু চাবি (না থাকলে খালি স্ট্রিং = বিশেষ লিংক বন্ধ) */
+function course_reg_key_get(int $batchId): string
+{
+    return $batchId > 0 ? trim(get_setting(course_reg_key_name($batchId))) : '';
+}
+
+/** নতুন চাবি — ১৬ হেক্স অক্ষর (আন্দাজ করা অসম্ভব, তবু লিংকটা হাতে পাঠানোর মতো ছোট) */
+function course_reg_key_make(): string
+{
+    return bin2hex(random_bytes(8));
+}
+
+function course_reg_key_valid(int $batchId, string $given): bool
+{
+    $given = trim($given);
+    $real  = course_reg_key_get($batchId);
+    // 🔴 চাবি সেট না থাকলে কোনো মানই পাস করবে না — খালি ↔ খালি মিলে যেন সবার জন্য খুলে না যায়
+    if ($given === '' || $real === '') {
+        return false;
+    }
+    return hash_equals($real, $given);   // timing-safe তুলনা
+}
+
+/**
+ * পাবলিক ফর্মটা খুলবে কিনা — সাধারণ গেট **অথবা** সঠিক বিশেষ লিংক।
+ * 🔴 নিয়ম: ফর্ম দেখানো ও সাবমিট — দুই জায়গাতেই এই একটাই ফাংশন ডাকুন।
+ */
+function course_reg_allowed(array $item, string $key = ''): bool
+{
+    return course_reg_open($item) || course_reg_key_valid((int) ($item['id'] ?? 0), $key);
+}
+
+/** অ্যাডমিনকে দেখানোর/কপি করার পুরো লিংক */
+function course_reg_key_url(int $batchId, string $key): string
+{
+    return SITE_URL . '/course-register?course_id=' . $batchId . '&k=' . rawurlencode($key);
+}
+
 /** কত সময় বাকি → "3 দিন 14 ঘণ্টা 22 মিনিট" (🔴 English অঙ্ক — পাবলিক সাইটের নিয়ম) */
 function course_deadline_remaining_text(int $seconds): string
 {

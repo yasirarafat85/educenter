@@ -7,6 +7,8 @@ $activePage = 'courses';
 $pageDescription = 'অনলাইনে কোর্সে ভর্তির ফর্ম পূরণ করুন — শিশুর তথ্য দিন, আসন নিশ্চিত করুন।';
 
 $courseId = (int) ($_GET['course_id'] ?? 0);
+// 🔑 বিশেষ (গোপন) লিংকের চাবি — সাইটে ভর্তি বন্ধ থাকলেও এটা দিয়ে ফর্মটা খোলে
+$regKey = trim((string) ($_GET['k'] ?? ''));
 $selectedCourse = null;
 
 if ($courseId > 0) {
@@ -84,7 +86,12 @@ if (!$selectedCourse):
             </div>
         <?php endif; ?>
 
-        <?php if (!course_reg_open($selectedCourse)): ?>
+        <?php
+        // ফর্ম দেখানোর গেট — সাধারণ নিয়ম **অথবা** সঠিক বিশেষ লিংক (সাবমিটেও হুবহু একই যাচাই)
+        $regAllowed = course_reg_allowed($selectedCourse, $regKey);
+        $regViaKey  = $regAllowed && !course_reg_open($selectedCourse);
+        ?>
+        <?php if (!$regAllowed): ?>
             <div class="bg-white/15 border border-white/30 rounded-xl p-6 text-center">
                 <i data-lucide="lock" class="w-10 h-10 text-white mx-auto mb-3"></i>
                 <p class="text-white font-bold text-lg mb-1">এই ব্যাচের রেজিস্ট্রেশন বর্তমানে বন্ধ</p>
@@ -106,10 +113,24 @@ if (!$selectedCourse):
         <?= render_course_media($db, (int) $selectedCourse['id']) ?>
 
         <?= render_countdown_html($selectedCourse, 'course', 'lg') ?>
+        <?php if ($regViaKey): ?>
+            <?php // 🔑 বিশেষ লিংক দিয়ে খোলা — অভিভাবক যেন বোঝেন এটা তাঁর জন্য আলাদা করে খোলা হয়েছে ?>
+            <div class="bg-white/15 border border-white/30 rounded-xl p-4 mb-4">
+                <p class="text-white font-bold text-sm">🔑 আপনার জন্য বিশেষভাবে খোলা রেজিস্ট্রেশন</p>
+                <p class="text-fuchsia-100 text-xs mt-1">
+                    এই ব্যাচে সাইটে ভর্তি এখন বন্ধ — এই লিংকটা শুধু আপনাকেই দেওয়া হয়েছে।
+                    অন্য কাউকে ফরওয়ার্ড করবেন না, আর ফর্মটা এখনই পূরণ করে ফেলুন।
+                </p>
+            </div>
+        <?php endif; ?>
+
         <form method="post" action="course-register-submit.php" class="space-y-4 mt-4" id="course-register-form" data-countdown-lock>
             <?= csrf_field() ?>
             <?= spam_protection_fields() ?>
             <input type="hidden" name="course_id" value="<?= $selectedCourse['id'] ?>">
+            <?php // 🔴 চাবিটা POST-এও যেতে হবে — সাবমিট হ্যান্ডলার আবার নিজে যাচাই করে (defense in depth),
+                  //    আর ফর্মে ভুল থাকলে ফেরত পাঠানোর লিংকেও এটা বয়ে যায় ?>
+            <?php if ($regViaKey): ?><input type="hidden" name="k" value="<?= e($regKey) ?>"><?php endif; ?>
 
             <div>
                 <label class="flex items-center gap-2 text-white font-semibold mb-1.5 text-sm">

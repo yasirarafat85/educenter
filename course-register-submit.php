@@ -6,7 +6,11 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $courseId = (int) ($_POST['course_id'] ?? 0);
-$backUrl = 'course-register.php?course_id=' . $courseId;
+// 🔑 বিশেষ (গোপন) লিংকের চাবি — ভুল হলে ফেরত পাঠানোর লিংকেও এটা বয়ে যেতে হবে,
+//    নাহলে অভিভাবক বন্ধ পাতায় গিয়ে পড়বেন আর লেখা তথ্যও কাজে লাগবে না।
+$regKey  = trim((string) ($_POST['k'] ?? ''));
+$backUrl = 'course-register.php?course_id=' . $courseId
+         . ($regKey !== '' ? '&k=' . rawurlencode($regKey) : '');
 
 function course_register_fail(string $msg, string $backUrl): void
 {
@@ -45,7 +49,9 @@ if (!$course) {
 // UI তে রেজিস্ট্রেশন বন্ধ থাকলে ফর্মই দেখানো হয় না, কিন্তু সরাসরি POST করলেও যেন আটকায় (defense in depth)
 // 🔴 course_reg_open() হাতের সুইচ **ও** ভর্তির শেষ সময় দুটোই দেখে — কেউ ফর্ম খুলে বসে থাকতে
 // থাকতে সময় পেরিয়ে গেলে ব্রাউজারের ঘড়ির উপর ভরসা না করে এখানেই আটকানো হয়।
-if (!course_reg_open($course)) {
+// 🔑 বিশেষ লিংকের চাবি সঠিক হলে এই দুটো গেটই খোলে (ব্যাচ নিষ্ক্রিয় হলে উপরের কোয়েরিতেই আটকে গেছে)
+$viaKey = !course_reg_open($course) && course_reg_key_valid($courseId, $regKey);
+if (!course_reg_allowed($course, $regKey)) {
     $closedMsg = course_deadline_passed($course)
         ? 'দুঃখিত, এই ব্যাচে ভর্তির সময় শেষ হয়ে গেছে। নতুন ব্যাচ খুললে জানতে আগ্রহ জানিয়ে রাখুন।'
         : 'এই ব্যাচের রেজিস্ট্রেশন বর্তমানে বন্ধ।';
@@ -119,6 +125,20 @@ $stmt->execute([
 ]);
 
 $newId = (int) $db->lastInsertId();
+
+// 🔑 বিশেষ লিংক দিয়ে এলে অ্যাডমিন-নোটে একটা চিহ্ন — তালিকায় দেখেই বোঝা যায় এটা
+//    সাইট বন্ধ থাকা অবস্থায় আলাদা করে নেওয়া রেজিস্ট্রেশন।
+// 🔴 আলাদা UPDATE-এ, try/catch-এ — এতে মূল INSERT অক্ষত থাকে, কিছু ভুল হলেও
+//    রেজিস্ট্রেশনটা কখনো হারায় না।
+if ($viaKey) {
+    try {
+        $db->prepare('UPDATE registrations SET admin_note = :n WHERE id = :id')
+           ->execute(['n' => '🔑 বিশেষ লিংক দিয়ে রেজিস্ট্রেশন (সাইটে ভর্তি বন্ধ ছিল)', 'id' => $newId]);
+    } catch (PDOException $ex) {
+        // নোট বসাতে না পারলেও রেজিস্ট্রেশন সফলই
+    }
+}
+
 form_record_submit($db, $spamIp); // রেট-লিমিটের হিসাবে যোগ
 unset($_SESSION['course_register_form_old']);
 

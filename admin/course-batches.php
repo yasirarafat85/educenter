@@ -182,6 +182,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete') {
 }
 
 // ------------------------------------------------------------
+// 🔑 বিশেষ (গোপন) রেজিস্ট্রেশন লিংক — তৈরি / নতুন করা / বন্ধ করা
+//
+// সাইটে ভর্তি বন্ধ রেখেও দু-একজনকে আলাদা করে রেজিস্ট্রেশন করানোর জন্য
+// (ইউজারের চাওয়া, ২০২৬-০৯-৩০)। চাবি `settings`-এ, তাই মাইগ্রেশন লাগে না।
+// 🔴 অ্যাকশন-মার্কার `reg-key` ইচ্ছাকৃতভাবে `admin_delete_actions()`-এ নেই —
+//    কোনো কনটেন্ট মোছা হচ্ছে না, তাই `content:courses`-এ **edit** cap-ই যথেষ্ট।
+// ------------------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'reg-key') {
+    if (!csrf_verify()) {
+        set_flash('error', 'ফর্ম টোকেন মিলছে না।');
+        redirect('course-batches.php?course_id=' . $courseId);
+    }
+    $batchId = (int) ($_POST['id'] ?? 0);
+    $mode    = ($_POST['mode'] ?? '') === 'off' ? 'off' : 'new';
+
+    // 🔴 ব্যাচটা সত্যিই এই কোর্সের কিনা DB থেকে যাচাই (POST-এর id-তে ভরসা নয়)
+    $chk = $db->prepare('SELECT batch_name FROM course_batches WHERE id = :id AND course_id = :cid');
+    $chk->execute(['id' => $batchId, 'cid' => $courseId]);
+    $chkRow = $chk->fetch();
+    if (!$chkRow) {
+        set_flash('error', 'ব্যাচটি পাওয়া যায়নি।');
+        redirect('course-batches.php?course_id=' . $courseId);
+    }
+
+    if ($mode === 'off') {
+        update_setting(course_reg_key_name($batchId), '');
+        set_flash('success', '🔑 বিশেষ লিংক বন্ধ করা হয়েছে — পুরনো লিংক আর কাজ করবে না।');
+    } else {
+        $had = course_reg_key_get($batchId) !== '';
+        update_setting(course_reg_key_name($batchId), course_reg_key_make());
+        set_flash('success', $had
+            ? '🔑 নতুন লিংক তৈরি হয়েছে — আগের লিংকটা এখন থেকে আর কাজ করবে না।'
+            : '🔑 বিশেষ লিংক তৈরি হয়েছে — "কপি" চেপে যাঁকে দরকার তাঁকে পাঠিয়ে দিন।');
+    }
+    redirect('course-batches.php?course_id=' . $courseId);
+}
+
+// ------------------------------------------------------------
 // FORM ভিউ (Add / Edit) ডেটা লোড
 // ------------------------------------------------------------
 $editBatch = null;
@@ -260,6 +298,7 @@ require __DIR__ . '/includes/layout-top.php';
                     <th class="py-3 px-4">প্রশিক্ষক</th>
                     <th class="py-3 px-4">মেয়াদ</th>
                     <th class="py-3 px-4">রেজিস্ট্রেশন খোলা?</th>
+                    <th class="py-3 px-4">🔑 বিশেষ লিংক</th>
                     <th class="py-3 px-4">পার্সেল হাইড?</th>
                     <th class="py-3 px-4">সাইটে দেখাবে?</th>
                     <th class="py-3 px-4">রেজিস্ট্রেশন</th>
@@ -298,6 +337,47 @@ require __DIR__ . '/includes/layout-top.php';
                             </div>
                         <?php endif; ?>
                     </td>
+                    <?php // 🔑 বিশেষ (গোপন) রেজিস্ট্রেশন লিংক — সাইটে ভর্তি বন্ধ রেখেও যাঁকে দরকার শুধু তাঁকে পাঠানোর জন্য
+                          $bKey = course_reg_key_get((int) $b['id']);
+                          $bUrl = $bKey !== '' ? course_reg_key_url((int) $b['id'], $bKey) : ''; ?>
+                    <td class="py-2.5 px-4" style="min-width:210px;max-width:320px;white-space:normal;vertical-align:top;">
+                        <?php // 🔴 পুরো ঘরটা একটাই মোড়কে — মোবাইল কার্ড-লেআউটে `td` flex হয়ে যায়,
+                              //    খোলা রাখলে বোতাম/লিংক/URL পাশাপাশি তিন কলামে চেপে যেত (স্ক্রিনশটে ধরা) ?>
+                        <div class="min-w-0">
+                        <?php if ($bKey === ''): ?>
+                            <form method="post" action="course-batches.php?action=reg-key" class="inline">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="id" value="<?= (int) $b['id'] ?>">
+                                <input type="hidden" name="course_id" value="<?= $courseId ?>">
+                                <input type="hidden" name="mode" value="new">
+                                <button type="submit" class="text-indigo-600 font-semibold text-sm">🔑 লিংক তৈরি করুন</button>
+                            </form>
+                            <div class="text-xs text-gray-400 mt-0.5">ভর্তি বন্ধ থাকলেও এই লিংক দিয়ে ফর্ম খোলে</div>
+                        <?php else: ?>
+                            <button type="button" class="regkey-copy text-white font-semibold text-xs px-2.5 py-1.5 rounded-lg bg-indigo-600"
+                                    data-url="<?= e($bUrl) ?>">🔗 লিংক কপি করুন</button>
+                            <div class="text-xs text-gray-400 mt-1" style="word-break:break-all;"><?= e($bUrl) ?></div>
+                            <div class="mt-1 flex flex-wrap" style="column-gap:.75rem;row-gap:.25rem;">
+                                <form method="post" action="course-batches.php?action=reg-key" class="inline"
+                                      onsubmit="return confirmSubmit(this, 'নতুন লিংক তৈরি করলে আগের লিংকটা সাথে সাথে অচল হয়ে যাবে — কাউকে আগেরটা পাঠিয়ে থাকলে সে আর ঢুকতে পারবে না। নতুন লিংক বানাবেন?', 'নতুন লিংক বানাবেন?');">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="id" value="<?= (int) $b['id'] ?>">
+                                    <input type="hidden" name="course_id" value="<?= $courseId ?>">
+                                    <input type="hidden" name="mode" value="new">
+                                    <button type="submit" class="text-gray-500 text-xs font-semibold">↻ নতুন লিংক</button>
+                                </form>
+                                <form method="post" action="course-batches.php?action=reg-key" class="inline"
+                                      onsubmit="return confirmSubmit(this, 'বিশেষ লিংকটা বন্ধ করে দেবেন? যাঁদের পাঠিয়েছিলেন তাঁরা আর ফর্ম খুলতে পারবেন না। (আগে হয়ে যাওয়া রেজিস্ট্রেশনে কিছু হবে না।)', 'লিংক বন্ধ করবেন?');">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="id" value="<?= (int) $b['id'] ?>">
+                                    <input type="hidden" name="course_id" value="<?= $courseId ?>">
+                                    <input type="hidden" name="mode" value="off">
+                                    <button type="submit" class="text-red-600 text-xs font-semibold">✕ বন্ধ করুন</button>
+                                </form>
+                            </div>
+                        <?php endif; ?>
+                        </div>
+                    </td>
                     <td class="py-2.5 px-4"><?= $b['hide_parcel'] ? '<span class="text-green-600 font-semibold">হ্যাঁ</span>' : '<span class="text-gray-400">না</span>' ?></td>
                     <td class="py-2.5 px-4"><?= $b['is_active'] ? '<span class="text-green-600 font-semibold">হ্যাঁ</span>' : '<span class="text-gray-400">না</span>' ?></td>
                     <td class="py-2.5 px-4">
@@ -328,6 +408,35 @@ require __DIR__ . '/includes/layout-top.php';
         </table>
     </div>
     <?php endif; ?>
+
+    <?php // 🔗 লিংক কপি — 🔴 নিজের আলাদা ব্লকে (layout-bottom-এর বড় স্ক্রিপ্টের ভেতরে নয়),
+          //    ওখানে কিছু ভাঙলে মডাল/সার্চ/টেবিল-কার্ড সব একসাথে মরে। ?>
+    <script>
+    (function () {
+        document.querySelectorAll('.regkey-copy').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var url = btn.getAttribute('data-url') || '', old = btn.textContent;
+                function done(ok) {
+                    btn.textContent = ok ? '✓ কপি হয়েছে' : 'কপি হয়নি — নিচের লেখাটা হাতে কপি করুন';
+                    setTimeout(function () { btn.textContent = old; }, 2500);
+                }
+                // navigator.clipboard শুধু HTTPS-এ চলে — না পারলে লুকানো textarea + execCommand
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(url).then(function () { done(true); }, function () { fallback(); });
+                } else { fallback(); }
+                function fallback() {
+                    try {
+                        var t = document.createElement('textarea');
+                        t.value = url; t.style.position = 'fixed'; t.style.opacity = '0';
+                        document.body.appendChild(t); t.select();
+                        var ok = document.execCommand('copy');
+                        document.body.removeChild(t); done(ok);
+                    } catch (e) { done(false); }
+                }
+            });
+        });
+    })();
+    </script>
 
 <?php elseif ($action === 'form'): ?>
     <div class="bg-white rounded-2xl shadow p-6 max-w-2xl">
