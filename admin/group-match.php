@@ -55,7 +55,8 @@ $selLabel  = '';
 if ($selItemId > 0) {
     try {
         $st = $db->prepare(
-            "SELECT id, customer_name, phone, facebook_id, father_mobile, item_title, batch, status
+            "SELECT id, customer_name, phone, facebook_id, father_mobile, item_title, batch, status,
+                    fb_group_added, messenger_group_added
              FROM registrations
              WHERE type = 'course' AND item_id = :i AND COALESCE(batch, '') = :b AND status <> 'cancelled'
              ORDER BY customer_name"
@@ -244,11 +245,13 @@ require __DIR__ . '/includes/layout-top.php';
 
 <div class="bg-white rounded-2xl shadow p-5 mb-6">
     <p class="text-gray-700 text-sm leading-relaxed">
-        কোর্সের <b>মেসেঞ্জার/ফেসবুক গ্রুপে কারা আছেন</b> আর <b>কারা রেজিস্ট্রেশন করেছেন</b> — দুটো মিলিয়ে দেখার পাতা।
+        <b>কে রেজিস্ট্রেশন করেছে কিন্তু মেসেঞ্জার/ফেসবুক গ্রুপে নেই</b> — সেটা বের করার পাতা।
         গ্রুপের সদস্য-তালিকার নামগুলো নিচের বাক্সে বসান, তারপর <b>“মিলিয়ে দেখুন”</b>।
+        যাঁদের নাম দেবেন, ধরে নেওয়া হবে <b>এঁরা গ্রুপে আছেন</b>।
     </p>
     <p class="text-gray-500 text-xs mt-2">
-        🔴 এখানে <b>কিছুই সংরক্ষণ হয় না</b> — শুধু দেখানো হয়। মিল খোঁজা হয় রেজিস্ট্রেশনের
+        🔴 এখান থেকে <b>কোনো তথ্য বদলায় না</b> — গ্রুপের টিক, স্ট্যাটাস, টাকার খাতা কিচ্ছু ছোঁয়া হয় না;
+        শুধু এই মেলানোর একটা রেকর্ড জমা থাকে (নিচে “আগে যতবার মিলিয়েছেন”)। মিল খোঁজা হয় রেজিস্ট্রেশনের
         <b>“ফেসবুক আইডি নাম”</b> ও শিক্ষার্থী/অভিভাবকের নামের সাথে। বাতিল করা রেজিস্ট্রেশন গোনা হয় না।
     </p>
 </div>
@@ -292,6 +295,8 @@ require __DIR__ . '/includes/layout-top.php';
         <textarea name="names" id="gmNames" rows="9" placeholder="AyeSha Siddika&#10;Elora Parvin&#10;Israt Jahan"
                   class="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm" style="min-width:0"><?= e($gmBoxText) ?></textarea>
         <p class="text-gray-400 text-xs mt-1">
+            এখানে যাঁদের নাম দেবেন, ধরে নেওয়া হবে <strong>এঁরা গ্রুপে আছেন</strong> — বাকিরা
+            “গ্রুপে যোগ করা বাকি” তালিকায় আসবেন।
             “Joined with invite link” / “Added by you” জাতীয় লাইন থাকলেও সমস্যা নেই — নিজে থেকেই বাদ যাবে।
         </p>
 
@@ -380,11 +385,13 @@ $showSnap = $snap ?? (($viewRun && $result === null) ? $viewSnap : null);
 $s = $showSnap['stats'];
 // 🔴 “গ্রুপে” = **আলাদা নাম**, লাইন-সংখ্যা নয় (একই নাম দুইবার থাকলে একটাই কার্ড হয়,
 //    তার ভেতরে “গ্রুপে ২ বার” লেখা থাকে) — লেবেলটা তাই স্পষ্ট করে লেখা।
+// 🔴 ক্রমটা ইচ্ছাকৃত — ইউজারের আসল প্রশ্ন “কে গ্রুপে নেই”, তাই ওটাই **প্রথম কার্ড**
+//    (নিচের সেকশনের ক্রমও একই, দুটো মিলিয়ে রাখুন)।
 $cards = [
+    ['📋 গ্রুপে যোগ করা বাকি', $s['missing'],   'text-amber-600'],
     ['👥 গ্রুপে পাওয়া নাম',   $s['group'],     'text-indigo-600'],
     ['✅ রেজিস্ট্রেশন মিলেছে', $s['matched'],   'text-green-600'],
     ['⚠️ রেজিস্ট্রেশন পাইনি',  $s['unmatched'], 'text-red-600'],
-    ['📋 গ্রুপে পাইনি',       $s['missing'],   'text-amber-600'],
 ];
 // একই নাম একাধিকবার থাকলে লাইন-সংখ্যা আর নাম-সংখ্যা আলাদা হয় — সেটা বলে দেওয়া হয়
 $gmTotalLines = 0;
@@ -470,6 +477,13 @@ function gm_card(array $entry): void
                     <a href="registrations.php?action=view&amp;id=<?= (int) $m['id'] ?>" target="_blank" rel="noopener"
                        class="text-indigo-600 font-semibold text-sm"><?= e($m['name']) ?></a>
                     <span class="inline-block px-2 py-1 rounded-lg text-xs font-semibold <?= $cls ?>"><?= e($lbl) ?></span>
+                    <?php
+                    // গ্রুপে পাওয়া গেছে অথচ অর্ডারে গ্রুপের টিক দেওয়া নেই — মনে করিয়ে দেওয়া।
+                    // 🔴 `array_key_exists` দিয়ে দেখা হয় কারণ **পুরনো (v1) রানে ঘরটাই নেই**,
+                    //    থাকলে-না-থাকলে দুটো এক করে ফেললে পুরনো রানে ভুল চিপ বসত।
+                    if (array_key_exists('mg', $m) && empty($m['mg']) && empty($m['fg'])): ?>
+                        <span class="inline-block px-2 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600">গ্রুপের টিক দেওয়া নেই</span>
+                    <?php endif; ?>
                 </div>
                 <div class="text-xs text-gray-500 mt-1">
                     <?php if (trim((string) $m['fb']) !== ''): ?>ফেসবুক: <?= e($m['fb']) ?> · <?php endif; ?>
@@ -494,30 +508,72 @@ $matched = array_values(array_filter($showSnap['entries'], fn($x) => (bool) $x['
 $noReg   = array_values(array_filter($showSnap['entries'], fn($x) => !$x['matches']));
 ?>
 
-<?php if ($noReg): ?>
-    <h3 class="font-bold text-gray-800 mb-2">⚠️ গ্রুপে আছেন, রেজিস্ট্রেশন পাইনি (<?= count($noReg) ?>)</h3>
-    <p class="text-gray-500 text-xs mb-3">নামের বানান আলাদা হলেও এমন দেখাতে পারে — নিচের “গ্রুপে পাইনি” তালিকার সাথে মিলিয়ে দেখুন।</p>
-    <?php foreach ($noReg as $entry) { gm_card($entry); } ?>
-<?php endif; ?>
-
+<?php
+// ── 📋 এটাই এই পাতার আসল উত্তর, তাই **সবার উপরে** (২০২৬-০৯-২৯, ইউজারের চাওয়া:
+//    “রেজিস্ট্রেশান করেছে কিন্তু মেসেঞ্জার গ্রুপে নেই”)।
+//    পেস্ট করা তালিকা = গ্রুপের সদস্য; এখানে সেই তালিকায় যাঁদের পাওয়া যায়নি।
+?>
 <?php if ($showSnap['missing']): ?>
-    <h3 class="font-bold text-gray-800 mt-6 mb-2">📋 রেজিস্ট্রেশন আছে, গ্রুপে পাইনি (<?= count($showSnap['missing']) ?>)</h3>
-    <p class="text-gray-500 text-xs mb-3">এঁদের গ্রুপে যোগ করা বাকি থাকতে পারে (অথবা গ্রুপে নাম আলাদা)।</p>
+    <h3 class="font-bold text-gray-800 mb-2">📋 রেজিস্ট্রেশন আছে, কিন্তু গ্রুপে পাইনি (<?= count($showSnap['missing']) ?>)</h3>
+    <p class="text-gray-500 text-xs mb-3">
+        আপনার দেওয়া তালিকাটাই “কে গ্রুপে আছেন” — এঁদের নাম ওখানে পাওয়া যায়নি, অর্থাৎ
+        <strong>এঁদের গ্রুপে যোগ করা বাকি</strong> (অথবা গ্রুপে নামটা একদম আলাদা)।
+    </p>
+    <?php
+    // একই লম্বা ব্যাখ্যা প্রতি সারিতে না লিখে **একবারই** — কয়েকজন টিক-দেওয়া থাকলে
+    // পুরো তালিকাটা এক কথায় ভরে যেত।
+    $tickedCount = 0;
+    foreach ($showSnap['missing'] as $r) {
+        if (!empty($r['mg']) || !empty($r['fg'])) { $tickedCount++; }
+    }
+    ?>
+    <?php if ($tickedCount > 0): ?>
+        <p class="text-xs bg-amber-50 text-amber-800 rounded-xl px-3 py-2 mb-3">
+            ⚠️ এঁদের <?= (int) $tickedCount ?> জনের অর্ডারে “গ্রুপে যোগ করা হয়েছে” টিক দেওয়া আছে, অথচ
+            গ্রুপের তালিকায় নাম নেই — হয় গ্রুপে নামটা আলাদা, নয়তো গ্রুপ ছেড়ে গেছেন। যাচাই করে নিন।
+        </p>
+    <?php endif; ?>
     <div class="bg-white rounded-2xl shadow p-4 mb-3">
-        <?php foreach ($showSnap['missing'] as $r): $ph = $gmPhones[(int) $r['id']] ?? null; ?>
+        <?php foreach ($showSnap['missing'] as $r):
+            $ph     = $gmPhones[(int) $r['id']] ?? null;
+            // টিক দেওয়া আছে অথচ গ্রুপের তালিকায় নাম নেই — এটাই আসল গরমিল।
+            $ticked = !empty($r['mg']) || !empty($r['fg']);
+            $tickWhere = [];
+            if (!empty($r['mg'])) { $tickWhere[] = 'মেসেঞ্জার'; }
+            if (!empty($r['fg'])) { $tickWhere[] = 'ফেসবুক'; } ?>
             <div class="py-2 border-b last:border-0">
-                <a href="registrations.php?action=view&amp;id=<?= (int) $r['id'] ?>" target="_blank" rel="noopener"
-                   class="text-indigo-600 font-semibold text-sm"><?= e($r['name']) ?></a>
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="registrations.php?action=view&amp;id=<?= (int) $r['id'] ?>" target="_blank" rel="noopener"
+                       class="text-indigo-600 font-semibold text-sm"><?= e($r['name']) ?></a>
+                    <?php if ($ticked): ?>
+                        <span class="inline-block px-2 py-1 rounded-lg text-xs font-semibold bg-amber-100 text-amber-800">
+                            টিক দেওয়া আছে (<?= e(implode(' ও ', $tickWhere)) ?>)
+                        </span>
+                    <?php endif; ?>
+                </div>
                 <div class="text-xs text-gray-500 mt-1">
                     <?php if (trim((string) $r['fb']) !== ''): ?>ফেসবুক: <?= e($r['fb']) ?> · <?php else: ?>
                         <span class="text-amber-600">ফেসবুক আইডি নাম দেওয়া নেই</span> ·
                     <?php endif; ?>
-                    <?php if ($ph): ?><a href="tel:<?= e($ph['phone']) ?>"><?= e($ph['phone']) ?></a>
+                    <?php if ($ph): ?>
+                        <a href="tel:<?= e($ph['phone']) ?>"><?= e($ph['phone']) ?></a>
+                        <?php if (trim((string) ($ph['father_mobile'] ?? '')) !== ''): ?> · বাবা: <?= e($ph['father_mobile']) ?><?php endif; ?>
                     <?php else: ?><span class="text-gray-400">(এই রেজিস্ট্রেশনটি আর নেই)</span><?php endif; ?>
                 </div>
             </div>
         <?php endforeach; ?>
     </div>
+<?php elseif ($showSnap['entries']): ?>
+    <div class="bg-white rounded-2xl shadow p-4 mb-3" style="box-shadow:inset 4px 0 0 0 #16a34a">
+        <p class="font-bold text-gray-800 text-sm">✅ কেউ বাদ নেই</p>
+        <p class="text-gray-500 text-xs mt-1">এই ব্যাচের প্রতিটা রেজিস্ট্রেশনের নাম গ্রুপের তালিকায় পাওয়া গেছে।</p>
+    </div>
+<?php endif; ?>
+
+<?php if ($noReg): ?>
+    <h3 class="font-bold text-gray-800 mt-6 mb-2">⚠️ গ্রুপে আছেন, রেজিস্ট্রেশন পাইনি (<?= count($noReg) ?>)</h3>
+    <p class="text-gray-500 text-xs mb-3">নামের বানান আলাদা হলেও এমন দেখাতে পারে — উপরের “গ্রুপে পাইনি” তালিকার সাথে মিলিয়ে দেখুন।</p>
+    <?php foreach ($noReg as $entry) { gm_card($entry); } ?>
 <?php endif; ?>
 
 <?php if ($matched): ?>

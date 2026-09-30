@@ -497,6 +497,10 @@ function gm_snapshot(array $result, array $parsed): array
                 'name' => (string) ($mt['reg']['customer_name'] ?? ''),
                 'fb'   => (string) ($mt['reg']['facebook_id'] ?? ''),
                 'how'  => (string) ($mt['how'] ?? ''),
+                // গ্রুপের টিক — v2 (২০২৬-০৯-২৯)। এই পাতা টিক **বদলায় না**, শুধু
+                // পেস্ট করা তালিকার সাথে মিলিয়ে গরমিল দেখায়।
+                'mg'   => !empty($mt['reg']['messenger_group_added']) ? 1 : 0,
+                'fg'   => !empty($mt['reg']['fb_group_added']) ? 1 : 0,
             ];
         }
         $entries[] = [
@@ -513,11 +517,16 @@ function gm_snapshot(array $result, array $parsed): array
             'id'   => (int) ($r['id'] ?? 0),
             'name' => (string) ($r['customer_name'] ?? ''),
             'fb'   => (string) ($r['facebook_id'] ?? ''),
+            'mg'   => !empty($r['messenger_group_added']) ? 1 : 0,
+            'fg'   => !empty($r['fb_group_added']) ? 1 : 0,
         ];
     }
 
     return [
-        'v'          => 1,                       // ভার্সন — গঠন বদলালে পুরনো রান পড়তে কাজে লাগবে
+        // ভার্সন — গঠন বদলালে পুরনো রান পড়তে কাজে লাগবে।
+        // v2 = প্রতিটা রেজিস্ট্রেশনে গ্রুপের টিক (`mg`/`fg`) যোগ হয়েছে।
+        // 🔴 পুরনো (v1) রানে ঘর দুটো **নেই** — রেন্ডারিং সবসময় `?? null` দিয়ে পড়ে।
+        'v'          => 2,
         'entries'    => $entries,
         'missing'    => $missing,
         'unreadable' => array_values($parsed['unreadable'] ?? []),
