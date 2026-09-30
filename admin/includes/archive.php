@@ -31,13 +31,20 @@ function archive_children_map(): array
         // (registration_id — flat, batch_id ওই batch গুলোকেই পয়েন্ট করে যা এইমাত্র restore হলো)।
         // courier_shipments ইচ্ছাকৃতভাবে registration_id দিয়ে flat সংগ্রহ (courier_batches এর নিচে nested না) —
         // নাহলে batch_id-যুক্ত শিপমেন্ট দুইবার সংগ্রহ হয়ে restore এ duplicate id crash করত।
-        'registrations'  => [
+        'registrations'  => array_merge([
             ['table' => 'income', 'fk' => 'registration_id'],
             ['table' => 'registration_payments', 'fk' => 'registration_id'],
             ['table' => 'registration_courier_notes', 'fk' => 'registration_id'],
             ['table' => 'courier_batches', 'fk' => 'registration_id'],
             ['table' => 'courier_shipments', 'fk' => 'registration_id'],
         ],
+            // 💸 পার্সেলের ছাড়/মাফ থেকে বসা খরচ-সারি (FK CASCADE, তাই ডিলিটে এমনিতেই যায় —
+            // বান্ডলে রাখা হয় যাতে রিস্টোরে খরচের অঙ্কটাও ফিরে আসে)।
+            // 🔴 শর্তসাপেক্ষে: মাইগ্রেশনের আগে কলামটাই নেই, শর্ত ছাড়া দিলে আর্কাইভ (ও ডিলিট) ভাঙত।
+            (function_exists('db_has_column') && db_has_column(null, 'expenses', 'registration_id'))
+                ? [['table' => 'expenses', 'fk' => 'registration_id']]
+                : []
+        ),
     ];
 }
 

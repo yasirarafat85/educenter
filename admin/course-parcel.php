@@ -10,6 +10,7 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/courier/CourierManager.php';
 require_once __DIR__ . '/includes/courier-notes.php';
 require_once __DIR__ . '/includes/payments.php'; // 🔑 টাকার খাতা — কালেকশনের পরিমাণ এখান থেকেই আসে
+require_once __DIR__ . '/includes/expense-sync.php'; // 💸 ছাড়/মাফ → খরচের বই
 admin_require_login();
 
 $db = get_db();
@@ -23,6 +24,9 @@ function cp_month_label(int $i): string
     if (isset($names[$i])) { return $names[$i]; }
     return strtr((string) $i, ['0'=>'০','1'=>'১','2'=>'২','3'=>'৩','4'=>'৪','5'=>'৫','6'=>'৬','7'=>'৭','8'=>'৮','9'=>'৯']) . 'তম মাস';
 }
+// 💸 এক পার্সেলে সর্বোচ্চ কত টাকা ছাড় দেওয়া যাবে — নিছক টাইপো-গার্ড (৫০০০০ লিখে ফেলা আটকাতে)
+const CP_MAX_WAIVE = 100000;
+
 // প্রদর্শনের জন্য (English সংখ্যা — পড়া সহজ)
 function cp_month_display(int $i): string { return 'মাস ' . $i; }
 
@@ -124,7 +128,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // পাঠানো ব্যাচের ফিল্ড আপডেট (রেকর্ড সংশোধন) — send_status ছোঁয় না
         $updSent = $db->prepare('UPDATE courier_batches SET item_description=:d, amount_to_collect=:amt, delivery_zone=:z, weight_extra=:wx, adjustment=:adj, adjustment_reason=:rs, recipient_address=COALESCE(:addr, recipient_address) WHERE id = :id');
 
+        // 💸 ছাড়/মাফ — অঙ্কটা পার্সেলের সারিতেই জমা থাকে (উৎস), আর বইয়ে একটা খরচ-সারি বসে।
+        // 🔴 আলাদা ছোট UPDATE রাখা হলো (উপরের বড় স্টেটমেন্টগুলোতে কলাম যোগ করা হয়নি) —
+        //    মাইগ্রেশন না চালানো থাকলেও পার্সেল সেভ করা যেন আগের মতোই চলে।
+        $waiveReady = expense_waiver_ready($db);
+        $updWaive = $waiveReady
+            ? $db->prepare('UPDATE courier_batches SET waived_amount = :w, waived_reason = :wr WHERE id = :id')
+            : null;
+
         $prep = 0; $declined = 0; $sent = 0; $resent = 0; $failed = []; $editedSent = 0;
+        $waiveTotal = 0.0; $waiveSet = 0; $waiveCleared = 0;
+
+        // পার্সেলের সারিতে অঙ্কটা লেখা + বইয়ের খরচ-সারি মিলিয়ে দেওয়া — এক জায়গায় (তিন শাখা থেকেই ডাকা হয়)
+        $applyWaive = function (int $batchId, int $rid, float $w, string $wr)
+                use ($updWaive, $db, $period, $regMap, &$waiveTotal, &$waiveSet, &$waiveCleared): void {
+            if (!$updWaive || $batchId <= 0) { return; }
+            $updWaive->execute(['w' => $w, 'wr' => $wr, 'id' => $batchId]);
+            $res = expense_sync_parcel_waiver($db, $rid, $period, $w, $wr, (string) ($regMap[$rid]['customer_name'] ?? ''));
+            if ($res === 'removed') { $waiveCleared++; }
+            elseif ($res !== '')    { $waiveSet++; $waiveTotal += $w; }
+        };
         foreach (($_POST['bd'] ?? []) as $rid => $row) {
             $rid = (int) $rid;
             if (empty($row['present']) || !isset($regMap[$rid])) { continue; }
@@ -143,11 +166,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   : (in_array($regZone, ['dhaka', 'near', 'outside'], true) ? $regZone : 'dhaka');
             $wx   = !empty($row['wx']);
             $adj  = (float) ($row['adj'] ?? 0);
+            // 💸 এই পার্সেলে কত টাকা ছাড়/মাফ দেওয়া হলো — কালেকশন থেকে বাদ যায় **এবং** খরচে বসে।
+            // 🔴 ঋণাত্মক নয় (ছাড় মানে দেওয়া, নেওয়া নয়) আর টাইপো-গার্ড হিসেবে উপরে সীমা।
+            $waive = $waiveReady ? max(0.0, min(CP_MAX_WAIVE, round((float) ($row['waive'] ?? 0), 2))) : 0.0;
+            $waiveReason = mb_substr(trim((string) ($row['waive_reason'] ?? '')), 0, 200);
             $ledgerRows = $ledgerMap[$rid] ?? [];
             // 🔴 এই মাসে খাতার **সব** কিস্তির বাকি মিলিয়ে (রেজি ফি + বেতন একসাথে পড়তে পারে;
             //    এক-কালীন/পুরনো সারি প্রথম পার্সেলে) — নিচের কার্ডের `data-due`-তেও হুবহু এই সংখ্যা
             $basis = $ledgerRows ? pay_month_outstanding($ledgerRows, $month) : $courseFee;
             $amt  = courier_compute_collection($basis, 1, $zone, $wx, $adj); // মাল্টিপ্লায়ার সবসময় ১
+            $amt  = max(0, $amt - $waive);                                     // 💸 ছাড় বাদ (০-এর নিচে নামে না)
             if (is_numeric($row['amt'] ?? null)) { $amt = max(0, round((float) $row['amt'])); } // সরাসরি লেখা পরিমাণই চূড়ান্ত
             $desc   = trim($row['desc'] ?? '') ?: null;
             $reason = trim($row['reason'] ?? '') ?: null;
@@ -160,6 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($alreadySent) {
                 if (empty($row['unlocked'])) { continue; } // 🔓 আনলক না করলে ছোঁয়া হবে না
                 $updSent->execute(['d' => $desc, 'amt' => $amt, 'z' => $zone, 'wx' => $wx ? 1 : 0, 'adj' => $adj, 'rs' => $reason, 'addr' => $addr, 'id' => $existId]);
+                $applyWaive($existId, $rid, $waive, $waiveReason);
                 if ($mode === 'send' && $resend) {
                     try {
                         $res = send_courier_batch($db, $provider, $regMap[$rid], [], $existId); // নতুন consignment
@@ -174,7 +203,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($decision === 'no') {
                 if ($existId) { $updDeclined->execute(['id' => $existId]); }
-                else { $insDeclined->execute(['r' => $rid, 'p' => $period]); }
+                else { $insDeclined->execute(['r' => $rid, 'p' => $period]); $existId = (int) $db->lastInsertId(); }
+                // 🔴 এই মাসে পার্সেলই যাচ্ছে না — তাই ছাড়ও ০, আগের খরচ-সারি থাকলে মুছে যাবে
+                $applyWaive($existId, $rid, 0.0, '');
                 $declined++;
                 continue;
             }
@@ -186,6 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $insDraft->execute(['r' => $rid, 'p' => $period, 'd' => $desc, 'amt' => $amt, 'z' => $zone, 'wx' => $wx ? 1 : 0, 'adj' => $adj, 'rs' => $reason, 'addr' => $addr]);
                 $draftId = (int) $db->lastInsertId();
             }
+            $applyWaive($draftId, $rid, $waive, $waiveReason);
             $prep++;
 
             if ($mode === 'send') {
@@ -200,12 +232,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($mode === 'send') {
-            $_SESSION['cp_result'] = ['item' => $itemId, 'period' => cp_month_display($month), 'sent' => $sent, 'resent' => $resent, 'prep' => $prep, 'declined' => $declined, 'failed' => $failed, 'edited' => $editedSent];
+            $_SESSION['cp_result'] = ['item' => $itemId, 'period' => cp_month_display($month), 'sent' => $sent, 'resent' => $resent, 'prep' => $prep, 'declined' => $declined, 'failed' => $failed, 'edited' => $editedSent,
+                                      'waive_set' => $waiveSet, 'waive_total' => $waiveTotal, 'waive_cleared' => $waiveCleared];
         } else {
             $bits = [];
             if ($prep)       { $bits[] = $prep . ' জন প্রস্তুত'; }
             if ($declined)   { $bits[] = $declined . ' জন "না"'; }
             if ($editedSent) { $bits[] = $editedSent . ' জন (পাঠানো) তথ্য আপডেট'; }
+            // 💸 ছাড় দিলে/তুলে নিলে খরচের বইয়ে কী হলো — স্পষ্ট করে বলা হয় (টাকা জড়িত)
+            if ($waiveSet)     { $bits[] = $waiveSet . ' জনের ছাড় ৳' . number_format($waiveTotal) . ' খরচে যোগ হয়েছে'; }
+            if ($waiveCleared) { $bits[] = $waiveCleared . ' জনের ছাড় খরচ থেকে বাদ গেছে'; }
             set_flash($bits ? 'success' : 'error', $bits ? (cp_month_display($month) . ' — ' . implode(', ', $bits) . '। (এখনো পাঠানো হয়নি)') : 'কিছু করা হয়নি — অন্তত একজন সক্রিয় শিক্ষার্থী থাকতে হবে।');
         }
         redirect(cp_url($itemId, $month));
@@ -279,8 +315,11 @@ $byRegPeriod = [];
 if ($regs) {
     $ids = array_map(fn($r) => (int) $r['id'], $regs);
     $in = implode(',', array_fill(0, count($ids), '?'));
+    // 🔴 ছাড়ের ঘর দুটো শর্তসাপেক্ষে — মাইগ্রেশন না চালানো থাকলে কলামই নেই, সরাসরি চাইলে পুরো পাতা ভাঙত
+    $cbWaiveCols = expense_waiver_ready($db) ? ', waived_amount, waived_reason' : '';
     $st = $db->prepare("SELECT id, registration_id, period_label, send_status, amount_to_collect,
                                delivery_zone, weight_extra, adjustment, adjustment_reason, recipient_address
+                               $cbWaiveCols
                         FROM courier_batches WHERE registration_id IN ($in) ORDER BY id ASC");
     $st->execute($ids);
     foreach ($st->fetchAll() as $row) { $byRegPeriod[(int) $row['registration_id']][$row['period_label']] = $row; }
@@ -291,6 +330,9 @@ $ledgerByReg = pay_fetch_many($db, array_map(fn($r) => (int) $r['id'], $regs)); 
 $activeRegs   = array_values(array_filter($regs, fn($r) => (int) ($r['courier_active'] ?? 1) === 1));
 $inactiveRegs = array_values(array_filter($regs, fn($r) => (int) ($r['courier_active'] ?? 1) !== 1));
 $pendingGroupRemoval = array_values(array_filter($inactiveRegs, fn($r) => !empty($r['fb_group_added']) || !empty($r['messenger_group_added'])));
+
+// 💸 ছাড়/মাফের ঘর দেখানো যাবে কিনা (মাইগ্রেশন চালানো হয়েছে কিনা)
+$cpWaiveReady = expense_waiver_ready($db);
 
 $periodHasExisting = false;
 if ($selLabel) { foreach ($activeRegs as $r) { if (isset($byRegPeriod[(int) $r['id']][$selLabel])) { $periodHasExisting = true; break; } } }
@@ -355,6 +397,9 @@ function cp_cell(?array $b): array
             <span class="px-2 py-1 rounded-lg bg-green-100 text-green-800 font-semibold">✓ সফল: <?= (int) $sr['sent'] ?><?= !empty($sr['resent']) ? ' (আবার-পাঠানো ' . (int) $sr['resent'] . ')' : '' ?></span>
             <?php if ($hasFail): ?><span class="px-2 py-1 rounded-lg bg-red-100 text-red-800 font-semibold">✕ ব্যর্থ: <?= count($sr['failed']) ?></span><?php endif; ?>
             <?php if (!empty($sr['edited'])): ?><span class="px-2 py-1 rounded-lg bg-gray-100 text-gray-700 font-semibold">তথ্য আপডেট: <?= (int) $sr['edited'] ?></span><?php endif; ?>
+            <?php // 💸 ছাড় দিলে সেটা খরচের বইয়ে গেছে — টাকা জড়িত বলে ফলাফলেও বলা হয় ?>
+            <?php if (!empty($sr['waive_set'])): ?><span class="px-2 py-1 rounded-lg bg-amber-100 text-amber-800 font-semibold">💸 ছাড় খরচে: <?= (int) $sr['waive_set'] ?> জন · ৳<?= e(number_format((float) $sr['waive_total'])) ?></span><?php endif; ?>
+            <?php if (!empty($sr['waive_cleared'])): ?><span class="px-2 py-1 rounded-lg bg-gray-100 text-gray-700 font-semibold">ছাড় বাদ: <?= (int) $sr['waive_cleared'] ?> জন</span><?php endif; ?>
         </div>
         <?php if ($hasFail): ?>
             <div class="mt-3 text-sm text-red-900"><div class="font-semibold mb-1">যাদের পাঠানো যায়নি (কারণ সহ):</div>
@@ -407,11 +452,15 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
     for ($i = 1; $i <= $months; $i++) { if (($byRegPeriod[$rid][cp_month_label($i)]['send_status'] ?? '') === 'sent') { $sentCount++; } }
     ?>
     <tr class="border-b last:border-0 hover:bg-gray-50 <?= $active ? '' : 'opacity-70' ?>">
-        <td class="py-2.5 px-3 whitespace-nowrap">
-            <div class="font-semibold text-gray-900"><span class="text-[10px] text-gray-400 font-normal">শিশু:</span> <?= e($r['customer_name']) ?></div>
-            <div class="text-[11px] text-blue-600"><span class="text-gray-400">FB:</span> <?= e($r['facebook_id'] ?: '—') ?></div>
-            <div class="text-[11px] text-gray-400 font-mono"><?= e($r['phone']) ?></div>
-            <?php if ($needsRemoval): ?><div class="text-[11px] text-red-600 font-semibold mt-0.5">⚠ গ্রুপ থেকে বাদ দিন</div><?php endif; ?>
+        <td class="py-2.5 px-3" style="min-width:150px;vertical-align:top;">
+            <?php // 🔴 তিন লাইন একটাই মোড়কে — মোবাইল কার্ড-লেআউটে `td` flex হয়ে যায়, খোলা রাখলে
+                  //    নাম/ফেসবুক/ফোন পাশাপাশি তিন কলামে চেপে যেত (স্ক্রিনশটে ধরা) ?>
+            <div class="min-w-0">
+                <div class="font-bold text-gray-900 text-base leading-snug"><span class="text-xs text-gray-400 font-normal">শিশু:</span> <?= e($r['customer_name']) ?></div>
+                <div class="text-sm text-blue-600 leading-snug break-words"><span class="text-gray-400">ফেসবুক:</span> <?= e($r['facebook_id'] ?: '—') ?></div>
+                <div class="text-sm text-gray-500 font-mono break-all"><?= e($r['phone']) ?></div>
+                <?php if ($needsRemoval): ?><div class="text-sm text-red-600 font-semibold mt-0.5">⚠ গ্রুপ থেকে বাদ দিন</div><?php endif; ?>
+            </div>
         </td>
         <td class="py-2.5 px-2 text-center"><?php $grp_toggle($r, 'fb', $fbOn, $itemId, $selMonth); ?></td>
         <td class="py-2.5 px-2 text-center"><?php $grp_toggle($r, 'messenger', $msgOn, $itemId, $selMonth); ?></td>
@@ -420,6 +469,10 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
                 <input type="hidden" name="action" value="active"><input type="hidden" name="item_id" value="<?= $itemId ?>"><input type="hidden" name="id" value="<?= $rid ?>"><input type="hidden" name="month" value="<?= $selMonth ?>"><input type="hidden" name="value" value="<?= $active ? 0 : 1 ?>">
                 <button type="submit" class="px-2.5 py-1 rounded-full text-xs font-semibold <?= $active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500' ?>"><?= $active ? 'সক্রিয়' : 'নিষ্ক্রিয়' ?></button>
             </form>
+        </td>
+        <td class="py-2.5 px-2 text-sm text-gray-600" style="min-width:180px;max-width:300px;white-space:normal;vertical-align:top;">
+            <?php // 📍 ডেলিভারি এলাকা বাছার আগে ঠিকানাটা দেখা দরকার — তাই পাশেই (ইউজারের চাওয়া) ?>
+            <?= e(trim((string) ($r['address'] ?? '')) ?: '—') ?>
         </td>
         <td class="py-2.5 px-2 text-center">
             <?php // 🔑 স্থায়ী এলাকা — একবার সেট করলেই প্রতি মাসের কালেকশনে অটো বসে ?>
@@ -466,14 +519,14 @@ function cpPermZone(sel) {
 <div class="bg-white rounded-2xl shadow overflow-x-auto mb-3">
     <table class="w-full text-sm">
         <thead><tr class="text-left text-gray-500 border-b bg-gray-50">
-            <th class="py-3 px-3">শিশুর নাম</th><th class="py-3 px-2 text-center">FB</th><th class="py-3 px-2 text-center">Msngr</th><th class="py-3 px-2 text-center">সক্রিয়</th><th class="py-3 px-2 text-center whitespace-nowrap">ডেলিভারি</th>
+            <th class="py-3 px-3">শিশুর নাম</th><th class="py-3 px-2 text-center">FB</th><th class="py-3 px-2 text-center">Msngr</th><th class="py-3 px-2 text-center">সক্রিয়</th><th class="py-3 px-2">ঠিকানা</th><th class="py-3 px-2 text-center whitespace-nowrap">ডেলিভারি</th>
             <?php for ($i = 1; $i <= $months; $i++): ?>
                 <th class="py-3 px-1.5 text-center whitespace-nowrap <?= $i === $selMonth ? 'bg-indigo-50' : '' ?>"><a href="<?= e(cp_url($itemId, $i)) ?>" class="<?= $i === $selMonth ? 'text-indigo-700 font-bold' : 'text-gray-500 hover:text-indigo-600' ?>" title="এই মাসে কাজ করুন">মাস <?= $i ?></a></th>
             <?php endfor; ?>
             <?php if ($months): ?><th class="py-3 px-2 text-center whitespace-nowrap">পাঠানো</th><?php endif; ?>
         </tr></thead>
         <tbody>
-        <?php if (!$activeRegs && $inactiveRegs): ?><tr><td colspan="<?= 6 + $months ?>" class="py-6 px-4 text-center text-gray-400">সব শিক্ষার্থী নিষ্ক্রিয় — নিচে থেকে সক্রিয় করুন।</td></tr><?php endif; ?>
+        <?php if (!$activeRegs && $inactiveRegs): ?><tr><td colspan="<?= 7 + $months ?>" class="py-6 px-4 text-center text-gray-400">সব শিক্ষার্থী নিষ্ক্রিয় — নিচে থেকে সক্রিয় করুন।</td></tr><?php endif; ?>
         <?php foreach ($activeRegs as $r) { $render_row($r); } ?>
         </tbody>
     </table>
@@ -522,6 +575,14 @@ function cpPermZone(sel) {
                 <?php if ($periodHasExisting): ?><span class="block text-xs text-indigo-600 mt-0.5">এই মাসের কিছু আগে থেকেই আছে — বদলালে নিশ্চিতকরণ চাইবে।</span><?php endif; ?>
             </div>
 
+            <?php if (!$cpWaiveReady): ?>
+                <div class="p-3 mb-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl">
+                    💸 <b>ছাড় / মাফ খরচে নেওয়ার ঘরটা এখনো চালু হয়নি।</b>
+                    phpMyAdmin-এ <code class="bg-white px-1 rounded">database/migrate-parcel-waiver.sql</code> একবার চালালেই আসবে।
+                    ততক্ষণ পার্সেল আগের মতোই কাজ করবে।
+                </div>
+            <?php endif; ?>
+
             <div class="space-y-3 pb-32">
             <?php foreach ($activeRegs as $r):
                 $rid = (int) $r['id'];
@@ -540,6 +601,9 @@ function cpPermZone(sel) {
                 $exAddr  = trim((string) ($ex['recipient_address'] ?? ''));
                 $addrDiff = $exAddr !== '' && $exAddr !== $regAddr;
                 $exAdj = $ex['adjustment'] ?? 0; $exReason = $ex['adjustment_reason'] ?? '';
+                // 💸 আগে দেওয়া ছাড় (মাইগ্রেশনের আগে ঘরদুটো কোয়েরিতেই আসে না — তাই ?? 0)
+                $exWaive  = (float) ($ex['waived_amount'] ?? 0);
+                $exWaiveR = (string) ($ex['waived_reason'] ?? '');
                 $exAmt = ($ex && $ex['amount_to_collect'] !== null && $ex['send_status'] !== 'declined') ? (string) (int) round((float) $ex['amount_to_collect']) : '';
                 $notes = $notesByReg[$rid] ?? [];
 
@@ -552,17 +616,17 @@ function cpPermZone(sel) {
                 // সব কিস্তিই ⊘ বাদ দেওয়া থাকলেই "বাদ" বার্তা
                 $lSkip  = $lMonth && count(array_filter($lMonth, 'pay_is_skipped')) === count($lMonth);
             ?>
-                <div class="stu bg-white rounded-2xl shadow p-4 <?= $isNo ? 'opacity-60' : '' ?>" data-fee="<?= (int) $courseFee ?>" data-due="<?= (int) round($lDue) ?>" data-sent="<?= $isSent ? 1 : 0 ?>">
+                <div class="stu bg-white rounded-2xl shadow p-4 <?= $isNo ? 'opacity-60' : '' ?>" data-fee="<?= (int) $courseFee ?>" data-due="<?= (int) round($lDue) ?>" data-sent="<?= $isSent ? 1 : 0 ?>" data-waive0="<?= (int) round($exWaive) ?>">
                     <input type="hidden" name="bd[<?= $rid ?>][present]" value="1">
                     <input type="hidden" name="bd[<?= $rid ?>][decision]" class="decision" value="<?= $isNo ? 'no' : 'go' ?>">
                     <input type="hidden" name="bd[<?= $rid ?>][unlocked]" class="unlocked" value="">
                     <input type="hidden" name="bd[<?= $rid ?>][resend]" class="resend" value="">
                     <div class="flex items-start gap-2.5 mb-3">
                         <div class="min-w-0 flex-1">
-                            <div class="font-bold text-gray-900 text-sm break-words"><span class="text-[10px] text-gray-400 font-normal">শিশু:</span> <?= e($r['customer_name']) ?></div>
-                            <div class="text-[11px] text-blue-600 break-words"><span class="text-gray-400">ফেসবুক:</span> <?= e($r['facebook_id'] ?: '—') ?></div>
-                            <div class="text-[11px] text-gray-500">রিসিভার: <?= e($r['receiver_name'] ?: $r['customer_name']) ?> · <?= e($r['receiver_phone'] ?: $r['phone']) ?></div>
-                            <div class="text-[11px] text-gray-400 break-words">ঠিকানা: <?= e($r['address'] ?: '—') ?></div>
+                            <div class="font-bold text-gray-900 text-base break-words"><span class="text-xs text-gray-400 font-normal">শিশু:</span> <?= e($r['customer_name']) ?></div>
+                            <div class="text-sm text-blue-600 break-words"><span class="text-gray-400">ফেসবুক:</span> <?= e($r['facebook_id'] ?: '—') ?></div>
+                            <div class="text-sm text-gray-600">রিসিভার: <?= e($r['receiver_name'] ?: $r['customer_name']) ?> · <?= e($r['receiver_phone'] ?: $r['phone']) ?></div>
+                            <div class="text-sm text-gray-600 break-words">ঠিকানা: <?= e($r['address'] ?: '—') ?></div>
                         </div>
                         <?php if ($isSent): ?>
                             <div class="flex-shrink-0 flex flex-col items-end gap-1">
@@ -574,7 +638,7 @@ function cpPermZone(sel) {
                             <button type="button" class="goNoBtn flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border"></button>
                         <?php endif; ?>
                     </div>
-                    <?php if ($isFailed): ?><div class="text-[11px] text-orange-700 bg-orange-50 rounded px-2 py-1 mb-2">গতবার পাঠানো ব্যর্থ হয়েছিল — আবার চেষ্টা করতে পারেন।</div><?php endif; ?>
+                    <?php if ($isFailed): ?><div class="text-sm text-orange-700 bg-orange-50 rounded px-2 py-1.5 mb-2">গতবার পাঠানো ব্যর্থ হয়েছিল — আবার চেষ্টা করতে পারেন।</div><?php endif; ?>
                     <?php if ($notes): ?><div class="flex flex-wrap items-center gap-1.5 mb-3"><?php render_note_chips($notes); ?></div><?php endif; ?>
                     <?php
                     // লেখা মন্তব্য দুটো — খাতার নোট (অ্যাডমিনের) ও রেজিস্ট্রেশন ফর্মে অভিভাবকের লেখা।
@@ -583,7 +647,7 @@ function cpPermZone(sel) {
                     $formNote   = trim((string) ($r['notes'] ?? ''));
                     ?>
                     <?php if ($ledgerNote !== '' || $formNote !== ''): ?>
-                        <div class="text-[11px] bg-gray-50 text-gray-600 rounded-lg px-2 py-1.5 mb-2 break-words">
+                        <div class="text-sm bg-gray-50 text-gray-700 rounded-lg px-2.5 py-2 mb-2 break-words">
                             <?php if ($ledgerNote !== ''): ?>
                                 <div>📝 <b>খাতার নোট:</b> <?= e($ledgerNote) ?></div>
                             <?php endif; ?>
@@ -593,7 +657,7 @@ function cpPermZone(sel) {
                         </div>
                     <?php endif; ?>
                     <?php // 🔑 খাতার অবস্থা — কালেকশনের টাকা এখান থেকেই বসে ?>
-                    <div class="text-[11px] rounded-lg px-2 py-1.5 mb-2 <?= $lRows ? 'bg-indigo-50 text-indigo-800' : 'bg-amber-50 text-amber-800' ?>">
+                    <div class="text-sm rounded-lg px-2.5 py-2 mb-2 <?= $lRows ? 'bg-indigo-50 text-indigo-800' : 'bg-amber-50 text-amber-800' ?>">
                         <?php if (!$lRows): ?>
                             💰 <b>খাতা নেই</b> — মাসিক ফি ৳<?= e(number_format($courseFee)) ?> ধরা হয়েছে। অর্ডার তালিকার “খাতা” থেকে সেভ করলে এখানে আসল বাকি বসবে।
                         <?php elseif ($lSkip): ?>
@@ -612,7 +676,7 @@ function cpPermZone(sel) {
                                 </div>
                             <?php endforeach; ?>
                             <?php if (count($lMonth) > 1): ?>
-                                <div class="mt-0.5 pt-0.5 border-t border-indigo-200">
+                                <div class="mt-0.5 border-t border-indigo-200" style="padding-top:2px;">
                                     এই পার্সেলে মোট <b class="<?= $lDue > 0 ? 'text-red-700' : 'text-green-700' ?>">৳<?= e(number_format($lDue)) ?></b> তুলতে হবে
                                 </div>
                             <?php endif; ?>
@@ -625,9 +689,9 @@ function cpPermZone(sel) {
                                 <?php foreach ($zoneLabels as $zk => $zl): ?><option value="<?= $zk ?>" <?= $exZone === $zk ? 'selected' : '' ?>><?= e($zl) ?></option><?php endforeach; ?>
                             </select>
                             <?php if ($permZone === ''): ?>
-                                <span class="block text-[10px] text-amber-700 mt-0.5">উপরের তালিকায় স্থায়ী এলাকা একবার সেট করুন — তাহলে প্রতি মাসে আর বাছতে হবে না</span>
+                                <span class="block text-xs text-amber-700 mt-0.5">উপরের তালিকায় স্থায়ী এলাকা একবার সেট করুন — তাহলে প্রতি মাসে আর বাছতে হবে না</span>
                             <?php elseif ($exZone !== $permZone): ?>
-                                <span class="block text-[10px] text-amber-700 mt-0.5">শুধু এই মাসে আলাদা (স্থায়ী: <?= e($zoneLabels[$permZone]) ?>)</span>
+                                <span class="block text-xs text-amber-700 mt-0.5">শুধু এই মাসে আলাদা (স্থায়ী: <?= e($zoneLabels[$permZone]) ?>)</span>
                             <?php endif; ?></label>
                             <label class="flex items-center gap-1 text-xs text-gray-600 pb-2"><input type="checkbox" class="wx w-4 h-4 accent-indigo-600" name="bd[<?= $rid ?>][wx]" value="1" <?= $exWx?'checked':'' ?>> ওজন+</label>
                             <label class="text-xs text-gray-600">সমন্বয়±<input type="number" step="1" value="<?= e((string)(int)$exAdj) ?>" name="bd[<?= $rid ?>][adj]" class="adj block w-full border rounded-lg px-2 py-2 text-sm mt-1"></label>
@@ -642,12 +706,29 @@ function cpPermZone(sel) {
                                       class="addrBox block w-full border rounded-lg px-2 py-2 text-sm mt-1 <?= $addrDiff ? '' : 'hidden' ?>"
                                       placeholder="মূল ঠিকানা: <?= e($regAddr ?: '—') ?>"><?= $addrDiff ? e($exAddr) : '' ?></textarea>
                             <?php if ($addrDiff): ?>
-                                <span class="block text-[10px] text-amber-700 mt-0.5">এই মাসে আলাদা ঠিকানায় যাচ্ছে — অর্ডারের মূল ঠিকানা অপরিবর্তিত</span>
+                                <span class="block text-xs text-amber-700 mt-0.5">এই মাসে আলাদা ঠিকানায় যাচ্ছে — অর্ডারের মূল ঠিকানা অপরিবর্তিত</span>
                             <?php endif; ?>
                         </div>
 
+                        <?php // 💸 ছাড় / মাফ — কালেকশন থেকে বাদ যায় **এবং** খরচের বইয়ে বসে (২০২৬-০৯-৩০) ?>
+                        <?php if ($cpWaiveReady): ?>
+                        <div class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
+                            <div class="text-sm font-semibold text-amber-800">💸 ছাড় / মাফ — খরচে যাবে</div>
+                            <div class="text-xs text-amber-700 mb-1">ডেলিভারি চার্জ মাফ করলেন বা কোনো ছাড় দিলেন? অঙ্কটা লিখুন — কালেকশন থেকে বাদ যাবে, আর ঠিক এই টাকাটাই <b>খরচের বইয়ে</b> যোগ হবে।</div>
+                            <div class="grid gap-2" style="grid-template-columns:110px minmax(0,1fr);">
+                                <input type="number" step="1" min="0" max="<?= CP_MAX_WAIVE ?>" name="bd[<?= $rid ?>][waive]"
+                                       value="<?= $exWaive > 0 ? (int) round($exWaive) : '' ?>" placeholder="0"
+                                       class="waive w-full border rounded-lg px-2 py-2 text-sm" style="min-width:0">
+                                <input type="text" name="bd[<?= $rid ?>][waive_reason]" value="<?= e($exWaiveR) ?>" maxlength="200"
+                                       placeholder="কেন (ঐচ্ছিক) — যেমন: ডেলিভারি ফ্রি"
+                                       class="w-full border rounded-lg px-2 py-2 text-sm" style="min-width:0">
+                            </div>
+                            <div class="waivehint text-xs text-amber-800 mt-1"></div>
+                        </div>
+                        <?php endif; ?>
+
                         <div class="flex items-center justify-between gap-2 mt-3 pt-3 border-t">
-                            <div class="text-xs text-gray-500">কালেকশন (টাকা)<div class="autohint text-[11px] text-gray-400"><?= $lRows ? 'খাতার বাকি + ডেলিভারি' : 'মাসিক ফি + ডেলিভারি' ?> = ৳<span class="autoval">0</span> · <button type="button" class="text-indigo-600 font-semibold underline autobtn">অটো বসান</button></div></div>
+                            <div class="text-sm font-semibold text-gray-600">কালেকশন (টাকা)<div class="autohint text-xs text-gray-500"><?= $lRows ? 'খাতার বাকি + ডেলিভারি' : 'মাসিক ফি + ডেলিভারি' ?><span class="autowv"></span> = ৳<span class="autoval">0</span> · <button type="button" class="text-indigo-600 font-semibold underline autobtn">অটো বসান</button></div></div>
                             <div class="flex items-center gap-1.5 flex-shrink-0">
                                 <span class="text-lg font-black text-gray-900">৳</span>
                                 <input type="number" step="1" min="0" name="bd[<?= $rid ?>][amt]" value="<?= e($exAmt) ?>" class="amt border-2 border-indigo-200 focus:border-indigo-500 rounded-lg px-2 py-1.5 text-lg font-black text-gray-900 text-right" style="width:120px;">
@@ -693,9 +774,20 @@ function cpPermZone(sel) {
     // ভিত্তি = খাতায় এই মাসের বাকি (খাতা না থাকলে মাসিক ফি) — সার্ভারেও হুবহু একই হিসাব
     var base=+el.getAttribute('data-due'), zone=el.querySelector('.zone').value;
     var wx=el.querySelector('.wx').checked?WX:0, adj=+el.querySelector('.adj').value||0;
-    var auto=Math.max(0,Math.round(base+(DC[zone]||0)+wx+adj));
+    // 💸 ছাড়/মাফ — কালেকশন থেকে বাদ (সার্ভারের round-save-এও হুবহু একই হিসাব, একটা বদলালে অন্যটাও)
+    var wvEl=el.querySelector('.waive'), wv=wvEl?Math.max(0,+wvEl.value||0):0;
+    var auto=Math.max(0,Math.round(base+(DC[zone]||0)+wx+adj-wv));
     var amtEl=el.querySelector('.amt'), manual=el.querySelector('.manual').value==='1';
     el.querySelector('.autoval').textContent=auto;
+    var wvl=el.querySelector('.autowv');
+    if(wvl){ wvl.textContent = wv>0 ? (' − ছাড় ৳'+wv) : ''; }
+    var wh=el.querySelector('.waivehint');
+    if(wh){
+      var had=+el.getAttribute('data-waive0')||0;
+      if(wv>0){ wh.textContent='৳'+wv+' কালেকশন থেকে বাদ যাবে, আর খরচের বইয়ে "ছাড় / মাফ" হিসেবে যোগ হবে।'; }
+      else if(had>0){ wh.textContent='০ করা হয়েছে — সেভ করলে আগের ৳'+had+' খরচের বই থেকে মুছে যাবে।'; }
+      else { wh.textContent=''; }
+    }
     if(!manual){ amtEl.value=auto; }
     var dec=el.querySelector('.decision').value, sent=el.getAttribute('data-sent')==='1';
     var resendEl=el.querySelector('.resend'), resend=resendEl && resendEl.value==='1';
@@ -732,6 +824,9 @@ function cpPermZone(sel) {
           function(){ addrChk.checked=true; addrBox.classList.remove('hidden'); addrBox.focus(); }, 'এই মাসে ঠিকানা বদলাবেন?');
       } else { addrBox.classList.add('hidden'); addrBox.value=''; }
     }); }
+    // 💸 ছাড় লিখলে কালেকশনটা আবার অটো হিসাব হয় — নাহলে হাতে বসানো পুরনো অঙ্কটাই থেকে যেত
+    var wvIn=el.querySelector('.waive');
+    if(wvIn){ wvIn.addEventListener('input',function(){ manualEl.value=''; refresh(); }); }
     var ab=el.querySelector('.autobtn');
     if(ab){ ab.addEventListener('click',function(){ manualEl.value=''; refresh(); }); }
     // পাঠানো কার্ড আনলক (ওয়ার্নিং সহ) → এডিট + "আবার পাঠান" চালু
@@ -753,12 +848,16 @@ function cpPermZone(sel) {
   });
   function doSubmit(mode){
     document.getElementById('roundMode').value=mode;
-    var g=0,no=0,s=0,re=0;
-    document.querySelectorAll('.stu').forEach(function(el){var r=calc(el); if(r.send){g++;s+=r.t; if(r.resend)re++;} if(r.no)no++;});
+    var g=0,no=0,s=0,re=0,wv=0;
+    document.querySelectorAll('.stu').forEach(function(el){
+      var r=calc(el); if(r.send){g++;s+=r.t; if(r.resend)re++;} if(r.no)no++;
+      if(!r.no){ var w=el.querySelector('.waive'); if(w){ wv+=Math.max(0,+w.value||0); } }
+    });
     if(mode==='send' && g===0){ showConfirmModal('কাউকে পাঠানোর জন্য বাছাই করা হয়নি (নতুন "যাবে" বা পাঠানো কার্ডে "আবার পাঠান")।',function(){},'পাঠানো খালি'); return; }
     var msg = (mode==='send')
       ? ('মাস '+selMonth+' — '+g+' জনের পার্সেল এখনই আসল কুরিয়ারে পাঠাবেন?'+(re?(' (তার মধ্যে '+re+' জন আবার-পাঠানো)'):'')+' মোট কালেকশন ৳'+s+'। পাঠানোর পর আর ফেরানো যাবে না।')
       : ('মাস '+selMonth+' — সেভ করবেন? এটা সংবেদনশীল পেজ — শুধু ঠিক করে রাখা হবে (এখনো কুরিয়ারে পাঠাবে না)।');
+    if(wv>0){ msg+='\n\n💸 মোট ৳'+wv+' ছাড়/মাফ দেওয়া হয়েছে — এটা খরচের বইয়ে যোগ হবে।'; }
     if(periodHasExisting){ msg='⚠️ এই মাসের কিছু আগে থেকেই আছে — পরিবর্তন হবে।\n\n'+msg; }
     showConfirmModal(msg,function(){ form.submit(); }, mode==='send'?'কুরিয়ারে পাঠাবেন?':'সেভ করবেন?');
   }

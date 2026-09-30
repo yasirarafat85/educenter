@@ -843,4 +843,20 @@ CREATE TABLE `group_match_runs` (
     INDEX `idx_created` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ------------------------------------------------------------
+-- Parcel waiver / discount booked as an expense (2026-09-30).
+-- See database/migrate-parcel-waiver.sql for the full explanation.
+-- ------------------------------------------------------------
+ALTER TABLE courier_batches
+    ADD COLUMN waived_amount DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER adjustment_reason,
+    ADD COLUMN waived_reason VARCHAR(255) DEFAULT '' AFTER waived_amount;
+
+ALTER TABLE expenses
+    ADD COLUMN registration_id INT UNSIGNED NULL AFTER category_id,
+    ADD COLUMN period_label VARCHAR(50) NULL AFTER registration_id,
+    ADD COLUMN source VARCHAR(30) NOT NULL DEFAULT '' AFTER period_label,
+    ADD KEY idx_exp_source (source, registration_id, period_label),
+    ADD CONSTRAINT fk_expenses_registration
+        FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE;
+
 SET FOREIGN_KEY_CHECKS = 1;

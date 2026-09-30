@@ -104,7 +104,14 @@ require __DIR__ . '/includes/layout-top.php';
         <?php foreach ($rows as $r): ?>
             <tr class="border-b last:border-0 hover:bg-gray-50">
                 <td class="py-2.5 px-4"><?= e($r['category_name']) ?></td>
-                <td class="py-2.5 px-4"><?= e($r['description'] ?? '-') ?></td>
+                <td class="py-2.5 px-4">
+                    <?= e($r['description'] ?? '-') ?>
+                    <?php // 💸 কোর্স পার্সেলের ছাড়/মাফ থেকে অটো বসা সারি — এখান থেকে মুছলে ওখানে সেভ করলেই আবার আসবে ?>
+                    <?php if (($r['source'] ?? '') === 'parcel_waiver'): ?>
+                        <span class="inline-block px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-100 text-amber-800 ml-1"
+                              title="কোর্স পার্সেলের কার্ডে ছাড়ের ঘরটা ০ করলে এই সারি নিজে থেকেই মুছে যাবে">কোর্স পার্সেল থেকে</span>
+                    <?php endif; ?>
+                </td>
                 <td class="py-2.5 px-4 font-bold text-red-700">৳<?= number_format($r['amount'], 2) ?></td>
                 <td class="py-2.5 px-4"><?= e($r['expense_date']) ?></td>
                 <td class="py-2.5 px-4">
