@@ -7,33 +7,31 @@ require_once __DIR__ . '/includes/functions.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-const INTEREST_LOOKUP_MAX_PER_WINDOW = 20;
-const INTEREST_LOOKUP_WINDOW_MINUTES = 10;
+// 🔴 POST + ফর্মের টোকেন বাধ্যতামূলক, আর রেট-লিমিট "কয়টা **ভিন্ন** নম্বর দেখা হলো" ধরে —
+//    দুটোই `ajax-lookup-registration.php`-এর হুবহু একই নিয়ম (শেয়ার্ড হেল্পার, ২০২৬-১০-০১)।
+//    **দুই এন্ডপয়েন্টের নিয়ম সবসময় এক রাখুন** — একটা কড়া আর অন্যটা খোলা থাকলে
+//    আক্রমণকারী সহজ পথটাই বেছে নেবে (দুটোই একই `phone_lookup_attempts` ব্যবহার করে)।
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !csrf_verify()) {
+    http_response_code(403);
+    echo json_encode(['found' => false, 'error' => 'forbidden']);
+    exit;
+}
 
 $db = get_db();
 $ip = client_ip();
 
-$stmt = $db->prepare(
-    'SELECT COUNT(*) c FROM phone_lookup_attempts WHERE ip_address = :ip AND attempted_at > (NOW() - INTERVAL :mins MINUTE)'
-);
-$stmt->bindValue('ip', $ip);
-$stmt->bindValue('mins', INTEREST_LOOKUP_WINDOW_MINUTES, PDO::PARAM_INT);
-$stmt->execute();
-
-if ((int) $stmt->fetch()['c'] >= INTEREST_LOOKUP_MAX_PER_WINDOW) {
-    http_response_code(429);
-    echo json_encode(['found' => false, 'error' => 'too_many_requests']);
-    exit;
-}
-
-$db->prepare('INSERT INTO phone_lookup_attempts (ip_address) VALUES (:ip)')->execute(['ip' => $ip]);
-$db->exec('DELETE FROM phone_lookup_attempts WHERE attempted_at < (NOW() - INTERVAL 1 DAY)');
-
-$phone = trim($_GET['phone'] ?? '');
+$phone = trim($_POST['phone'] ?? '');
 if (!is_valid_bd_phone($phone)) {
     echo json_encode(['found' => false]);
     exit;
 }
+
+if (phone_lookup_rate_limited($db, $ip, $phone)) {
+    http_response_code(429);
+    echo json_encode(['found' => false, 'error' => 'too_many_requests']);
+    exit;
+}
+phone_lookup_record($db, $ip, $phone);
 
 // সবচেয়ে সাম্প্রতিক আগ্রহ-এন্ট্রি থেকে তথ্য (একই পরিবার সাধারণত একই নাম/ফেসবুক ব্যবহার করে)
 // remarks ইচ্ছাকৃতভাবে আনা হয় না — মন্তব্য প্রতিবার নতুন করে লেখা হয় (ইউজারের স্পষ্ট চাওয়া,

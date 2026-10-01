@@ -96,8 +96,10 @@ CREATE TABLE login_attempts (
 CREATE TABLE phone_lookup_attempts (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     ip_address VARCHAR(45) NOT NULL,
+    phone_hash CHAR(64) NULL,  -- নম্বরের sha256 হ্যাশ (নম্বর নিজে নয়) — "কয়টা ভিন্ন নম্বর দেখা হলো" গোনার জন্য
     attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_ip_time (ip_address, attempted_at)
+    INDEX idx_ip_time (ip_address, attempted_at),
+    INDEX idx_plk_ip_hash (ip_address, phone_hash, attempted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------

@@ -313,11 +313,27 @@ if (!$selectedCourse):
         picker.classList.remove('hidden');
     }
 
+    // 🔴 লুকআপ এখন **POST + ফর্মের টোকেন** দিয়ে হয় (২০২৬-১০-০১ অডিট) — টোকেনটা ফর্মের
+    //    হিডেন ঘর থেকেই নেওয়া হয়, তাই আলাদা করে কিছু বসাতে হয়নি। টোকেন না পেলে অনুরোধই
+    //    পাঠানো হয় না (সার্ভারও 403 দিত)। ব্যর্থ হলে নিচের .catch() নীরবে ছেড়ে দেয় —
+    //    ঘরগুলো নিজে থেকে ভরে না, অভিভাবক হাতে লিখে দেন, ফর্ম কখনো আটকায় না।
+    function lookupPost(url, fields) {
+        var tok = document.querySelector('input[name="csrf_token"]');
+        if (!tok || !tok.value) { return Promise.reject(new Error('no-token')); }
+        var body = new URLSearchParams(fields);
+        body.set('csrf_token', tok.value);
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString()
+        });
+    }
+
     motherMobile.addEventListener('blur', function () {
         var phone = this.value.trim();
         if (!/^01[3-9][0-9]{8}$/.test(phone)) return;
 
-        fetch('ajax-lookup-registration.php?phone=' + encodeURIComponent(phone))
+        lookupPost('ajax-lookup-registration.php', { phone: phone })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (!data || !data.found) return;

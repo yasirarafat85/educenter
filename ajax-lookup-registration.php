@@ -9,40 +9,37 @@ require_once __DIR__ . '/includes/functions.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-function lookup_client_ip(): string
-{
-    return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-}
-
-const LOOKUP_MAX_PER_WINDOW = 20;
-const LOOKUP_WINDOW_MINUTES = 10;
-
-$db = get_db();
-$ip = lookup_client_ip();
-
-$stmt = $db->prepare(
-    'SELECT COUNT(*) c FROM phone_lookup_attempts WHERE ip_address = :ip AND attempted_at > (NOW() - INTERVAL :mins MINUTE)'
-);
-$stmt->bindValue('ip', $ip);
-$stmt->bindValue('mins', LOOKUP_WINDOW_MINUTES, PDO::PARAM_INT);
-$stmt->execute();
-
-if ((int) $stmt->fetch()['c'] >= LOOKUP_MAX_PER_WINDOW) {
-    http_response_code(429);
-    echo json_encode(['found' => false, 'error' => 'too_many_requests']);
+// 🔴 এখন **POST + ফর্মের টোকেন** বাধ্যতামূলক (২০২৬-১০-০১ অডিট)। আগে যেকোনো জায়গা থেকে
+//    শুধু একটা GET ঠিকানা দিয়েই যে কেউ নম্বর বসিয়ে বসিয়ে অভিভাবকের নাম/ঠিকানা তুলে
+//    নিতে পারত। এখন আগে আসল ফর্মের পাতাটা খুলতে হয় — টোকেনটা ওখান থেকেই আসে।
+// 🔴 টোকেনটা GET-এ নয়, POST বডিতে — URL সার্ভারের অ্যাক্সেস-লগ ও Referer হেডারে জমা হয়,
+//    সেখানে টোকেন ফাঁস হওয়া উচিত নয়।
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !csrf_verify()) {
+    http_response_code(403);
+    echo json_encode(['found' => false, 'error' => 'forbidden']);
     exit;
 }
 
-$db->prepare('INSERT INTO phone_lookup_attempts (ip_address) VALUES (:ip)')->execute(['ip' => $ip]);
-$db->exec('DELETE FROM phone_lookup_attempts WHERE attempted_at < (NOW() - INTERVAL 1 DAY)');
+$db = get_db();
+$ip = client_ip();
 
-$phone = trim($_GET['phone'] ?? '');
-$mode = $_GET['mode'] ?? 'course';
+$phone = trim($_POST['phone'] ?? '');
+$mode = $_POST['mode'] ?? 'course';
 
 if (!is_valid_bd_phone($phone)) {
     echo json_encode(['found' => false]);
     exit;
 }
+
+// 🔑 রেট-লিমিট — "কয়টা **ভিন্ন** নম্বর দেখা হলো" ধরে গোনা হয় (বিস্তারিত functions.php-এর
+//    phone_lookup_rate_limited()-এর ঘরে)। একই নম্বর যতবার খুশি দেখা যায়, তাই আসল
+//    অভিভাবক কখনো আটকান না। 🔴 নম্বর যাচাইয়ের **পরে** — অবৈধ নম্বর কোটা খাবে না।
+if (phone_lookup_rate_limited($db, $ip, $phone)) {
+    http_response_code(429);
+    echo json_encode(['found' => false, 'error' => 'too_many_requests']);
+    exit;
+}
+phone_lookup_record($db, $ip, $phone);
 
 // ওয়ার্কশিট/প্রোডাক্ট অর্ডার ফর্মের জন্য — কোর্স বাদে আগের যেকোনো অর্ডার থেকে নাম/ইমেইল/ঠিকানা অটো-ফিল
 if ($mode === 'general') {

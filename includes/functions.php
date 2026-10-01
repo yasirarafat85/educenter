@@ -25,11 +25,40 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+/**
+ * 🔒 HSTS — ব্রাউজারকে বলে রাখা "এই সাইটে আর কখনো তালা-ছাড়া http:// দিয়ে যাবে না"
+ * (২০২৬-১০-০১ অডিট)।
+ *
+ * কেন দরকার: `config.php`-এ http→https রিডাইরেক্ট আগে থেকেই আছে, কিন্তু ফাঁকটা থাকে
+ * **প্রথম অনুরোধে** — কেউ শুধু `shishurmedhabikash.com` টাইপ করলে ব্রাউজার প্রথমবার
+ * তালা ছাড়াই অনুরোধ পাঠায়। খারাপ WiFi/রাউটারে কেউ ঐ মুহূর্তটা ধরে ভিজিটরকে নকল
+ * http পাতায় আটকে রাখতে পারে (SSL stripping) — তখন অ্যাডমিন পাসওয়ার্ড বা অভিভাবকের
+ * ফোন নম্বর তালা ছাড়া যায়। HSTS থাকলে প্রথম সফল https ভিজিটের পর ব্রাউজার আর কখনো
+ * তালা-ছাড়া অনুরোধই পাঠায় না।
+ *
+ * 🔴🔴 মেয়াদ ইচ্ছাকৃতভাবে **মাত্র ৭ দিন** — HSTS ব্রাউজারে **আটকে থাকে**, আর ঐ সময়টা
+ *    SSL সার্টিফিকেট নষ্ট হলে ব্রাউজার সাইটটা দেখাতেই রাজি হয় না (ভিজিটর "তবু দেখব"
+ *    বলেও ঢুকতে পারে না)। তাই প্রথমে ছোট মেয়াদ — কয়েক সপ্তাহ নির্বিঘ্নে চলার পর
+ *    ইউজারের অনুমতি নিয়ে ৩১৫৩৬০০০ (১ বছর) করা যাবে। **না জিজ্ঞেস করে বাড়াবেন না।**
+ * 🔴 `includeSubDomains` ও `preload` ইচ্ছাকৃতভাবে **দেওয়া হয়নি** — সাবডোমেইনে
+ *    (webmail/cpanel ইত্যাদি) SSL না থাকলে সেগুলো অচল হয়ে যেত, আর `preload` একবার
+ *    দিলে ব্রাউজারের তালিকা থেকে সরাতে মাসখানেক লাগে।
+ * 🔴 শুধু https-এ পাঠানো হয় (স্পেকের নিয়ম) আর শুধু `DEV_MODE=false`-এ — লোকাল
+ *    `http://localhost/website/` যেন কখনো আটকে না যায়।
+ */
+const HSTS_MAX_AGE = 604800;   // ৭ দিন (সেকেন্ডে)
+
 // বেসিক সিকিউরিটি হেডার — সব পেজেই প্রযোজ্য (clickjacking, MIME-sniffing ঠেকাতে)
 if (!headers_sent()) {
     header('X-Frame-Options: SAMEORIGIN');
     header('X-Content-Type-Options: nosniff');
     header('Referrer-Policy: strict-origin-when-cross-origin');
+
+    $overHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    if ($overHttps && defined('DEV_MODE') && !DEV_MODE) {
+        header('Strict-Transport-Security: max-age=' . HSTS_MAX_AGE);
+    }
 }
 
 // HTML আউটপুটে নিরাপদভাবে টেক্সট বসানোর শর্টকাট (XSS প্রতিরোধ)
@@ -1212,6 +1241,148 @@ function form_record_submit(PDO $db, string $ip): void
     try {
         $db->prepare('INSERT INTO form_submit_attempts (ip_address) VALUES (:ip)')->execute(['ip' => $ip]);
         $db->exec('DELETE FROM form_submit_attempts WHERE attempted_at < (NOW() - INTERVAL 1 DAY)');
+    } catch (Throwable $e) {
+        // টেবিল না থাকলে চুপচাপ
+    }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * 📞 ফোন-লুকআপ রেট-লিমিট (২০২৬-১০-০১ অডিট — গোপনীয়তা)
+ *
+ * `ajax-lookup-registration.php` ও `ajax-lookup-interest.php` একটা মোবাইল নম্বর
+ * পেলে ঐ পরিবারের শিশুর নাম · জন্ম তারিখ · ফেসবুক নাম · বাবার মোবাইল · **ঠিকানা**
+ * ফেরত দেয় (রেজিস্ট্রেশন ফর্মের অটো-ফিল)। এন্ডপয়েন্টটা পাবলিক, তাই কেউ একজন
+ * অভিভাবকের নম্বর জানলে এক ক্লিকেই ঐ তথ্য পেয়ে যেতে পারত।
+ *
+ * 🔴 আগের নিয়ম ছিল শুধু "IP-প্রতি ১০ মিনিটে ২০টা অনুরোধ" — দুই দিকেই দুর্বল:
+ *    (ক) আসল অভিভাবক নম্বরের ঘরে কয়েকবার ঢুকে-বেরোলেই কোটা পুড়ত (একই নম্বর, কোনো
+ *        তথ্য ফাঁস হচ্ছে না, তবু গোনা হচ্ছিল), আর
+ *    (খ) মোবাইল ডেটায় (GP/Robi) **অনেক অভিভাবক একই IP শেয়ার করেন** — তাই IP-ভিত্তিক
+ *        কড়া সীমা আসল মানুষকেই আটকে দিতে পারে।
+ *
+ * 🔑 **এখনকার মূল ধারণা: গোনা হয় "কয়টা *ভিন্ন* নম্বর দেখা হলো", কতবার দেখা হলো তা নয়।**
+ *    আসল অভিভাবক একটাই নম্বর দেখেন (যতবার খুশি, ফ্রি); স্ক্র্যাপার একটার পর একটা
+ *    **ভিন্ন** নম্বর দেয় — এই একটা হিসাবই দুই দলকে নিখুঁতভাবে আলাদা করে।
+ *
+ * তিনটা গেট:
+ *   A. **একই ব্রাউজারে** (সেশন) ৪টা ভিন্ন নম্বর — আসল অ্যান্টি-স্ক্র্যাপ গেট।
+ *      🔴 হিসাবটা DB-তে নয়, **সেশনেই** রাখা — তাই (১) কোনো মাইগ্রেশন ছাড়াই চলে, আর
+ *      (২) শত অভিভাবক একই মোবাইল-IP শেয়ার করলেও প্রত্যেকের নিজের সেশন, কেউ
+ *      আরেকজনের কোটা খায় না (CGNAT সমস্যার আসল সমাধান এটাই)।
+ *   B. **একই কানেকশনে** (IP) ১২টা ভিন্ন নম্বর — কেউ বারবার নতুন সেশন নিয়ে এলে ধরে।
+ *      ১২ রাখা হয়েছে যাতে ভর্তির দিন একই অপারেটরের পেছনে থাকা আসল অভিভাবকদের ভিড়েও
+ *      সীমা না ছোঁয়।
+ *   C. **মোট অনুরোধ** ৪০ — নিছক flood গার্ড (একই নম্বর বারবার দিলেও এখানে গোনা হয়)।
+ *
+ * 🔴 ব্লক হলে কী হয়: এন্ডপয়েন্ট `found: false` + HTTP 429 ফেরায়, আর পাতার JS সেটা
+ *    **নীরবে উপেক্ষা** করে — ঘরগুলো নিজে থেকে ভরে না, অভিভাবক হাতে লিখে দেন,
+ *    রেজিস্ট্রেশন আগের মতোই হয়। **কখনো ফর্ম আটকায় না, টাইপ করা লেখাও হারায় না।**
+ *
+ * 🔴 নম্বরটা কখনো `phone_lookup_attempts`-এ জমা হয় না — শুধু তার **sha256 হ্যাশ**
+ *    (`phone_lookup_hash()`)। "একই নম্বর কিনা" বোঝার জন্য হ্যাশই যথেষ্ট, আর তাতে
+ *    একই PII দুই টেবিলে ছড়ায় না (group_match_runs-এর মতোই নীতি)।
+ * 🔴 মাইগ্রেশনের আগে (`phone_hash` কলাম না থাকলে) গেট B চুপচাপ বাদ যায়, গেট A ও C
+ *    আগের মতোই চলে — **এই ফলব্যাক সরাবেন না** (এই প্রজেক্টে ফাইল আগে ডিপ্লয় হয়,
+ *    SQL পরে চলে)। মাইগ্রেশন `database/migrate-phone-lookup-hash.sql`।
+ * ════════════════════════════════════════════════════════════════════════════ */
+const PHONE_LOOKUP_WINDOW_MINUTES = 10;
+const PHONE_LOOKUP_MAX_PER_SESSION = 4;    // একই ব্রাউজারে কয়টা **ভিন্ন** নম্বর
+const PHONE_LOOKUP_MAX_PER_IP = 12;        // একই কানেকশনে কয়টা **ভিন্ন** নম্বর
+const PHONE_LOOKUP_MAX_REQUESTS = 40;      // মোট অনুরোধ (flood গার্ড)
+const PHONE_LOOKUP_SESSION_CAP = 60;       // সেশনে সর্বোচ্চ কত হ্যাশ রাখা হবে (স্মৃতি-গার্ড)
+
+// নম্বরের পরিচয়-হ্যাশ — শেষ ১০ ডিজিট ধরে, তাই "01712..." আর "+88017১২..." একই গোনা হয়
+function phone_lookup_hash(string $phone): string
+{
+    return hash('sha256', 'edu-plk|' . phone_last10($phone));
+}
+
+// সেশনে রাখা পুরনো এন্ট্রি ছেঁটে এই জানালার হ্যাশ-তালিকা ফেরায় (রেফারেন্সে, যাতে caller লিখতে পারে)
+function &phone_lookup_session_store(): array
+{
+    if (!isset($_SESSION['plk']) || !is_array($_SESSION['plk'])) {
+        $_SESSION['plk'] = [];
+    }
+    $cutoff = time() - (PHONE_LOOKUP_WINDOW_MINUTES * 60);
+    foreach ($_SESSION['plk'] as $h => $ts) {
+        if (!is_int($ts) || $ts < $cutoff) {
+            unset($_SESSION['plk'][$h]);
+        }
+    }
+    return $_SESSION['plk'];
+}
+
+/**
+ * এই নম্বরটা এখন দেখতে দেওয়া যাবে কি? true = আটকান (429)।
+ * 🔴 একই নম্বর আগে দেখা থাকলে কোনো গেটেই নতুন করে গোনা হয় না — শুধু flood গার্ড ছাড়া।
+ */
+function phone_lookup_rate_limited(PDO $db, string $ip, string $phone): bool
+{
+    $hash = phone_lookup_hash($phone);
+
+    // ── গেট C: মোট অনুরোধ (একই নম্বর হলেও গোনা হয়) ──
+    try {
+        $stmt = $db->prepare('SELECT COUNT(*) c FROM phone_lookup_attempts WHERE ip_address = :ip AND attempted_at > (NOW() - INTERVAL :m MINUTE)');
+        $stmt->bindValue('ip', $ip);
+        $stmt->bindValue('m', PHONE_LOOKUP_WINDOW_MINUTES, PDO::PARAM_INT);
+        $stmt->execute();
+        if ((int) $stmt->fetch()['c'] >= PHONE_LOOKUP_MAX_REQUESTS) {
+            return true;
+        }
+    } catch (Throwable $e) {
+        // টেবিল না থাকলে এই গেটটা বাদ (পেজ ভাঙে না)
+    }
+
+    // ── গেট A: একই ব্রাউজারে ভিন্ন নম্বরের সংখ্যা (সেশন, মাইগ্রেশন লাগে না) ──
+    $seen = &phone_lookup_session_store();
+    if (!isset($seen[$hash]) && count($seen) >= PHONE_LOOKUP_MAX_PER_SESSION) {
+        return true;
+    }
+
+    // ── গেট B: একই IP-তে ভিন্ন নম্বরের সংখ্যা (phone_hash কলাম থাকলে) ──
+    if (db_has_column($db, 'phone_lookup_attempts', 'phone_hash')) {
+        try {
+            $stmt = $db->prepare(
+                'SELECT COUNT(DISTINCT phone_hash) c FROM phone_lookup_attempts
+                 WHERE ip_address = :ip AND phone_hash IS NOT NULL
+                   AND phone_hash <> :h AND attempted_at > (NOW() - INTERVAL :m MINUTE)'
+            );
+            $stmt->bindValue('ip', $ip);
+            $stmt->bindValue('h', $hash);
+            $stmt->bindValue('m', PHONE_LOOKUP_WINDOW_MINUTES, PDO::PARAM_INT);
+            $stmt->execute();
+            // এই নম্বরটা বাদ দিয়ে গোনা হলো — তাই আগে দেখা নম্বর আবার দেখলে কখনো আটকায় না
+            if ((int) $stmt->fetch()['c'] >= PHONE_LOOKUP_MAX_PER_IP) {
+                return true;
+            }
+        } catch (Throwable $e) {
+            // কলাম/টেবিল না থাকলে চুপচাপ বাদ
+        }
+    }
+
+    return false;
+}
+
+// লুকআপটা রেকর্ড করা (হিসাবের জন্য) + পুরনো এন্ট্রি পরিষ্কার
+function phone_lookup_record(PDO $db, string $ip, string $phone): void
+{
+    $hash = phone_lookup_hash($phone);
+
+    $seen = &phone_lookup_session_store();
+    $seen[$hash] = time();
+    if (count($seen) > PHONE_LOOKUP_SESSION_CAP) {
+        $seen = array_slice($seen, -PHONE_LOOKUP_SESSION_CAP, null, true);
+        $_SESSION['plk'] = $seen;
+    }
+
+    try {
+        if (db_has_column($db, 'phone_lookup_attempts', 'phone_hash')) {
+            $db->prepare('INSERT INTO phone_lookup_attempts (ip_address, phone_hash) VALUES (:ip, :h)')
+               ->execute(['ip' => $ip, 'h' => $hash]);
+        } else {
+            $db->prepare('INSERT INTO phone_lookup_attempts (ip_address) VALUES (:ip)')->execute(['ip' => $ip]);
+        }
+        $db->exec('DELETE FROM phone_lookup_attempts WHERE attempted_at < (NOW() - INTERVAL 1 DAY)');
     } catch (Throwable $e) {
         // টেবিল না থাকলে চুপচাপ
     }
