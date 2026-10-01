@@ -7,7 +7,8 @@ header('Content-Type: application/json; charset=utf-8');
 function wa_out($d, int $code = 200): void { http_response_code($code); echo json_encode($d, JSON_UNESCAPED_UNICODE); exit; }
 
 $in = json_decode(file_get_contents('php://input'), true) ?: [];
-if (!hash_equals($_SESSION['csrf_token'] ?? '', $in['csrf_token'] ?? '')) { wa_out(['error' => 'csrf'], 403); }
+// 🔴 শেয়ার্ড csrf_verify() — খালি টোকেন বাতিল করে (hash_equals('','') true ফেরায়) ও কুকি-ফলব্যাক মানে
+if (!csrf_verify((string) ($in['csrf_token'] ?? ''))) { wa_out(['error' => 'csrf'], 403); }
 
 $db = get_db();
 $challenge = wa_challenge();

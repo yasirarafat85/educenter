@@ -2,6 +2,10 @@
 // কার্যকলাপ লগ — কে কী করল (২০২৬-০৯-২৪)
 // লেখা হয় কেন্দ্রীয় গার্ড থেকে (admin/includes/activity.php দ্রষ্টব্য) — প্রতিটা POST।
 require_once __DIR__ . '/includes/auth.php';
+// 🔴 nav.php স্পষ্টভাবে এখানেই — নিচে `admin_nav_groups()` ডাকা হয় (পেজ-ফাইলের বাংলা নাম তুলতে),
+//    অথচ layout-top.php (যেটা nav.php আনে) লোড হয় আরও পরে। এটা না থাকলে পাতাটা
+//    "Call to undefined function admin_nav_groups()" হয়ে HTTP 500 দিত।
+require_once __DIR__ . '/includes/nav.php';
 admin_require_login();
 
 $db = get_db();

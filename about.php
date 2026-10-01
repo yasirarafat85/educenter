@@ -12,7 +12,7 @@ require __DIR__ . '/includes/site-header.php';
 
 <div class="max-w-5xl mx-auto">
     <?= render_page_header('info', 'পরিচিতি', 'আমাদের সম্পর্কে', get_setting('site_name', 'EduCenter') . ' এর যাত্রা, লক্ষ্য এবং আমাদের শিক্ষার দর্শন', 'text-teal-700') ?>
-    <div class="prose prose-lg max-w-none">
+    <div class="max-w-none">
         <div class="colorful-card rounded-2xl shadow-lg p-8 sm:p-10 mb-10 border border-white/30">
             <h2 class="text-2xl sm:text-3xl font-bold mb-6 text-gray-900 flex items-center gap-3">
                 <span class="icon-circle bg-teal-100 text-teal-600 w-11 h-11"><i data-lucide="target" class="w-5 h-5"></i></span>

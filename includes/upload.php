@@ -54,6 +54,14 @@ function handle_image_upload(string $fieldName, string $subDir, bool $pad = true
         }
         @chmod($uploadRoot, 0755); // umask-এর কারণে mkdir এর mode কমে যেতে পারে — নিশ্চিত করে নেওয়া
     }
+    // 🔴 ডিরেক্টরি-লিস্টিং ঠেকানো (২০২৬-১০-০১): রুট .htaccess-এ `Options -Indexes` ইচ্ছাকৃতভাবে নেই
+    //    (কিছু শেয়ার্ড হোস্টে AllowOverride Options বন্ধ থাকলে ঐ লাইনেই পুরো সাইট 500 দেয়)। তাই
+    //    PHP নিজেই প্রতিটা নতুন আপলোড-ফোল্ডারে একটা খালি index.html রেখে দেয় — তাহলে হোস্টে
+    //    Indexes চালু থাকলেও /uploads/<sub>/ খুলে কেউ সব ছবির তালিকা দেখতে পায় না।
+    //    (ডিপ্লয় জিপও একই কাজ করে — build_zip.py-তে প্রতিটা সাবফোল্ডারে placeholder index.html থাকে।)
+    if (!is_file($uploadRoot . '/index.html')) {
+        @file_put_contents($uploadRoot . '/index.html', '');
+    }
     // ⚠️ is_writable() কিছু হোস্টে ভুল বলে (২০২৬-০৭-২০ এ লাইভে ধরা পড়েছে: is_writable() true
     // বলছিল অথচ আসল লেখা ব্যর্থ হচ্ছিল)। তাই সত্যিকারের এক-বাইট রাইট-টেস্ট করা হয়, আর ব্যর্থ হলে
     // নিজেই chmod 0755 দিয়ে সারানোর চেষ্টা করা হয় — তাতেও না হলে তবেই ইউজারকে বলা হয়।

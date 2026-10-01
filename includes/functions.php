@@ -130,9 +130,16 @@ function csrf_field(): string
     return '<input type="hidden" name="csrf_token" value="' . e(csrf_token()) . '">';
 }
 
-function csrf_verify(): bool
+/**
+ * টোকেন যাচাই। $posted না দিলে $_POST থেকে নেওয়া হয় — JSON বডি পাঠানো এন্ডপয়েন্ট
+ * (admin/webauthn-*.php) নিজের তোলা মানটা পাস করে।
+ *
+ * 🔴 খালি টোকেন সবসময় বাতিল — `hash_equals('', '')` **true** ফেরায়, তাই সেশনে টোকেন না
+ *    থাকা অবস্থায় কেউ টোকেন ছাড়াই POST করলে সেটা পাস করে যেত (CSRF গার্ড ফাঁকি)।
+ */
+function csrf_verify(?string $posted = null): bool
 {
-    $posted = (string) ($_POST['csrf_token'] ?? '');
+    $posted = (string) ($posted ?? ($_POST['csrf_token'] ?? ''));
     if ($posted === '') {
         return false;
     }
@@ -1374,6 +1381,8 @@ function visitor_human_sql(string $col = 'user_agent'): string
     return "($col IS NOT NULL AND $col <> '' AND LOWER($col) NOT REGEXP '" . visitor_bot_pattern() . "')";
 }
 
+const VISITOR_LOG_KEEP_DAYS = 180;   // ভিজিটর লগ কত দিন রাখা হবে (অ্যাডমিনের লগইন লগ ৯০, কার্যকলাপ ১৮০)
+
 function log_visitor(): void
 {
     // 🔴 অ্যাডমিন প্যানেলে লগইন থাকা অবস্থায় নিজের সাইট ঘুরে দেখলে সেটা আর ভিজিট হিসেবে গোনা হয় না
@@ -1385,12 +1394,21 @@ function log_visitor(): void
         $ip = $_SERVER['REMOTE_ADDR'] ?? '';
         $page = $_SERVER['REQUEST_URI'] ?? '';
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
-        get_db()->prepare('INSERT INTO visitor_logs (ip_address, page_url, user_agent) VALUES (:ip, :page, :ua)')
+        $db = get_db();
+        $db->prepare('INSERT INTO visitor_logs (ip_address, page_url, user_agent) VALUES (:ip, :page, :ua)')
             ->execute([
                 'ip' => $ip,
                 'page' => mb_substr($page, 0, 500),
                 'ua' => mb_substr($ua, 0, 255),
             ]);
+        // 🔴 পুরনো সারি ছাঁটাই (২০২৬-১০-০১) — এই টেবিলে **প্রতিটা পাবলিক পেজ-লোডে** একটা সারি বসে,
+        //    অথচ আগে কিছুই মোছা হতো না; বছর ঘুরতে কয়েক লাখ সারি জমে শেয়ার্ড হোস্টের ডিস্ক কোটা খেত,
+        //    আর ড্যাশবোর্ড/ভিজিটর-লগের COUNT(*) + REGEXP প্রতিবার পুরো টেবিল স্ক্যান করত।
+        //    registration_errors-এর মতোই probabilistic (প্রতি ~১০০ ভিজিটে একবার) — প্রতি রিকোয়েস্টে
+        //    একটা বাড়তি DELETE চালানোর দরকার নেই।
+        if (random_int(1, 100) === 1) {
+            $db->exec('DELETE FROM visitor_logs WHERE visited_at < (NOW() - INTERVAL ' . (int) VISITOR_LOG_KEEP_DAYS . ' DAY)');
+        }
     } catch (Throwable $e) {
         // নীরবে উপেক্ষা
     }
