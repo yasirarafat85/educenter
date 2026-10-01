@@ -404,7 +404,12 @@ CREATE TABLE registrations (
     approved_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_phone_type (phone, type)
+    INDEX idx_phone_type (phone, type),
+    -- কোর্স পার্সেল/গ্রুপ মেলানো/কোর্স ডেটা: `WHERE type='course' AND item_id = ?` ও `GROUP BY item_id`
+    -- 🔴 `type` আগে — GROUP BY কোয়েরিতে ওটাই একমাত্র সমান-শর্ত (migrate-registrations-indexes.sql)
+    INDEX idx_reg_type_item (type, item_id),
+    -- অর্ডার তালিকা: `WHERE status = ? ORDER BY created_at DESC LIMIT 25` + স্ট্যাটাস-গণনা
+    INDEX idx_reg_status_created (status, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------

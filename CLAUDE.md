@@ -433,6 +433,16 @@ PHP `require`/`include` একই global scope শেয়ার করে। �
 - `registrations.item_id` (type='course') — `course_batches.id` পয়েন্ট করে (courses.id না)
 - `registrations.income_approved`/`income_amount`/`approved_at` — status confirmed/shipped/delivered হলে অটো সেট হয় (`sync_income_for_status()` ফাংশন, `admin/registrations.php` এ)
 - `registrations.due_amount` — এখন **পেমেন্ট খাতা থেকে অটো হিসাব** হয়ে ডিনরমালাইজড বসে (আসল উৎস `registration_payments`)। `admin_note` অ্যাডমিনের সাধারণ মন্তব্য। 🔴 **আয়ের হিসাবের সাথে কোনো সম্পর্ক নেই**; `admin_note` গ্রাহকের নিজের `notes` ও কুরিয়ার-নোট (`registration_courier_notes`) দুটো থেকেই আলাদা
+- **⚡ `registrations`-এর ইনডেক্স (২০২৬-১০-০১, `migrate-registrations-indexes.sql`)**: `idx_phone_type (phone, type)`
+  (পুরনো, অভিভাবক-ড্যাশবোর্ড/লুকআপ) · **`idx_reg_type_item (type, item_id)`** (কোর্স পার্সেল · গ্রুপ মেলানো ·
+  কোর্স ডেটা — 🔴 **`type` আগে**, কারণ গ্রুপ-পিকার ও ডুপ্লিকেট-শনাক্তকরণের `GROUP BY item_id …`-এ `type`-ই
+  একমাত্র সমান-শর্ত; উল্টো ক্রমে ওখানে ইনডেক্সটা ব্যবহারই হতো না) · **`idx_reg_status_created (status, created_at)`**
+  (তালিকার `WHERE status = ? ORDER BY created_at DESC LIMIT 25` — এক ইনডেক্সেই ফিল্টার ও সাজানো দুটোই)।
+  🔴 **নিয়ম: `registrations`-এ নতুন কোনো ভারী কোয়েরি লিখলে আগে দেখুন বিদ্যমান তিনটার কোনোটার
+  বাঁ-দিকের-অংশ কাজে লাগে কিনা** — নতুন ইনডেক্স যোগ করলে লেখার (INSERT/UPDATE) খরচ বাড়ে, তাই
+  শুধু আসল কোয়েরি দেখে, অনুমান করে নয়। ⚠️ তালিকার তারিখ-ফিল্টার `DATE(created_at) >= ?` **কোনো
+  ইনডেক্স ব্যবহার করতে পারে না** (কলাম ফাংশনে মোড়ানো) — ইচ্ছাকৃতভাবে অপরিবর্তিত রাখা, বদলালে
+  কোয়েরির অর্থ (সময়ের অংশ) বদলে যায়।
 - `registrations` এ course-specific কলাম: `date_of_birth`, `facebook_id`, `father_mobile`, `receiver_name`, `receiver_phone` (worksheet/product এর জন্য NULL থাকে, generic `district`/`thana` ব্যবহার হয় না কোর্সে)
 
 ## ⚠️ CSRF টোকেন + সেশনের আয়ু (২০২৬-০৯-২৪, আসল বাগ থেকে শেখা)
