@@ -161,6 +161,10 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     @media (max-width: 767px) {
         main .overflow-x-auto { overflow-x: visible; }
 
+        /* 🔴 সার্চ বক্সের হরফ মোবাইলে ১৬px — iOS Safari ১৬px-এর ছোট ইনপুটে ফোকাস করলে
+           নিজে থেকেই পাতা জুম করে দেয়, তখন লেখা/কার্সর লাফায় (২০২৬-১০-০৩)। */
+        input[data-autosearch] { font-size: 16px; }
+
         /* ⚠️ কার্ড-ইন-কার্ড ঠিক করা (২০২৬-০৭-২০, ইউজারের স্ক্রিনশট): টেবিলের মোড়ক
            `.bg-white rounded-2xl shadow` নিজেই একটা সাদা কার্ডের মতো দেখায়, আর ভেতরে প্রতিটা রো-ও
            কার্ড হয়ে যায় — ফলে "একটা কার্ডের ভেতরে আরেকটা কার্ড" দেখাত। মোবাইলে মোড়কটা স্বচ্ছ করে

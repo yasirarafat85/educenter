@@ -188,6 +188,72 @@
         }, 'নিশ্চিতকরণ');
     }
 
+    // ── সার্ভার-সাইড ফিল্টার ফর্মের সার্চ বক্স (registrations.php / users.php)
+    // 🔴 মোবাইলে এটা ভাঙত (২০২৬-১০-০৩, ইউজারের রিপোর্ট): আগে যেকোনো ডিভাইসে ৫০০ms পরেই
+    // ফুল GET রিলোড হতো, অথচ বাংলা ফোনেটিক কীবোর্ডে (Ridmik/Gboard) একটা যুক্তাক্ষর লিখতেই
+    // তার চেয়ে বেশি সময় লাগে — মাঝপথে পাতা রিলোড হয়ে কীবোর্ড বন্ধ হয়ে যেত, আধখানা লেখা
+    // আর কার্সর দুটোই হারাত। 🔴 মোবাইলে প্রোগ্রাম থেকে focus() দিলেও কীবোর্ড খোলে না
+    // (ব্রাউজারের নিয়ম), তাই ওখানে অটো-রিলোডটাই বন্ধ — Enter/Go বা "🔍 খুঁজুন" বোতামই সাবমিট করে।
+    // ডেস্কটপে আগের মতোই লেখা থামলে নিজে থেকে খোঁজে (ফোকাস ও কার্সর ফিরিয়ে দেওয়া হয়)।
+    function adminAutoSearch(box, form) {
+        if (!box || !form) { return; }
+
+        var KEY = 'admin_autosearch_focus';
+        var MARK = (form.id || '') + '|' + (box.name || 'q');
+        var coarse = false;
+        try { coarse = window.matchMedia('(hover: none) and (pointer: coarse)').matches; } catch (e) {}
+
+        var applied = box.value;   // সার্ভার যে লেখাটা দিয়ে এই পাতাটা বানিয়েছে
+        var timer = null;
+        var composing = false;     // IME/ফোনেটিক কীবোর্ডে যুক্তাক্ষর লেখা চলছে কিনা
+
+        function go() {
+            if (composing) { return; }                 // লেখা শেষ হয়নি
+            if (box.value === applied) { return; }     // একই লেখা — রিলোডের দরকার নেই
+            try { sessionStorage.setItem(KEY, MARK); } catch (e) {}
+            form.submit();
+        }
+        function restart() {
+            clearTimeout(timer);
+            timer = setTimeout(go, 700);
+        }
+
+        box.addEventListener('compositionstart', function () { composing = true; clearTimeout(timer); });
+        box.addEventListener('compositionend', function () { composing = false; if (!coarse) { restart(); } });
+        if (!coarse) {
+            box.addEventListener('input', function () { if (!composing) { restart(); } });
+        }
+        // কীবোর্ডের Enter/Go — অপেক্ষা না করে এখনই খুঁজবে
+        box.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                clearTimeout(timer);
+                composing = false;
+                go();
+            }
+        });
+
+        // রিলোডের পর কীবোর্ড/কার্সর ফিরিয়ে দেওয়া — শুধু ডেস্কটপে (মোবাইলে focus() পাতা লাফায়)
+        try {
+            if (sessionStorage.getItem(KEY) === MARK) {
+                sessionStorage.removeItem(KEY);
+                if (!coarse) {
+                    box.focus();
+                    var n = box.value.length;
+                    if (box.setSelectionRange) { box.setSelectionRange(n, n); }
+                }
+            }
+        } catch (e) {}
+    }
+
+    // যেসব সার্চ বক্সে data-autosearch="<ফর্মের id>" আছে, সেগুলো নিজে থেকেই ওয়্যার হয় —
+    // পেজে আলাদা <script> লেখার দরকার নেই (আর ordering নিয়েও ঝামেলা হয় না)
+    (function () {
+        document.querySelectorAll('input[data-autosearch]').forEach(function (box) {
+            adminAutoSearch(box, document.getElementById(box.getAttribute('data-autosearch')));
+        });
+    })();
+
     // মোবাইলে সাইডবার খোলা/বন্ধ করা (hamburger মেনু)
     (function () {
         const sidebar = document.getElementById('admin-sidebar');

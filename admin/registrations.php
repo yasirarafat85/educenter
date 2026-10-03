@@ -1145,7 +1145,10 @@ require __DIR__ . '/includes/layout-top.php';
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
             <div class="lg:col-span-2">
                 <label class="block text-xs font-semibold text-gray-500 mb-1">নাম, ফোন বা আইটেম</label>
-                <input type="text" name="q" value="<?= e($search) ?>" placeholder="টাইপ করা মাত্র ফলাফল আপডেট হবে..." id="regSearchInput" class="w-full border rounded-xl px-3 py-2.5 text-sm">
+                <div class="flex gap-2 items-center">
+                    <input type="text" name="q" value="<?= e($search) ?>" placeholder="নাম / ফোন / আইটেম লিখুন" id="regSearchInput" data-autosearch="regFilterForm" class="flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm">
+                    <button type="submit" class="flex-shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap">🔍 খুঁজুন</button>
+                </div>
             </div>
             <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1">নির্দিষ্ট আইটেম</label>
@@ -1748,18 +1751,9 @@ require __DIR__ . '/includes/layout-top.php';
         return 'এই অর্ডারটি ইতিমধ্যে "' + STATUS_LABELS[original] + '" অবস্থায় আছে এবং আয়ের হিসাবে যুক্ত থাকতে পারে। স্ট্যাটাস পরিবর্তন করলে আয়ের হিসাবও বদলে যেতে পারে। আপনি কি নিশ্চিত?';
     }
 
-    // সার্চ বক্সে টাইপ করা মাত্র (থামার পর) অটো-ফিল্টার — বাটনে ক্লিক করা লাগে না
-    (function () {
-        var searchInput = document.getElementById('regSearchInput');
-        if (!searchInput) { return; }
-        var debounceTimer;
-        searchInput.addEventListener('input', function () {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(function () {
-                document.getElementById('regFilterForm').submit();
-            }, 500);
-        });
-    })();
+    // সার্চ বক্সের অটো-ফিল্টার এখন শেয়ার্ড: ইনপুটের data-autosearch="regFilterForm" দেখে
+    // admin/includes/layout-bottom.php-এর adminAutoSearch() নিজেই ওয়্যার করে নেয়
+    // (ডেস্কটপে লেখা থামলে, মোবাইলে Enter/🔍 বোতামে — কেন সেভাবে, তা ওখানের কমেন্টে লেখা)
 
     // লিস্ট পেজের ইনলাইন ড্রপডাউন — onchange এ কল হয়
     function confirmStatusChange(select) {

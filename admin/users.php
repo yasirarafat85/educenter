@@ -189,7 +189,10 @@ require __DIR__ . '/includes/layout-top.php';
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div class="sm:col-span-2">
             <label class="block text-xs font-semibold text-gray-500 mb-1">নাম বা মোবাইল নম্বর</label>
-            <input type="text" name="q" id="usersSearchInput" value="<?= e($activeFilters['q'] ?? '') ?>" placeholder="টাইপ করা মাত্র ফলাফল আপডেট হবে..." class="w-full border rounded-xl px-3 py-2.5 text-sm">
+            <div class="flex gap-2 items-center">
+                <input type="text" name="q" id="usersSearchInput" data-autosearch="usersFilterForm" value="<?= e($activeFilters['q'] ?? '') ?>" placeholder="নাম বা মোবাইল লিখুন" class="flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm">
+                <button type="submit" class="flex-shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap">🔍 খুঁজুন</button>
+            </div>
         </div>
         <div>
             <label class="block text-xs font-semibold text-gray-500 mb-1">কোন কোর্সের অভিভাবক</label>
@@ -308,18 +311,6 @@ require __DIR__ . '/includes/layout-top.php';
 </div>
 <?php endif; ?>
 
-<script>
-// সার্চ বক্সে টাইপ করা মাত্র (থামার পর) অটো-ফিল্টার — registrations.php-এর হুবহু প্যাটার্ন
-(function () {
-    var box = document.getElementById('usersSearchInput');
-    if (!box) { return; }
-    var t;
-    box.addEventListener('input', function () {
-        clearTimeout(t);
-        t = setTimeout(function () { document.getElementById('usersFilterForm').submit(); }, 500);
-    });
-})();
-</script>
 <?php
 require __DIR__ . '/includes/layout-bottom.php';
 
