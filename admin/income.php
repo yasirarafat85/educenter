@@ -75,7 +75,7 @@ $where = [];
 $params = [];
 if ($filterItem > 0) {
     $where[] = fin_item_where('i', 'r', $db);
-    $params['fin_item'] = $filterItem;
+    $params += fin_item_params($filterItem, $db);   // 🔴 হেল্পারই ঠিক করে কয়টা প্যারাম লাগবে
 }
 $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 

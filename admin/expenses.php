@@ -63,9 +63,9 @@ $activeFilters = array_filter(['item' => $filterItem ?: null], fn($v) => $v !== 
 
 $where = [];
 $params = [];
-if ($finReady && $filterItem > 0) {
+if ($filterItem > 0) {
     $where[] = fin_item_where('e', 'r', $db);
-    $params['fin_item'] = $filterItem;
+    $params += fin_item_params($filterItem, $db);   // 🔴 হেল্পারই ঠিক করে কয়টা প্যারাম লাগবে
 }
 $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 
@@ -82,7 +82,7 @@ $rows = $stmt->fetchAll();
 
 $total = array_sum(array_column($rows, 'amount'));
 $categories = get_finance_categories('expense');
-$batchOptions = $finReady ? fin_batch_options($db) : [];
+$batchOptions = fin_batch_options($db);
 
 require __DIR__ . '/includes/layout-top.php';
 ?>
@@ -136,7 +136,7 @@ require __DIR__ . '/includes/layout-top.php';
     </form>
 </div>
 
-<?php if ($finReady && $batchOptions): ?>
+<?php if ($batchOptions): ?>
 <form method="get" action="expenses.php" id="expFilterForm" class="bg-white rounded-2xl shadow p-4 mb-4">
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
         <div class="sm:col-span-2">

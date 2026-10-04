@@ -129,14 +129,38 @@ function fin_item_select(string $a, string $r = 'r', ?PDO $db = null, bool $grou
          . ' ' . sprintf($t, "COALESCE($r.batch, $a.batch)") . ' AS eff_batch';
 }
 
-/** ফিল্টারের WHERE-অংশ — শুধু ঐ কোর্স-ব্যাচের সারি (রেজিস্ট্রেশন-জোড়া ও হাতে লেখা দুটোই) */
+/**
+ * ফিল্টারের WHERE-অংশ — শুধু ঐ কোর্স-ব্যাচের সারি (রেজিস্ট্রেশন-জোড়া ও হাতে লেখা দুটোই)।
+ *
+ * 🔴🔴 দুটো শর্তে **আলাদা আলাদা প্লেসহোল্ডার** (`:fin_item` ও `:fin_item2`) — একই নাম
+ *    দুইবার লিখবেন না। `includes/db.php`-এ `ATTR_EMULATE_PREPARES => false`, আর MySQL-এর
+ *    নেটিভ prepare-এ একই নামের প্লেসহোল্ডার দুইবার থাকলে সরাসরি
+ *    **`SQLSTATE[HY093]: Invalid parameter number`** এসে পাতা HTTP 500 হয়ে যায়
+ *    (২০২৬-১০-০৪ এ লাইভে ধরা — আয়ে কোর্স বাছলেই)। ⚠️ **SQLite নীরবে মেনে নেয়**,
+ *    তাই হারনেসে কখনো ধরা পড়ে না — আসল MySQL-এ চালিয়েই যাচাই করতে হয়েছিল।
+ */
 function fin_item_where(string $a, string $r = 'r', ?PDO $db = null): string
 {
     if (!fin_link_ready($db)) {
         return "($r.type = 'course' AND $r.item_id = :fin_item)";
     }
     return "(($r.type = 'course' AND $r.item_id = :fin_item)"
-         . " OR ($a.registration_id IS NULL AND $a.item_type = 'course' AND $a.item_id = :fin_item))";
+         . " OR ($a.registration_id IS NULL AND $a.item_type = 'course' AND $a.item_id = :fin_item2))";
+}
+
+/**
+ * উপরের WHERE-এর সাথে যে প্যারামিটারগুলো বাঁধতে হবে।
+ * 🔴 মাইগ্রেশনের আগে `:fin_item2` SQL-এ থাকেই না — তখন ওটা বাঁধলে **একই HY093** এরর আসে
+ *    (অব্যবহৃত প্যারামিটার বাঁধাও নিষিদ্ধ, CLAUDE.md-এর পুরনো ফাঁদ)। তাই গণনাটা এখানেই,
+ *    যাতে কলার-পেজ দুটোতে নিয়ম আলাদা হয়ে না যায়।
+ */
+function fin_item_params(int $itemId, ?PDO $db = null): array
+{
+    $params = ['fin_item' => $itemId];
+    if (fin_link_ready($db)) {
+        $params['fin_item2'] = $itemId;
+    }
+    return $params;
 }
 
 /** গ্রুপিং-চাবি — ওয়ার্কশিট ৫ আর কোর্স-ব্যাচ ৫ যেন এক না হয় (course_media_all_counts()-এর মতোই) */
