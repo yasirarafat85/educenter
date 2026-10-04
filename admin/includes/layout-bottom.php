@@ -465,6 +465,37 @@
         document.querySelectorAll('select[data-picker]').forEach(adminPicker);
     })();
 
+    /* ✍️ কোর্স বাছলে ক্যাটেগরির ঘর নিজে থেকেই ভরে দেওয়া (২০২৬-১০-০৪, ইউজারের চাওয়া)
+       ওয়্যারিং শুধু select-এ `data-fill-into="#<ঘরের id>"` + `data-fill-text="<লেখা>"` —
+       পেজে আলাদা <script> লাগে না (`data-picker`/`data-autosearch`-এর মতোই)।
+
+       🔴 অ্যাডমিনের নিজের লেখা কখনো মোছা হয় না — শুধু **খালি** ঘরেই বসে।
+       🔴 আমরা বসিয়েছিলাম আর অ্যাডমিন হাত দেননি — এমন লেখাই কোর্স বাদ দিলে ফিরিয়ে নেওয়া হয়
+          (`data-autofilled` মার্কার; অ্যাডমিন নিজে কিছু টাইপ করলেই মার্কারটা উঠে যায়)।
+       ⚠️ পিকার `change` ছোড়ে বাছাই ও ✕ দুই ক্ষেত্রেই, কিন্তু পাতার শুরুতে আগের বাছাই
+          ফেরানোর সময় **ছোড়ে না** (silent) — তাই রিলোডে ক্যাটেগরি নিজে থেকে বদলায় না। */
+    (function () {
+        document.querySelectorAll('select[data-fill-into]').forEach(function (sel) {
+            const box = document.querySelector(sel.getAttribute('data-fill-into'));
+            const text = sel.getAttribute('data-fill-text') || '';
+            if (!box || !text) { return; }
+
+            box.addEventListener('input', function () { delete box.dataset.autofilled; });
+
+            sel.addEventListener('change', function () {
+                if (sel.value) {
+                    if (box.value.trim() === '') {
+                        box.value = text;
+                        box.dataset.autofilled = '1';
+                    }
+                } else if (box.dataset.autofilled === '1' && box.value === text) {
+                    box.value = '';
+                    delete box.dataset.autofilled;
+                }
+            });
+        });
+    })();
+
     // মোবাইলে সাইডবার খোলা/বন্ধ করা (hamburger মেনু)
     (function () {
         const sidebar = document.getElementById('admin-sidebar');

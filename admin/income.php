@@ -112,7 +112,7 @@ require __DIR__ . '/includes/layout-top.php';
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
             <div>
                 <label class="block text-xs text-gray-500 mb-1">ক্যাটেগরি</label>
-                <input type="text" name="category" required list="income-cat-list" placeholder="যেমন: কোর্স" class="w-full border rounded-lg px-3 py-2 text-sm">
+                <input type="text" name="category" id="incCategory" required list="income-cat-list" placeholder="যেমন: কোর্স" class="w-full border rounded-lg px-3 py-2 text-sm">
                 <datalist id="income-cat-list">
                     <?php foreach ($categories as $c): ?><option value="<?= e($c['name']) ?>"><?php endforeach; ?>
                 </datalist>
@@ -133,7 +133,7 @@ require __DIR__ . '/includes/layout-top.php';
         <?php if ($finReady): ?>
         <div class="border-t pt-3">
             <label class="block text-xs text-gray-500 mb-1">কোন কোর্স-ব্যাচের আয়? <span class="text-gray-400">(ঐচ্ছিক — নাম লিখে খুঁজতে পারেন)</span></label>
-            <select name="item_batch" data-picker class="w-full border rounded-lg px-3 py-2 text-sm">
+            <select name="item_batch" data-picker data-fill-into="#incCategory" data-fill-text="<?= e(get_setting('income_auto_category') ?: 'কোর্স ফি') ?>" class="w-full border rounded-lg px-3 py-2 text-sm">
                 <option value="">— আলাদা আয় (কোর্স নির্দিষ্ট নয়) —</option>
                 <?= fin_batch_select_options($filterItem, $db) ?>
             </select>
