@@ -91,17 +91,17 @@ try {
 require __DIR__ . '/includes/layout-top.php';
 ?>
 
-<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-    <div class="bg-white rounded-2xl shadow p-5">
-        <div class="text-2xl sm:text-3xl font-black text-green-600">৳<?= number_format($totalIncome, 2) ?></div>
+<div class="fin-stats mb-8">
+    <div class="bg-white rounded-2xl shadow p-5 min-w-0">
+        <div class="fin-stat font-black break-all text-green-600">৳<?= number_format($totalIncome, 2) ?></div>
         <p class="text-gray-500 text-sm mt-1">মোট আয় (এই মাসে ৳<?= number_format($monthIncome, 2) ?>)</p>
     </div>
-    <div class="bg-white rounded-2xl shadow p-5">
-        <div class="text-2xl sm:text-3xl font-black text-red-600">৳<?= number_format($totalExpense, 2) ?></div>
+    <div class="bg-white rounded-2xl shadow p-5 min-w-0">
+        <div class="fin-stat font-black break-all text-red-600">৳<?= number_format($totalExpense, 2) ?></div>
         <p class="text-gray-500 text-sm mt-1">মোট খরচ (এই মাসে ৳<?= number_format($monthExpense, 2) ?>)</p>
     </div>
-    <div class="bg-white rounded-2xl shadow p-5">
-        <div class="text-2xl sm:text-3xl font-black <?= $netProfit >= 0 ? 'text-indigo-600' : 'text-red-600' ?>">৳<?= number_format($netProfit, 2) ?></div>
+    <div class="bg-white rounded-2xl shadow p-5 min-w-0">
+        <div class="fin-stat font-black break-all <?= $netProfit >= 0 ? 'text-indigo-600' : 'text-red-600' ?>">৳<?= number_format($netProfit, 2) ?></div>
         <p class="text-gray-500 text-sm mt-1">নীট মুনাফা</p>
     </div>
 </div>

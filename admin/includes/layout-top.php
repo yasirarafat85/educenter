@@ -155,11 +155,21 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     main table tbody tr:nth-child(even) td { background: rgb(var(--c-surface-2) / .45); }
     main table tbody tr:hover td { background: rgb(var(--c-primary) / .06); }
 
+    /* ── 💰 আয়-ব্যয় সারাংশ কার্ডের বড় অঙ্ক (finance.php, ২০২৬-১০-০৪)
+          🔴 কম্পাইলড অ্যাডমিন CSS-এ `lg:text-3xl` নেই, তাই সাধারণ CSS — রিবিল্ড লাগে না।
+          ৭৬৮px-এ তিন কার্ডের গ্রিডে ৩০px হরফের লম্বা অঙ্ক কার্ড ছাপিয়ে পুরো পাতা উপচে দিত। ── */
+    .fin-stats { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+    @media (min-width: 1024px) { .fin-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .fin-stat { font-size: 1.25rem; line-height: 1.75rem; }
+    @media (min-width: 1024px) { .fin-stat { font-size: 1.5rem; line-height: 2rem; } }
+    @media (min-width: 1280px) { .fin-stat { font-size: 1.875rem; line-height: 2.25rem; } }
+
     /* ── 🔎 কোর্স → ব্যাচ খোঁজা-যায় এমন পিকার (২০২৬-১০-০৪, layout-bottom.php-এর adminPicker())
           সাধারণ CSS, রঙ থিম-ভ্যারিয়েবল থেকে — Tailwind রিবিল্ড লাগে না। ── */
     .fp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
     @media (max-width: 640px) { .fp-grid { grid-template-columns: 1fr; } }
-    .fp-field { position: relative; }
+    .fp-wrap { min-width: 0; }
+    .fp-field { position: relative; min-width: 0; }
     .fp-cap { display: block; font-size: 11px; color: rgb(var(--c-text-muted)); margin-bottom: 2px; }
     .fp-input {
         width: 100%; border: 1px solid rgb(var(--c-border)); border-radius: .5rem;

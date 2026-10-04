@@ -97,38 +97,40 @@ require __DIR__ . '/includes/layout-top.php';
 
 <div class="bg-white rounded-2xl shadow p-5 mb-6">
     <h3 class="font-bold text-gray-800 mb-4">➕ নতুন খরচ যোগ করুন</h3>
-    <form method="post" action="expenses.php?action=add" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+    <form method="post" action="expenses.php?action=add" class="space-y-3">
         <?= csrf_field() ?>
-        <div class="lg:col-span-1">
-            <label class="block text-xs text-gray-500 mb-1">ক্যাটেগরি</label>
-            <input type="text" name="category" required list="expense-cat-list" placeholder="যেমন: ভাড়া, বেতন" class="w-full border rounded-lg px-3 py-2 text-sm">
-            <datalist id="expense-cat-list">
-                <?php foreach ($categories as $c): ?><option value="<?= e($c['name']) ?>"><?php endforeach; ?>
-            </datalist>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">ক্যাটেগরি</label>
+                <input type="text" name="category" required list="expense-cat-list" placeholder="যেমন: ভাড়া, বেতন" class="w-full border rounded-lg px-3 py-2 text-sm">
+                <datalist id="expense-cat-list">
+                    <?php foreach ($categories as $c): ?><option value="<?= e($c['name']) ?>"><?php endforeach; ?>
+                </datalist>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">পরিমাণ (৳)</label>
+                <input type="number" step="0.01" min="0.01" name="amount" required class="w-full border rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">বিবরণ (ঐচ্ছিক)</label>
+                <input type="text" name="description" class="w-full border rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">তারিখ</label>
+                <input type="date" name="expense_date" value="<?= date('Y-m-d') ?>" class="w-full border rounded-lg px-3 py-2 text-sm">
+            </div>
         </div>
         <?php if ($finReady): ?>
-        <div class="lg:col-span-2">
-            <label class="block text-xs text-gray-500 mb-1">কোন কোর্স-ব্যাচের খরচ? <span class="text-gray-400">(ঐচ্ছিক)</span></label>
+        <div class="border-t pt-3">
+            <label class="block text-xs text-gray-500 mb-1">কোন কোর্স-ব্যাচের খরচ? <span class="text-gray-400">(ঐচ্ছিক — নাম লিখে খুঁজতে পারেন)</span></label>
             <select name="item_batch" data-picker class="w-full border rounded-lg px-3 py-2 text-sm">
                 <option value="">— সাধারণ খরচ (কোর্স নির্দিষ্ট নয়) —</option>
                 <?= fin_batch_select_options($filterItem, $db) ?>
             </select>
-            <p class="text-xs text-gray-400 mt-1">নাম লিখে খুঁজতে পারেন। ভাড়া/বেতন/বিদ্যুতের মতো খরচে দুটোই খালি রাখুন।</p>
+            <p class="text-xs text-gray-400 mt-1">ভাড়া/বেতন/বিদ্যুতের মতো সাধারণ খরচে দুটোই খালি রাখুন।</p>
         </div>
         <?php endif; ?>
         <div>
-            <label class="block text-xs text-gray-500 mb-1">পরিমাণ (৳)</label>
-            <input type="number" step="0.01" min="0.01" name="amount" required class="w-full border rounded-lg px-3 py-2 text-sm">
-        </div>
-        <div class="<?= $finReady ? '' : 'lg:col-span-2' ?>">
-            <label class="block text-xs text-gray-500 mb-1">বিবরণ (ঐচ্ছিক)</label>
-            <input type="text" name="description" class="w-full border rounded-lg px-3 py-2 text-sm">
-        </div>
-        <div>
-            <label class="block text-xs text-gray-500 mb-1">তারিখ</label>
-            <input type="date" name="expense_date" value="<?= date('Y-m-d') ?>" class="w-full border rounded-lg px-3 py-2 text-sm">
-        </div>
-        <div class="lg:col-span-6">
             <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-2.5 rounded-xl text-sm">যোগ করুন</button>
         </div>
     </form>
