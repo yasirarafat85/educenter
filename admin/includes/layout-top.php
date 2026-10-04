@@ -24,8 +24,23 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><?= isset($pageTitle) ? e($pageTitle) . ' - ' : '' ?>Admin Panel</title>
 <script>
-    // সেভ করা থিম রেন্ডারের আগেই বসিয়ে দেওয়া হয় যাতে পেজ লোডে ঝলক (flash) না হয়
-    (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('admin_theme') || 'indigo'); } catch (e) {} })();
+    // সেভ করা থিম রেন্ডারের আগেই বসিয়ে দেওয়া হয় যাতে পেজ লোডে ঝলক (flash) না হয়।
+    // 🌙 সেভ করা কিছু না থাকলে (= কখনো থিম বাছা হয়নি) ফোন/পিসির **সিস্টেম ডার্ক মোড** দেখে
+    //    প্রথমবার `midnight` বসে (২০২৬-১০-০৪)।
+    // 🔴 এখানে localStorage-এ কিচ্ছু **লেখা হয় না** — অ্যাডমিন নিজে একবার কোনো থিম বাছলে
+    //    তারপর থেকে তাঁর পছন্দই চলে, সিস্টেম যা-ই বলুক। (লিখে ফেললে পছন্দটা পিন হয়ে যেত।)
+    // 🔴 থিম ঠিক করার জায়গা **এই একটাই ফাংশন** — layout-bottom.php-এর পিকারও এটাই ডাকে,
+    //    নাহলে হেড আর পিকার দুই রকম থিম ধরে নিত।
+    window.adminTheme = function () {
+        var saved = null;
+        try { saved = localStorage.getItem('admin_theme'); } catch (e) {}
+        if (saved) { return saved; }
+        try {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) { return 'midnight'; }
+        } catch (e) {}
+        return 'indigo';
+    };
+    try { document.documentElement.setAttribute('data-theme', window.adminTheme()); } catch (e) {}
 </script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
@@ -207,7 +222,11 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     /* ── মোবাইলে অ্যাডমিন টেবিল → কার্ড-লেআউট (অনুভূমিক স্ক্রলের বদলে প্রতিটা রো একটা কার্ড;
           প্রতিটা সেলের পাশে কলাম-নাম দেখায় — data-label, layout-bottom.php-এর JS thead থেকে সেট করে)।
           ডেস্কটপে (>৭৬৭px) স্বাভাবিক টেবিলই থাকে। ── */
-    @media (max-width: 767px) {
+    /* 🔴🔴 `screen and` **বাদ দেবেন না** (২০২৬-১০-০৪ এ ছাপার PDF-এ ধরা): ছাপার সময় ব্রাউজার
+       প্রস্থ মাপে **কাগজের** মাপে — A4-এর ২১০mm থেকে ২×১২mm মার্জিন বাদ দিয়ে ≈ ৭০৩px, অর্থাৎ
+       ৭৬৭-এর কম। `screen` না লিখলে প্রতিটা টেবিল কাগজেও কার্ড-লেআউটে ছাপত (এক সারি = এক কার্ড,
+       প্রতি ঘরের পাশে লেবেল) — কাগজে যেটা পড়াই যায় না, ওখানে আসল টেবিলই দরকার। */
+    @media screen and (max-width: 767px) {
         main .overflow-x-auto { overflow-x: visible; }
 
         /* 🔴 সার্চ বক্সের হরফ মোবাইলে ১৬px — iOS Safari ১৬px-এর ছোট ইনপুটে ফোকাস করলে
@@ -294,6 +313,96 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     .theme-dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; transition: transform .1s, border-color .15s; }
     .theme-dot:hover { transform: translateY(-1px); }
     .theme-dot.on { border-color: rgb(var(--c-text)); }
+
+    /* ══════════════════════════════════════════════════════════════════════════
+       🖐️ ছোঁয়া-পর্দা, বেশি কনট্রাস্ট ও ছাপার আলাদা চেহারা (২০২৬-১০-০৪)
+       সবই সাধারণ CSS — **Tailwind রিবিল্ড লাগে না**।
+       ══════════════════════════════════════════════════════════════════════════ */
+
+    /* ── 🔲 হোভার ইফেক্ট শুধু মাউসে ──
+       ফোনে "হোভার" বলে কিছু নেই, কিন্তু ট্যাপ করলে ব্রাউজার **আটকে থাকা হোভার** ধরে রাখে —
+       কার্ড উপরে উঠে ওখানেই থেকে যায়, বোতামের রঙও বদলে আটকে থাকে। তাই ছোঁয়া-পর্দায়
+       `transform`-ওয়ালা হোভারগুলো বাতিল।
+       🔴 গ্লোবাল `*:hover { transform: none }` **কখনো দেবেন না** — সাইডবারের
+       `-translate-x-full`/`md:translate-x-0`-ও transform, ছুঁলেই সাইডবার লাফাত। তালিকাটা
+       তাই ইচ্ছাকৃতভাবে নির্দিষ্ট, আর নতুন কোনো transform-হোভার লিখলে এখানেও যোগ করুন। */
+    @media (hover: none) {
+        a[class*="bg-indigo-6"]:hover, button[class*="bg-indigo-6"]:hover,
+        a[class*="bg-green-6"]:hover, button[class*="bg-green-6"]:hover, button[class*="bg-emerald-6"]:hover,
+        a[class*="bg-red-6"]:hover, button[class*="bg-red-6"]:hover,
+        a[class*="bg-orange-"]:hover, button[class*="bg-orange-"]:hover, button[class*="bg-amber-6"]:hover,
+        a[class*="bg-blue-6"]:hover, button[class*="bg-blue-6"]:hover,
+        a[class*="bg-purple-6"]:hover, button[class*="bg-purple-6"]:hover,
+        a[class*="bg-gray-8"]:hover, button[class*="bg-gray-8"]:hover,
+        .theme-dot:hover
+        { filter: none; transform: none; }
+        main .bg-white.rounded-2xl:hover, main .bg-white.rounded-3xl:hover
+        { transform: none; box-shadow: 0 1px 3px rgba(0,0,0,.05) !important; }
+    }
+
+    /* ── 👆 আঙুলের জন্য বড় ট্যাপ-টার্গেট ──
+       🔴 প্রস্থ (`max-width`) দেখে নয়, **pointer** দেখে — তাহলে টাচ-ল্যাপটপ ও ট্যাবলেটও পায়,
+       আর মাউসওয়ালা ছোট উইন্ডোতে অযথা বড় হয় না। */
+    @media (pointer: coarse) {
+        .nav-pin > button { min-width: 34px; min-height: 34px; }
+        .fp-clear { min-width: 32px; min-height: 32px; }
+        .fp-opt { padding: .7rem .75rem; }
+        .theme-dot { width: 28px; height: 28px; }
+        main .overflow-x-auto > table.mcard td:last-child a,
+        main .overflow-x-auto > table.mcard td:last-child button { padding: 9px 16px; }
+    }
+
+    /* ── ♿ "বেশি কনট্রাস্ট" চালু থাকলে ধূসর লেখা গাঢ় ──
+       ইঙ্গিতের লাইন/লেবেল রোদে বা কম দৃষ্টিশক্তিতে পড়া কঠিন হয়। */
+    @media (prefers-contrast: more) {
+        :root { --c-text-muted: var(--c-text); }
+        .fp-cap, .empty-state { color: rgb(var(--c-text)); }
+        main .border, .toast, .list-search { border-color: rgb(var(--c-text-muted)); }
+    }
+
+    /* ── 🖨️ ছাপার চেহারা (কাগজ / "Save as PDF") ──
+       কুরিয়ার-পার্সেলের তালিকা, রেজিস্ট্রেশনের বিস্তারিত, আয়-খরচের হিসাব — এগুলো ছাপতে হয়।
+       🔴 মোবাইলের কার্ড-লেআউট CSS `@media (max-width: 767px)`-এ, প্রিন্ট আলাদা মিডিয়া বলে
+       ওটা এখানে প্রযোজ্য নয় — কাগজে আসল টেবিলই ছাপবে, সেটাই কাম্য।
+       🔴 নতুন কোনো বোতাম/ফিল্টার/ভাসমান জিনিস বানালে `.no-print` দিন (নিচের তালিকায়
+       যোগ করার চেয়ে সেটাই সহজ ও ভুল কম হয়)। */
+    @media print {
+        /* কাগজে যা অর্থহীন: নেভিগেশন, ফিল্টার, বোতাম, টোস্ট, মডাল */
+        #admin-sidebar, #admin-sidebar-backdrop, header, #toast-wrap,
+        #confirm-modal, .theme-picker, .list-search-wrap, .nav-pin,
+        .no-print { display: none !important; }
+
+        /* 🔴 ফিল্টার ফর্ম ইচ্ছাকৃতভাবে **লুকানো হয় না** — কাগজে "কোন কোর্স / কোন মাসের তালিকা"
+           সেটাই একমাত্র প্রমাণ; সাবমিট বোতামগুলো নিচের নিয়মে এমনিতেই বাদ যায়।
+           কিন্তু "নতুন যোগ করুন" ফর্মটা কাগজে নিছক খালি ঘরের সারি — সেটা বাদ (`:has()` না
+           চিনলে ফর্মটাই বাদ যায়, কার্ডের খালি বাক্সটা থেকে যায় — ক্ষতি নেই)। */
+        main .bg-white:has(form[action*="action=add"]),
+        form[action*="action=add"] { display: none !important; }
+
+        /* 🔴 বোতাম/লিংক-বোতাম বাদ, কিন্তু টেবিলের ভেতরের সাধারণ লিংকের লেখা থাকে */
+        button, input[type="submit"], a[class*="bg-indigo-6"], a[class*="bg-green-6"],
+        a[class*="bg-red-6"], a[class*="bg-blue-6"] { display: none !important; }
+
+        html, body { background: #fff !important; color: #000 !important; }
+        body::before { content: none !important; }       /* ব্যাকগ্রাউন্ড আভা */
+        .flex.min-h-screen, main { display: block !important; padding: 0 !important; }
+
+        /* কার্ড — ছায়া/গোলাই বাদ, শুধু হালকা দাগ */
+        .bg-white, [class*="rounded-"] { background: #fff !important; box-shadow: none !important; }
+        main .bg-white { border: 1px solid #ccc !important; border-radius: 0 !important; margin-bottom: 10px; }
+
+        /* টেবিল — স্ক্রল বাদ, বর্ডার দেখা যাক, সারি পাতার মাঝখানে না ভাঙুক */
+        .overflow-x-auto { overflow: visible !important; }
+        table { width: 100% !important; border-collapse: collapse !important; font-size: 11px; }
+        th, td { border: 1px solid #bbb !important; padding: 4px 6px !important; background: #fff !important; color: #000 !important; }
+        thead { display: table-header-group; }           /* প্রতি পাতায় কলামের নাম */
+        tr, img { break-inside: avoid; page-break-inside: avoid; }
+
+        a { color: #000 !important; text-decoration: none !important; }
+        * { animation: none !important; transition: none !important; }
+
+        @page { size: A4; margin: 12mm; }
+    }
 </style>
 </head>
 <body class="bg-gray-100 min-h-screen">

@@ -126,8 +126,10 @@
     (function () {
         var pickers = document.querySelectorAll('[data-theme-picker]');
         if (!pickers.length) return;
+        // 🔴 layout-top.php-এর `window.adminTheme()`-ই একমাত্র উৎস (সেভ করা থিম → নাহলে
+        //    সিস্টেম ডার্ক মোড → নাহলে indigo); এখানে আলাদা করে localStorage পড়বেন না।
         var current = 'indigo';
-        try { current = localStorage.getItem('admin_theme') || 'indigo'; } catch (e) {}
+        try { current = (window.adminTheme ? window.adminTheme() : localStorage.getItem('admin_theme')) || 'indigo'; } catch (e) {}
         document.documentElement.setAttribute('data-theme', current);
 
         function highlight(id) {

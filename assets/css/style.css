@@ -721,3 +721,73 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
     .cd-row-main { flex-basis: 100%; }
     .cd-row .cd-chip { flex: 1 1 100%; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   🖐️ ছোঁয়া-পর্দা, বেশি কনট্রাস্ট ও ছাপার আলাদা চেহারা (২০২৬-১০-০৪)
+   সবই সাধারণ CSS — **Tailwind রিবিল্ড লাগে না**।
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 🔲 হোভার ইফেক্ট শুধু মাউসে ──
+   ফোনে "হোভার" বলে কিছু নেই, কিন্তু ট্যাপ করলে ব্রাউজার **আটকে থাকা হোভার** ধরে রাখে —
+   কার্ড উপরে উঠে ওখানেই থেকে যায়। তাই ছোঁয়া-পর্দায় transform-ওয়ালা হোভার বাতিল।
+   🔴 গ্লোবাল `*:hover { transform: none }` **কখনো দেবেন না** — মোবাইল মেনুর স্লাইড,
+   লাইটবক্সের ছবি, কাউন্টডাউনের স্পন্দন সবই transform; ছুঁলেই লাফাত। তালিকাটা তাই
+   ইচ্ছাকৃতভাবে নির্দিষ্ট — নতুন কোনো transform-হোভার লিখলে এখানেও যোগ করুন। */
+@media (hover: none) {
+    .card-hover:hover, .btn-primary:hover, .btn-secondary:hover, .btn-order:hover,
+    .nav-item:hover, .stats-card:hover, .btn-outline-white:hover, .pricing-card:hover,
+    .pricing-cta:hover, .fb-card:hover, a.pg-link:hover, .cd-row:hover, #wa-float:hover
+    { transform: none; }
+    .card-hover:hover, .stats-card:hover, .pricing-card:hover, .fb-card:hover, .cd-row:hover
+    { box-shadow: none; }
+    .fb-card:hover .fb-card-cta .arr { transform: none; }
+}
+
+/* ── 👆 আঙুলের জন্য বড় ট্যাপ-টার্গেট ──
+   🔴 প্রস্থ দেখে নয়, **pointer** দেখে — টাচ-ল্যাপটপ/ট্যাবলেটও পায়, আর মাউসওয়ালা ছোট
+   উইন্ডোতে অযথা বড় হয় না। */
+@media (pointer: coarse) {
+    .pg-link { min-width: 44px; min-height: 44px; display: inline-flex;
+                align-items: center; justify-content: center; }
+    .cc-btn { min-height: 44px; }
+    .cm-btn { min-height: 44px; }
+    .cm-x, .cm-arw { width: 48px; height: 48px; }          /* গ্যালারির বন্ধ/পরের বোতাম */
+    #img-lightbox .ilb-close { width: 48px; height: 48px; }
+    .fb-open-link { padding-top: 10px; padding-bottom: 10px; }
+}
+
+/* ── ♿ "বেশি কনট্রাস্ট" চালু থাকলে ধূসর লেখা গাঢ় ── */
+@media (prefers-contrast: more) {
+    .text-gray-400, .text-gray-500 { color: #374151 !important; }
+    .cc-btn, .pg-link { border-color: #4b5563; }
+}
+
+/* ── 🖨️ ছাপার চেহারা (কাগজ / "Save as PDF") ──
+   অভিভাবক নিজের ড্যাশবোর্ড বা রেজিস্ট্রেশনের কনফার্মেশন ছাপতে/PDF করতে পারেন।
+   🔴 নতুন কোনো ভাসমান/নেভিগেশন এলিমেন্ট বানালে তাতে `.no-print` দিন। */
+@media print {
+    /* কাগজে যা অর্থহীন */
+    header, footer, #bottom-nav, #mobile-nav, #wa-float, #back-to-top, .skip-link,
+    #img-lightbox, .cm-ov, .cd-strip, .no-print { display: none !important; }
+
+    /* ফর্ম/বোতাম বাদ — ছাপা হয় তথ্য, ক্লিক করার জিনিস নয় */
+    button, input[type="submit"], .btn-primary, .btn-order, .pricing-cta,
+    .cc-btns, .pg-bar { display: none !important; }
+
+    html, body { background: #fff !important; color: #000 !important; padding-bottom: 0 !important; }
+    main { padding: 0 !important; max-width: none !important; }
+    .gradient-bg, [class*="bg-gradient"] { background: #fff !important; color: #000 !important; }
+    .pricing-card, .card-hover, .stats-card, [class*="shadow"] { box-shadow: none !important; }
+    [class*="rounded-"] { border-radius: 0 !important; }
+
+    table { width: 100% !important; border-collapse: collapse !important; }
+    th, td { border: 1px solid #bbb !important; padding: 4px 6px !important; }
+    tr, img { break-inside: avoid; page-break-inside: avoid; }
+
+    /* 🔴 লিংকের ঠিকানা কাগজে দেখানো হয় না — বাংলা নামের URL `%E0%A6…` হয়ে
+       দৈত্যাকার হয়ে যায় (item_share_url()-এর ঘরে একই কারণ লেখা আছে)। */
+    a { color: #000 !important; text-decoration: none !important; }
+    * { animation: none !important; transition: none !important; }
+
+    @page { size: A4; margin: 12mm; }
+}
