@@ -155,6 +155,37 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     main table tbody tr:nth-child(even) td { background: rgb(var(--c-surface-2) / .45); }
     main table tbody tr:hover td { background: rgb(var(--c-primary) / .06); }
 
+    /* ── 🔎 কোর্স → ব্যাচ খোঁজা-যায় এমন পিকার (২০২৬-১০-০৪, layout-bottom.php-এর adminPicker())
+          সাধারণ CSS, রঙ থিম-ভ্যারিয়েবল থেকে — Tailwind রিবিল্ড লাগে না। ── */
+    .fp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+    @media (max-width: 640px) { .fp-grid { grid-template-columns: 1fr; } }
+    .fp-field { position: relative; }
+    .fp-cap { display: block; font-size: 11px; color: rgb(var(--c-text-muted)); margin-bottom: 2px; }
+    .fp-input {
+        width: 100%; border: 1px solid rgb(var(--c-border)); border-radius: .5rem;
+        padding: .5rem .75rem; padding-right: 1.9rem; font-size: 14px; background: #fff;
+        color: rgb(var(--c-text));
+    }
+    .fp-input:focus { outline: none; border-color: rgb(var(--c-primary)); box-shadow: 0 0 0 3px rgb(var(--c-primary) / .15); }
+    .fp-field.is-off .fp-input { background: rgb(var(--c-surface-2)); color: rgb(var(--c-text-muted)); cursor: not-allowed; }
+    .fp-field.is-set .fp-input { border-color: rgb(var(--c-primary) / .55); font-weight: 600; }
+    .fp-clear {
+        position: absolute; right: 6px; bottom: 7px; width: 22px; height: 22px; line-height: 20px;
+        border-radius: 999px; text-align: center; font-size: 13px; color: rgb(var(--c-text-muted));
+        background: rgb(var(--c-surface-2)); border: 0; cursor: pointer; padding: 0;
+    }
+    .fp-clear:hover { color: #b91c1c; }
+    .fp-list {
+        position: absolute; z-index: 40; left: 0; right: 0; top: 100%; margin-top: 2px;
+        max-height: 260px; overflow-y: auto; background: #fff;
+        border: 1px solid rgb(var(--c-border)); border-radius: .6rem; box-shadow: 0 10px 25px rgb(0 0 0 / .12);
+    }
+    .fp-opt { padding: .5rem .75rem; font-size: 14px; cursor: pointer; }
+    .fp-opt + .fp-opt { border-top: 1px solid rgb(var(--c-border) / .5); }
+    .fp-opt.on, .fp-opt:hover { background: rgb(var(--c-primary) / .1); }
+    .fp-opt small { display: block; font-size: 11px; color: rgb(var(--c-text-muted)); }
+    .fp-empty { padding: .6rem .75rem; font-size: 13px; color: rgb(var(--c-text-muted)); }
+
     /* ── মোবাইলে অ্যাডমিন টেবিল → কার্ড-লেআউট (অনুভূমিক স্ক্রলের বদলে প্রতিটা রো একটা কার্ড;
           প্রতিটা সেলের পাশে কলাম-নাম দেখায় — data-label, layout-bottom.php-এর JS thead থেকে সেট করে)।
           ডেস্কটপে (>৭৬৭px) স্বাভাবিক টেবিলই থাকে। ── */
@@ -163,7 +194,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
 
         /* 🔴 সার্চ বক্সের হরফ মোবাইলে ১৬px — iOS Safari ১৬px-এর ছোট ইনপুটে ফোকাস করলে
            নিজে থেকেই পাতা জুম করে দেয়, তখন লেখা/কার্সর লাফায় (২০২৬-১০-০৩)। */
-        input[data-autosearch] { font-size: 16px; }
+        input[data-autosearch], .fp-input { font-size: 16px; }
 
         /* ⚠️ কার্ড-ইন-কার্ড ঠিক করা (২০২৬-০৭-২০, ইউজারের স্ক্রিনশট): টেবিলের মোড়ক
            `.bg-white rounded-2xl shadow` নিজেই একটা সাদা কার্ডের মতো দেখায়, আর ভেতরে প্রতিটা রো-ও

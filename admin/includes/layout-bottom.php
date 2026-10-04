@@ -254,6 +254,217 @@
         });
     })();
 
+    // ── 🔎 কোর্স → ব্যাচ পিকার (২০২৬-১০-০৪, ইউজারের চাওয়া: "আগে কোর্স তারপর ব্যাচ,
+    //    আর লিখে সার্চ করে আনা যায়")। আয়/খরচ পাতার কোর্স-ব্যাচ বাছাইয়ে ব্যবহার হয়।
+    //
+    // 🔴 এটা **প্রগ্রেসিভ এনহ্যান্সমেন্ট** — আসল `<select name="item_batch">` ফর্মেই থেকে যায়
+    //    (শুধু লুকানো হয়), আর পছন্দ করলে তার `value` বসিয়ে `change` ইভেন্ট ছোড়া হয়। ফলে
+    //    (ক) JS ব্যর্থ হলে পুরনো ড্রপডাউনই কাজ করে, (খ) ফিল্টার ফর্মের `onchange="…submit()"`
+    //    আগের মতোই চলে, (গ) সার্ভারের কোডে কিচ্ছু বদলাতে হয় না।
+    // 🔴 ডেটাও ঐ select থেকেই পড়া হয় (`<optgroup label="কোর্স">` → `<option>` = ব্যাচ) —
+    //    আলাদা JSON পাঠানো হয় না, তাই দুই জায়গায় তালিকা আলাদা হয়ে যাওয়ার ভয় নেই।
+    function adminPicker(sel) {
+        if (!sel || sel.getAttribute('data-fp-done')) { return; }
+
+        var courses = [], byId = {};
+        Array.prototype.forEach.call(sel.children, function (node) {
+            if (node.tagName !== 'OPTGROUP') { return; }
+            var c = { name: node.label, batches: [] };
+            Array.prototype.forEach.call(node.children, function (o) {
+                var b = { id: o.value, label: (o.textContent || '').trim(), course: c };
+                c.batches.push(b);
+                byId[o.value] = b;
+            });
+            if (c.batches.length) { courses.push(c); }
+        });
+        if (!courses.length) { return; }   // কিছু নেই — নেটিভ select-ই থাক
+        sel.setAttribute('data-fp-done', '1');
+
+        var wrap = document.createElement('div');
+        wrap.className = 'fp-wrap';
+        wrap.innerHTML =
+            '<div class="fp-grid">'
+          + '<div class="fp-field" data-fp="course"><span class="fp-cap">ধাপ ১ — কোর্স</span>'
+          + '<input type="text" class="fp-input" placeholder="কোর্সের নাম লিখুন…" autocomplete="off">'
+          + '<button type="button" class="fp-clear" hidden title="বাদ দিন">✕</button><div class="fp-list" hidden></div></div>'
+          + '<div class="fp-field is-off" data-fp="batch"><span class="fp-cap">ধাপ ২ — ব্যাচ</span>'
+          + '<input type="text" class="fp-input" placeholder="আগে কোর্স বাছুন" autocomplete="off" disabled>'
+          + '<button type="button" class="fp-clear" hidden title="বাদ দিন">✕</button><div class="fp-list" hidden></div></div>'
+          + '</div>';
+        sel.parentNode.insertBefore(wrap, sel);
+        wrap.appendChild(sel);
+        sel.style.display = 'none';
+
+        var cf = wrap.querySelector('[data-fp="course"]'), bf = wrap.querySelector('[data-fp="batch"]');
+        var ci = cf.querySelector('.fp-input'),  bi = bf.querySelector('.fp-input');
+        var cl = cf.querySelector('.fp-list'),   bl = bf.querySelector('.fp-list');
+        var cx = cf.querySelector('.fp-clear'),  bx = bf.querySelector('.fp-clear');
+        var curCourse = null;
+
+        function norm(v) { return (v || '').toString().toLowerCase(); }
+        function close(list) { list.hidden = true; }
+        function closeAll() { close(cl); close(bl); }
+
+        function paint(list, items, onPick) {
+            list.innerHTML = '';
+            if (!items.length) {
+                var e = document.createElement('div');
+                e.className = 'fp-empty';
+                e.textContent = 'কিছু পাওয়া যায়নি';
+                list.appendChild(e);
+                list.hidden = false;
+                return;
+            }
+            items.forEach(function (it, i) {
+                var d = document.createElement('div');
+                d.className = 'fp-opt' + (i === 0 ? ' on' : '');
+                d.textContent = it.text;
+                if (it.sub) {
+                    var sm = document.createElement('small');
+                    sm.textContent = it.sub;
+                    d.appendChild(sm);
+                }
+                // 🔴 click নয়, mousedown — নাহলে ইনপুটের blur আগে চলে গিয়ে তালিকা বন্ধ হয়ে যেত
+                d.addEventListener('mousedown', function (ev) { ev.preventDefault(); onPick(it); });
+                list.appendChild(d);
+            });
+            list.hidden = false;
+        }
+
+        function courseItems(q) {
+            var out = [];
+            courses.forEach(function (c) {
+                if (norm(c.name).indexOf(norm(q)) < 0) { return; }
+                out.push({
+                    text: c.name,
+                    sub: c.batches.length > 1 ? (c.batches.length + ' টি ব্যাচ') : c.batches[0].label,
+                    course: c
+                });
+            });
+            return out;
+        }
+        function batchItems(q) {
+            if (!curCourse) { return []; }
+            var out = [];
+            curCourse.batches.forEach(function (b) {
+                if (norm(b.label).indexOf(norm(q)) >= 0) { out.push({ text: b.label, batch: b }); }
+            });
+            return out;
+        }
+
+        // 🔴🔴 পাতার শুরুতে আগের বাছাই ফেরানোর সময় এটা `silent` ছাড়া ডাকবেন না —
+        //    ফিল্টার select-এর `onchange` ফর্ম সাবমিট করে, তাই ওখানে change ছুড়লে
+        //    পাতা রিলোড → আবার ফেরানো → আবার রিলোড = **অসীম লুপ**
+        //    (টেস্টে হেডলেস ব্রাউজার ঝুলে গিয়ে এটা ধরা পড়েছিল)।
+        function setBatch(b, silent) {
+            bi.value = b.label;
+            bf.classList.add('is-set');
+            bx.hidden = false;
+            close(bl);
+            if (sel.value !== b.id) {
+                sel.value = b.id;
+                if (!silent) { sel.dispatchEvent(new Event('change', { bubbles: true })); }
+            }
+        }
+        function clearBatch(fire) {
+            bi.value = '';
+            bf.classList.remove('is-set');
+            bx.hidden = true;
+            if (sel.value !== '') {
+                sel.value = '';
+                if (fire) { sel.dispatchEvent(new Event('change', { bubbles: true })); }
+            }
+        }
+        function openCourse(c) {                   // শুধু দেখার অবস্থা — select-এর মান ছোঁয় না
+            curCourse = c;
+            ci.value = c.name;
+            cf.classList.add('is-set');
+            cx.hidden = false;
+            bf.classList.remove('is-off');
+            bi.disabled = false;
+            bi.placeholder = 'ব্যাচ বাছুন…';
+            close(cl);
+        }
+        function setCourse(c) {
+            openCourse(c);
+            clearBatch(false);
+            if (c.batches.length === 1) {          // একটাই ব্যাচ — নিজে থেকেই বসে যাক
+                setBatch(c.batches[0]);
+            } else {
+                bi.focus();
+                paint(bl, batchItems(''), function (it) { setBatch(it.batch); });
+            }
+        }
+        function clearCourse(fire) {
+            curCourse = null;
+            ci.value = '';
+            cf.classList.remove('is-set');
+            cx.hidden = true;
+            bf.classList.add('is-off');
+            bi.disabled = true;
+            bi.placeholder = 'আগে কোর্স বাছুন';
+            closeAll();
+            clearBatch(fire);
+        }
+
+        ci.addEventListener('focus', function () { paint(cl, courseItems(ci.value === (curCourse ? curCourse.name : '') ? '' : ci.value), function (it) { setCourse(it.course); }); });
+        ci.addEventListener('input', function () { paint(cl, courseItems(ci.value), function (it) { setCourse(it.course); }); });
+        bi.addEventListener('focus', function () { paint(bl, batchItems(bi.value === (sel.value && byId[sel.value] ? byId[sel.value].label : '') ? '' : bi.value), function (it) { setBatch(it.batch); }); });
+        bi.addEventListener('input', function () { paint(bl, batchItems(bi.value), function (it) { setBatch(it.batch); }); });
+
+        cx.addEventListener('click', function () { clearCourse(true); });
+        bx.addEventListener('click', function () { clearBatch(true); bi.focus(); });
+
+        // কীবোর্ড — ↑↓ নড়াচড়া, Enter বাছাই, Esc বন্ধ
+        function keys(input, list, build, pick) {
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') { close(list); return; }
+                var opts = list.hidden ? [] : list.querySelectorAll('.fp-opt');
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    if (!opts.length) { paint(list, build(input.value), pick); return; }
+                    e.preventDefault();
+                    var at = -1;
+                    for (var i = 0; i < opts.length; i++) { if (opts[i].classList.contains('on')) { at = i; } }
+                    opts.forEach(function (o) { o.classList.remove('on'); });
+                    at = e.key === 'ArrowDown' ? Math.min(at + 1, opts.length - 1) : Math.max(at - 1, 0);
+                    opts[at].classList.add('on');
+                    opts[at].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'Enter') {
+                    if (opts.length) {
+                        e.preventDefault();                       // ফর্ম সাবমিট নয়, শুধু বাছাই
+                        var on = list.querySelector('.fp-opt.on') || opts[0];
+                        on.dispatchEvent(new Event('mousedown'));
+                    }
+                }
+            });
+        }
+        keys(ci, cl, courseItems, function (it) { setCourse(it.course); });
+        keys(bi, bl, batchItems, function (it) { setBatch(it.batch); });
+
+        // বাইরে ক্লিক করলে বন্ধ, আর লেখা অসম্পূর্ণ থাকলে আগের মানটাই ফিরিয়ে দেওয়া
+        // (নাহলে ঘরে এমন লেখা পড়ে থাকত যেটা আসলে বাছাই হয়নি)
+        document.addEventListener('mousedown', function (e) {
+            if (wrap.contains(e.target)) { return; }
+            closeAll();
+            ci.value = curCourse ? curCourse.name : '';
+            bi.value = (sel.value && byId[sel.value]) ? byId[sel.value].label : '';
+        });
+
+        // পাতা খোলার সময় আগে থেকে বাছাই থাকলে (যেমন ফিল্টার চালু) সেটা দেখানো।
+        // 🔴 এখানে `sel.value` **একদম ছোঁয়া হয় না** — শুধু ঘর দুটো ভরা হয়, তাই কোনো change ইভেন্টও নেই।
+        if (sel.value && byId[sel.value]) {
+            var cur = byId[sel.value];
+            openCourse(cur.course);
+            bi.value = cur.label;
+            bf.classList.add('is-set');
+            bx.hidden = false;
+        }
+    }
+
+    (function () {
+        document.querySelectorAll('select[data-picker]').forEach(adminPicker);
+    })();
+
     // মোবাইলে সাইডবার খোলা/বন্ধ করা (hamburger মেনু)
     (function () {
         const sidebar = document.getElementById('admin-sidebar');

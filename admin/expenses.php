@@ -109,11 +109,11 @@ require __DIR__ . '/includes/layout-top.php';
         <?php if ($finReady): ?>
         <div class="lg:col-span-2">
             <label class="block text-xs text-gray-500 mb-1">কোন কোর্স-ব্যাচের খরচ? <span class="text-gray-400">(ঐচ্ছিক)</span></label>
-            <select name="item_batch" class="w-full border rounded-lg px-3 py-2 text-sm">
+            <select name="item_batch" data-picker class="w-full border rounded-lg px-3 py-2 text-sm">
                 <option value="">— সাধারণ খরচ (কোর্স নির্দিষ্ট নয়) —</option>
                 <?= fin_batch_select_options($filterItem, $db) ?>
             </select>
-            <p class="text-xs text-gray-400 mt-1">ভাড়া/বেতন/বিদ্যুতের মতো খরচে খালি রাখুন।</p>
+            <p class="text-xs text-gray-400 mt-1">নাম লিখে খুঁজতে পারেন। ভাড়া/বেতন/বিদ্যুতের মতো খরচে দুটোই খালি রাখুন।</p>
         </div>
         <?php endif; ?>
         <div>
@@ -138,8 +138,8 @@ require __DIR__ . '/includes/layout-top.php';
 <form method="get" action="expenses.php" id="expFilterForm" class="bg-white rounded-2xl shadow p-4 mb-4">
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
         <div class="sm:col-span-2">
-            <label class="block text-xs font-semibold text-gray-500 mb-1">কোর্স-ব্যাচ অনুযায়ী খরচ দেখুন</label>
-            <select name="item" onchange="document.getElementById('expFilterForm').submit()" class="w-full border rounded-xl px-3 py-2.5 text-sm">
+            <label class="block text-xs font-semibold text-gray-500 mb-1">কোর্স-ব্যাচ অনুযায়ী খরচ দেখুন <span class="font-normal text-gray-400">(নাম লিখে খুঁজুন)</span></label>
+            <select name="item" data-picker onchange="document.getElementById('expFilterForm').submit()" class="w-full border rounded-xl px-3 py-2.5 text-sm">
                 <option value="">সব খরচ</option>
                 <?= fin_batch_select_options($filterItem, $db) ?>
             </select>
