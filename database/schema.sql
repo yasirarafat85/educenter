@@ -866,4 +866,24 @@ ALTER TABLE expenses
     ADD CONSTRAINT fk_expenses_registration
         FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE;
 
+-- ------------------------------------------------------------
+-- আয়-খরচ ↔ কোর্স-ব্যাচ সংযোগ (২০২৬-১০-০৪)।
+-- বিস্তারিত ব্যাখ্যা database/migrate-finance-course-link.sql-এ।
+-- 🔴 registration_id থাকা সারিতে এই ঘরগুলো ব্যবহার হয় না — কোর্স/ব্যাচ
+--    `registrations` থেকে তাজা পড়া হয় (move-course করলেও হিসাব ঠিক থাকে)।
+-- ------------------------------------------------------------
+ALTER TABLE income
+    ADD COLUMN item_type VARCHAR(20) NULL AFTER registration_id,
+    ADD COLUMN item_id INT UNSIGNED NULL AFTER item_type,
+    ADD COLUMN item_title VARCHAR(255) NULL AFTER item_id,
+    ADD COLUMN batch VARCHAR(100) NULL AFTER item_title,
+    ADD KEY idx_income_item (item_type, item_id);
+
+ALTER TABLE expenses
+    ADD COLUMN item_type VARCHAR(20) NULL AFTER source,
+    ADD COLUMN item_id INT UNSIGNED NULL AFTER item_type,
+    ADD COLUMN item_title VARCHAR(255) NULL AFTER item_id,
+    ADD COLUMN batch VARCHAR(100) NULL AFTER item_title,
+    ADD KEY idx_expenses_item (item_type, item_id);
+
 SET FOREIGN_KEY_CHECKS = 1;
