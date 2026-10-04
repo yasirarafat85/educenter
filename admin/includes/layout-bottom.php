@@ -300,9 +300,15 @@
         var cl = cf.querySelector('.fp-list'),   bl = bf.querySelector('.fp-list');
         var cx = cf.querySelector('.fp-clear'),  bx = bf.querySelector('.fp-clear');
         var curCourse = null;
+        // 🔴🔴 তালিকা খোলা থাকলে কার্ডটা একটু উপরে তোলা হয় (`.fp-raise`) — কার্ডে মাউস গেলে
+        //    hover-lift-এর `transform` কার্ডটাকে stacking context বানিয়ে ফেলে, তখন তালিকার
+        //    `z-index: 40` কার্ডের ভেতরেই আটকে যায় আর নিচের ফিল্টার কার্ড তার উপরে এঁকে দেয়
+        //    (খোলা ড্রপডাউনের মাঝখানে নিচের কার্ডের লেখা ভেসে উঠত — ২০২৬-১০-০৪, স্ক্রিনশটে ধরা)
+        var card = wrap.closest('.bg-white');
 
         function norm(v) { return (v || '').toString().toLowerCase(); }
-        function close(list) { list.hidden = true; }
+        function raise() { if (card) { card.classList.toggle('fp-raise', !cl.hidden || !bl.hidden); } }
+        function close(list) { list.hidden = true; raise(); }
         function closeAll() { close(cl); close(bl); }
 
         function paint(list, items, onPick) {
@@ -313,6 +319,7 @@
                 e.textContent = 'কিছু পাওয়া যায়নি';
                 list.appendChild(e);
                 list.hidden = false;
+                raise();
                 return;
             }
             items.forEach(function (it, i) {
@@ -329,6 +336,7 @@
                 list.appendChild(d);
             });
             list.hidden = false;
+            raise();
         }
 
         function courseItems(q) {

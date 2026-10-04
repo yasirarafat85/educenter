@@ -195,6 +195,14 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     .fp-opt.on, .fp-opt:hover { background: rgb(var(--c-primary) / .1); }
     .fp-opt small { display: block; font-size: 11px; color: rgb(var(--c-text-muted)); }
     .fp-empty { padding: .6rem .75rem; font-size: 13px; color: rgb(var(--c-text-muted)); }
+    /* 🔴🔴 তালিকা খোলা থাকলে পিকারের কার্ডটা একটু উপরে তোলা হয় (JS ক্লাস বসায়, ২০২৬-১০-০৪)।
+       কারণ: কার্ডে মাউস গেলে `main .bg-white.rounded-2xl:hover`-এর `transform: translateY(-3px)`
+       ঐ কার্ডকে একটা **stacking context** বানিয়ে ফেলে, তখন `.fp-list`-এর `z-index: 40` কার্ডের
+       ভেতরেই আটকে যায় — কার্ড নিজে z-index 0-তে দাঁড়ায়, আর DOM-এ পরের কার্ড (নিচের ফিল্টার
+       কার্ড, যার `.fp-field` positioned) তার উপরে এঁকে দেয়। ফলে খোলা ড্রপডাউনের মাঝখানে নিচের
+       কার্ডের লেখা ভেসে উঠত (ইউজারের স্ক্রিনশটে ধরা)। 🔴 মান **৫** — ইচ্ছাকৃতভাবে ছোট, যাতে
+       সাইডবার (z-50) · ব্যাকড্রপ (z-40) · টোস্ট (z-60) কোনোটাই ঢাকা না পড়ে। */
+    .fp-raise { position: relative; z-index: 5; }
 
     /* ── মোবাইলে অ্যাডমিন টেবিল → কার্ড-লেআউট (অনুভূমিক স্ক্রলের বদলে প্রতিটা রো একটা কার্ড;
           প্রতিটা সেলের পাশে কলাম-নাম দেখায় — data-label, layout-bottom.php-এর JS thead থেকে সেট করে)।
