@@ -723,6 +723,130 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
+   🦶 ফুটার (২০২৬-১০-০৫ রিডিজাইন) — `includes/site-footer.php`
+   🔴 সবটা সাধারণ CSS-এ, **Tailwind রিবিল্ড লাগে না**; রঙ `--c-primary` ইত্যাদি
+      থেকে, তাই অ্যাডমিনের সাইট-থিম বদলালে ফুটারও সাথে সাথে বদলায়।
+   ══════════════════════════════════════════════════════════════════════════════ */
+.ft {
+    position: relative;
+    margin-top: 3rem;
+    padding: 2.75rem 0 1.5rem;
+    color: #d6dae3;
+    background: #0f1420;
+    /* থিম-রঙের হালকা আভা দুই কোনায় — একরঙা কালো বাক্সের বদলে গভীরতা */
+    background-image:
+        radial-gradient(900px 320px at 8% -10%, rgb(var(--c-primary) / .22), transparent 70%),
+        radial-gradient(760px 300px at 95% 0%, rgb(var(--c-primary-2) / .16), transparent 72%);
+}
+/* উপরে থিম-রঙের সরু পট্টি — পেজ আর ফুটারের মাঝে পরিষ্কার সীমানা */
+.ft::before {
+    content: ""; position: absolute; inset: 0 0 auto; height: 3px;
+    background: linear-gradient(90deg, rgb(var(--c-primary)), rgb(var(--c-primary-2)), rgb(var(--c-primary)));
+}
+
+.ft-grid {
+    display: grid;
+    gap: 2rem 2.5rem;
+    grid-template-columns: 1fr;
+    padding-bottom: 2rem;
+}
+/* ৪৮০px থেকেই দুই কলাম — নাহলে ফোনে ফুটার ১২০০px+ লম্বা হয়ে যেত (মেপে দেখা)।
+   ব্র্যান্ড ও যোগাযোগ পুরো চওড়ায়, মাঝের দুই লিংক-কলাম পাশাপাশি। */
+@media (min-width: 480px) {
+    .ft-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ft-brand, .ft-contact { grid-column: 1 / -1; }
+}
+/* 🔴 ব্র্যান্ড কলামটা একটু চওড়া (1.4fr) — ওতে লোগো, বর্ণনা, WhatsApp ও সোশ্যাল সব আছে */
+@media (min-width: 1024px) {
+    .ft-grid { grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 2rem; }
+    .ft-brand, .ft-contact { grid-column: auto; }
+}
+
+/* ── ব্র্যান্ড ── */
+.ft-brand { min-width: 0; }
+.ft-logo { display: flex; align-items: center; gap: .75rem; color: inherit; text-decoration: none; }
+.ft-logo img { width: 48px; height: 48px; border-radius: 12px; object-fit: cover; flex-shrink: 0;
+               box-shadow: 0 6px 18px rgb(0 0 0 / .45); }
+.ft-logo b { display: block; font-size: 1.15rem; font-weight: 800; color: #fff; line-height: 1.3; }
+.ft-logo i { display: block; font-style: normal; font-size: .8rem; color: #9aa3b2; }
+.ft-about { margin-top: 1rem; font-size: .92rem; line-height: 1.85; color: #b8c0cd; }
+
+/* WhatsApp বোতাম — ফুটারের সবচেয়ে দরকারি কাজ, তাই সবচেয়ে চোখে পড়ে
+   (🔴 রঙটা WhatsApp-এর নিজের, থিম-নিরপেক্ষ — মানুষ রঙ দেখেই চেনে) */
+.ft-wa {
+    display: inline-flex; align-items: center; gap: .55rem; margin-top: 1.1rem;
+    padding: .6rem 1.1rem; border-radius: 999px; text-decoration: none;
+    background: #25D366; color: #06331a; font-weight: 700; font-size: .9rem;
+    box-shadow: 0 8px 20px rgb(37 211 102 / .28);
+    transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+.ft-wa svg { width: 18px; height: 18px; }
+.ft-wa:hover { filter: brightness(1.06); transform: translateY(-2px); box-shadow: 0 12px 26px rgb(37 211 102 / .38); }
+
+/* সোশ্যাল আইকন — ডিফল্টে নিরপেক্ষ, হোভারে নিজের ব্র্যান্ড-রঙ (`--soc`, সার্ভারে inline) */
+.ft-socs { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1.25rem; }
+.ft-soc {
+    display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px;
+    color: #cdd4df; background: rgb(255 255 255 / .07);
+    border: 1px solid rgb(255 255 255 / .09);
+    transition: background .15s ease, color .15s ease, transform .15s ease, border-color .15s ease;
+}
+.ft-soc svg { width: 19px; height: 19px; }
+.ft-soc:hover { background: var(--soc); border-color: var(--soc); color: #fff; transform: translateY(-3px); }
+
+/* ── লিংক কলাম ── */
+.ft-col { min-width: 0; }
+.ft-col h4 {
+    position: relative; margin: 0 0 1.1rem; padding-bottom: .55rem;
+    font-size: 1rem; font-weight: 700; color: #fff;
+}
+/* শিরোনামের নিচে ছোট থিম-রঙের দাগ */
+.ft-col h4::after {
+    content: ""; position: absolute; left: 0; bottom: 0; width: 34px; height: 3px; border-radius: 3px;
+    background: linear-gradient(90deg, rgb(var(--c-primary)), rgb(var(--c-primary-2)));
+}
+.ft-col ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .15rem; }
+.ft-col a {
+    display: flex; align-items: center; gap: .55rem;
+    padding: .45rem .5rem .45rem 0; border-radius: 8px;
+    color: #b8c0cd; text-decoration: none; font-size: .93rem;
+    transition: color .15s ease, transform .15s ease, padding-left .15s ease;
+}
+.ft-col a:hover { color: #fff; transform: translateX(3px); }
+.ft-em { width: 1.25rem; flex-shrink: 0; text-align: center; font-size: .95rem; }
+
+/* ── যোগাযোগ ── */
+.ft-contact ul { gap: .85rem; }
+.ft-contact li { display: flex; align-items: flex-start; gap: .6rem; font-size: .93rem; color: #b8c0cd; line-height: 1.7; }
+.ft-contact li > i, .ft-contact li > svg { width: 17px; height: 17px; flex-shrink: 0; margin-top: .25rem; color: rgb(var(--c-primary-2)); }
+.ft-contact a { padding: 0; color: #b8c0cd; }
+.ft-contact a:hover { color: #fff; transform: none; }
+/* 🔴 ইমেইল লম্বা হলে ৩২০px পর্দায় ফুটার উপচে পড়ত — এই গার্ডটা সরাবেন না */
+.ft-break { word-break: break-all; }
+
+/* ── নিচের পট্টি ── */
+.ft-bottom {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: .75rem; padding-top: 1.35rem;
+    border-top: 1px solid rgb(255 255 255 / .09);
+    font-size: .86rem; color: #8e97a6;
+}
+.ft-bottom p { margin: 0; }
+/* 🔴 ডান পাশে ফাঁকা জায়গা — ভাসমান WhatsApp বোতামটা (`#wa-float`, fixed) পাতার
+   একদম নিচে এসে ঠিক এখানেই বসে আর "সাইটম্যাপ" লিংকটা ঢেকে দিত (স্ক্রিনশটে ধরা)।
+   নতুন কোনো ভাসমান বোতাম যোগ করলে এই ফাঁকটাও মিলিয়ে দেখুন। */
+@media (min-width: 481px) { .ft-bottom { padding-right: 76px; } }
+.ft-bottom-links { display: flex; align-items: center; gap: .5rem; }
+.ft-bottom-links a { color: #b8c0cd; text-decoration: none; }
+.ft-bottom-links a:hover { color: #fff; text-decoration: underline; }
+@media (max-width: 480px) { .ft-bottom { justify-content: center; text-align: center; } }
+
+/* ছোঁয়া-পর্দায় হোভারের নড়াচড়া বাতিল (উপরের `hover: none` নিয়মের মতোই) */
+@media (hover: none) {
+    .ft-wa:hover, .ft-soc:hover, .ft-col a:hover { transform: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
    🖐️ ছোঁয়া-পর্দা, বেশি কনট্রাস্ট ও ছাপার আলাদা চেহারা (২০২৬-১০-০৪)
    সবই সাধারণ CSS — **Tailwind রিবিল্ড লাগে না**।
    ══════════════════════════════════════════════════════════════════════════════ */

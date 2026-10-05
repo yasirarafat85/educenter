@@ -16,17 +16,19 @@ ob_start('digits_filter_html');
 log_visitor();
 
 // ক্লিন URL (.htaccess রিরাইট) — সব লিংক এখন extensionless, home = './' (সাবডিরেক্টরি/রুট দুই জায়গাতেই কাজ করে)
+// 🔴 উপরের মেনু = **৮ আইটেম** (২০২৬-১০-০৫, ইউজারের নির্দেশ)। আগে ১১টা ছিল; Teachers ·
+//    About · FAQs **ফুটারে সরানো হয়েছে** — ওগুলো একবার পড়ার মতো তথ্য-পাতা, প্রতিদিনের
+//    নেভিগেশন নয়, আর ১১টা আইটেম ১০২৪–১৩৫০px প্রস্থে এক সারিতে আঁটত না।
+// 🔴 পাতাগুলো মুছে ফেলা হয়নি — `teachers`/`about`/`faqs` তিনটাই আগের মতোই আছে, শুধু
+//    প্রবেশপথ ফুটার (+ sitemap/৪০৪)। নতুন কিছু মেনুতে যোগ করার আগে ভাবুন: ফুটারই যথেষ্ট কিনা।
 $navigation = [
     ['id' => 'home', 'label' => 'Home', 'icon' => 'home', 'url' => './'],
     ['id' => 'courses', 'label' => 'Our Course', 'icon' => 'book-open', 'url' => 'courses'],
     ['id' => 'worksheets', 'label' => 'Our Worksheet', 'icon' => 'file-text', 'url' => 'worksheets'],
     ['id' => 'products', 'label' => 'Our Products', 'icon' => 'shopping-bag', 'url' => 'products'],
     ['id' => 'notice', 'label' => 'Notice', 'icon' => 'bell', 'url' => 'notice'],
-    ['id' => 'teachers', 'label' => 'Teachers', 'icon' => 'users', 'url' => 'teachers'],
     ['id' => 'reviews', 'label' => 'Reviews', 'icon' => 'star', 'url' => 'reviews'],
-    ['id' => 'about', 'label' => 'About', 'icon' => 'info', 'url' => 'about'],
     ['id' => 'gallery', 'label' => 'Gallery', 'icon' => 'image', 'url' => 'gallery'],
-    ['id' => 'faqs', 'label' => 'FAQs', 'icon' => 'help-circle', 'url' => 'faqs'],
     ['id' => 'account', 'label' => !empty($_SESSION['user_id']) ? 'My Account' : 'Login', 'icon' => 'user-circle', 'url' => 'account'],
 ];
 
@@ -159,7 +161,7 @@ $metaDescription = en_digits($metaDescription);
     </style>
 </head>
 <body class="min-h-screen">
-    <?php // ♿ "সরাসরি মূল লেখায় যান" — কীবোর্ড/স্ক্রিন-রিডার ব্যবহারকারীকে ১১টা মেনু-লিংক
+    <?php // ♿ "সরাসরি মূল লেখায় যান" — কীবোর্ড/স্ক্রিন-রিডার ব্যবহারকারীকে পুরো মেনু-লিংক
           // পেরোতে হয় না। ডিফল্টে অদৃশ্য, Tab চাপলে দেখা যায় (স্টাইল style.css-এর `.skip-link`)। ?>
     <a href="#main-content" class="skip-link">সরাসরি মূল লেখায় যান</a>
     <header class="header-glass sticky top-0 z-40">
@@ -184,8 +186,8 @@ $metaDescription = en_digits($metaDescription);
 
                 <div class="flex items-center gap-2">
                     <?php // 🔎 সার্চ — ডেস্কটপ ও মোবাইল দুটোতেই আইকন হিসেবে (২০২৬-০৯-২৭)।
-                          // 🔴 উপরের মেনুতে টেক্সট-আইটেম হিসেবে যোগ করা হয়নি — ওখানে ১১টা আইটেম,
-                          //    আরেকটা দিলে ভিড় হতো (CLAUDE.md-এর নিয়ম)। নিচের স্টিকি বারেও নয় (৫ স্লট পূর্ণ)। ?>
+                          // 🔴 উপরের মেনুতে টেক্সট-আইটেম হিসেবে যোগ করা হয়নি — ওটা আইকনেই যথেষ্ট,
+                          //    আর মেনুর জায়গা কম (CLAUDE.md-এর নিয়ম)। নিচের স্টিকি বারেও নয় (৫ স্লট পূর্ণ)। ?>
                     <a href="search" class="p-3 rounded-xl glass-effect hover:bg-white/30 transition-colors" aria-label="খুঁজুন" title="খুঁজুন">
                         <i data-lucide="search" class="w-6 h-6 text-gray-700"></i>
                     </a>
