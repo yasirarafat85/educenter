@@ -149,6 +149,31 @@
         });
     })();
 
+    // 🎨 চেহারা (skin) পিকার — থিম-পিকারের হুবহু একই প্যাটার্ন (দুটো ইনস্ট্যান্স একসাথে সিঙ্কে থাকে)।
+    // 🔴 layout-top.php-এর `window.adminSkin()`-ই একমাত্র উৎস — এখানে আলাদা করে localStorage পড়বেন না।
+    (function () {
+        if (!document.querySelector('[data-skin-picker]')) return;
+        var cur = 'classic';
+        try { cur = (window.adminSkin ? window.adminSkin() : localStorage.getItem('admin_skin')) || 'classic'; } catch (e) {}
+        document.documentElement.setAttribute('data-skin', cur);
+
+        function highlight(id) {
+            document.querySelectorAll('[data-skin-picker] .skin-btn').forEach(function (b) {
+                b.classList.toggle('on', b.dataset.skinId === id);
+            });
+        }
+        highlight(cur);
+
+        document.querySelectorAll('[data-skin-picker] .skin-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var id = this.dataset.skinId;
+                document.documentElement.setAttribute('data-skin', id);
+                try { localStorage.setItem('admin_skin', id); } catch (e) {}
+                highlight(id);
+            });
+        });
+    })();
+
     // কাস্টম মডাল দেখানো — Confirm চাপলে onConfirm কল হবে, Cancel চাপলে শুধু বন্ধ হয়ে যাবে
     function showConfirmModal(message, onConfirm, title) {
         const modal = document.getElementById('confirm-modal');

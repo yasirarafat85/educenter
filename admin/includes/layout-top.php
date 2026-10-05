@@ -18,7 +18,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
 }
 ?>
 <!DOCTYPE html>
-<html lang="bn" data-theme="indigo">
+<html lang="bn" data-theme="indigo" data-skin="classic">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -41,6 +41,16 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
         return 'indigo';
     };
     try { document.documentElement.setAttribute('data-theme', window.adminTheme()); } catch (e) {}
+
+    // 🎨 চেহারা (skin) — রঙ থেকে সম্পূর্ণ আলাদা দ্বিতীয় সুইচ (২০২৬-১০-০৫)।
+    // 🔴 ডিফল্ট `classic` — ঐ নামের জন্য CSS-এ একটাও নিয়ম নেই, তাই আজকের চেহারাই অবিকল চলে।
+    // 🔴 থিমের মতোই: এই একটাই ফাংশন সত্যের উৎস, পিকারও এটাই ডাকে; আলাদা করে localStorage পড়বেন না।
+    window.adminSkin = function () {
+        var saved = null;
+        try { saved = localStorage.getItem('admin_skin'); } catch (e) {}
+        return (saved === 'flat' || saved === 'compact') ? saved : 'classic';
+    };
+    try { document.documentElement.setAttribute('data-skin', window.adminSkin()); } catch (e) {}
 </script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
@@ -308,11 +318,117 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     [data-theme="midnight"] [class*="bg-gray-50"], [data-theme="teal"] [class*="bg-gray-50"], [data-theme="carbon"] [class*="bg-gray-50"] { background-color: rgb(var(--c-surface-2)) !important; }
     [data-theme="midnight"] .border, [data-theme="teal"] .border, [data-theme="carbon"] .border { border-color: rgb(var(--c-border)); }
 
+    /* ── 🎨 চেহারা পিকার (skin) — থিম-বিন্দুর পাশে ছোট segmented কন্ট্রোল ── */
+    .skin-picker { display: inline-flex; align-items: center; gap: 2px; padding: 2px;
+                   border-radius: 999px; background: rgb(var(--c-primary) / .10); }
+    .skin-btn { padding: 3px 9px; border: 0; border-radius: 999px; cursor: pointer; background: transparent;
+                font-family: var(--font-body); font-size: 11.5px; font-weight: 700; line-height: 1.6;
+                color: rgb(var(--c-text-muted)); white-space: nowrap; }
+    .skin-btn:hover { color: rgb(var(--c-text)); }
+    .skin-btn.on { background: rgb(var(--c-primary)); color: #fff; }
+
     /* ── থিম পিকার ── */
     .theme-picker { display: flex; align-items: center; gap: 6px; }
     .theme-dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; transition: transform .1s, border-color .15s; }
     .theme-dot:hover { transform: translateY(-1px); }
     .theme-dot.on { border-color: rgb(var(--c-text)); }
+
+    /* ══════════════════════════════════════════════════════════════════════════
+       🎨 চেহারা (skin) — রঙ (`data-theme`) থেকে **সম্পূর্ণ আলাদা দ্বিতীয় সুইচ** (২০২৬-১০-০৫)
+       `<html data-theme="indigo" data-skin="flat">` — যেকোনো রঙের সাথে যেকোনো চেহারা।
+
+       🔴🔴 "ক্লাসিক" চেহারার জন্য এখানে **একটাও নিয়ম নেই, কখনো লিখবেনও না** — তাহলেই
+            উপরের মূল CSS-টাই অবিকল চলে, অর্থাৎ ক্লাসিক = আজকের চেহারার হুবহু নকল।
+            এটাই "ফিরে যাওয়ার" নিশ্চয়তা; কোনো শর্ত/ফলব্যাকের উপর ভরসা করতে হয় না।
+       🔴 সবই সাধারণ CSS — **Tailwind রিবিল্ড ও মাইগ্রেশন কোনোটাই লাগে না**।
+       🔴 ঘন (compact) শান্ত-র (flat) সব নিয়মই পায় — নিচে সিলেক্টরে দুটোই লেখা আছে,
+          তাই একটা বদলালে অন্যটাও মিলিয়ে দেখুন।
+       ══════════════════════════════════════════════════════════════════════════ */
+
+    /* ── ✍️ শান্ত + 📏 ঘন — দুটোতেই প্রযোজ্য (সমতল চেহারা) ───────────────────── */
+
+    /* ক্যানভাস সমতল — গ্রেডিয়েন্ট ও তিনটা রঙিন আভা বাদ */
+    [data-skin="flat"] body, [data-skin="compact"] body { background: rgb(var(--c-bg)); }
+    [data-skin="flat"] body::before, [data-skin="compact"] body::before { display: none; }
+
+    /* ছায়া প্রায় বাদ — গভীরতা এখন বর্ডার দিয়ে বোঝানো হয় */
+    [data-skin="flat"] .shadow-sm, [data-skin="compact"] .shadow-sm,
+    [data-skin="flat"] .shadow,    [data-skin="compact"] .shadow,
+    [data-skin="flat"] .shadow-md, [data-skin="compact"] .shadow-md,
+    [data-skin="flat"] .shadow-lg, [data-skin="compact"] .shadow-lg { box-shadow: none !important; }
+    /* ভাসমান জিনিস (মডাল/টোস্ট/ড্রপডাউন) ছায়া রাখে — নাহলে পেছনের লেখার সাথে মিশে যায় */
+    [data-skin="flat"] .shadow-xl, [data-skin="compact"] .shadow-xl,
+    [data-skin="flat"] .shadow-2xl, [data-skin="compact"] .shadow-2xl { box-shadow: 0 8px 24px -8px rgba(16,24,64,.28) !important; }
+
+    /* কোণ ১৬px → ৮px */
+    [data-skin="flat"] main .bg-white.rounded-2xl, [data-skin="compact"] main .bg-white.rounded-2xl,
+    [data-skin="flat"] main .bg-white.rounded-xl,  [data-skin="compact"] main .bg-white.rounded-xl,
+    [data-skin="flat"] main .bg-white.rounded-3xl, [data-skin="compact"] main .bg-white.rounded-3xl { border-radius: 8px; }
+
+    /* 🔴 হোভারে কার্ড উঠে আসা বাদ — এটাই ড্রপডাউন ঢেকে যাওয়ার stacking-context বাগের উৎস ছিল */
+    [data-skin="flat"] main .bg-white.rounded-2xl:hover, [data-skin="compact"] main .bg-white.rounded-2xl:hover,
+    [data-skin="flat"] main .bg-white.rounded-3xl:hover, [data-skin="compact"] main .bg-white.rounded-3xl:hover {
+        transform: none; box-shadow: none !important;
+    }
+
+    /* বোতাম একরঙা — গ্রেডিয়েন্ট সরালে Tailwind-এর নিজের `background-color`-ই থেকে যায় */
+    [data-skin="flat"] [class*="bg-indigo-6"], [data-skin="compact"] [class*="bg-indigo-6"],
+    [data-skin="flat"] [class*="bg-indigo-7"], [data-skin="compact"] [class*="bg-indigo-7"],
+    [data-skin="flat"] [class*="bg-green-6"], [data-skin="compact"] [class*="bg-green-6"],
+    [data-skin="flat"] [class*="bg-emerald-6"], [data-skin="compact"] [class*="bg-emerald-6"],
+    [data-skin="flat"] [class*="bg-red-6"], [data-skin="compact"] [class*="bg-red-6"],
+    [data-skin="flat"] [class*="bg-amber-6"], [data-skin="compact"] [class*="bg-amber-6"],
+    [data-skin="flat"] [class*="bg-orange-"], [data-skin="compact"] [class*="bg-orange-"],
+    [data-skin="flat"] [class*="bg-yellow-6"], [data-skin="compact"] [class*="bg-yellow-6"],
+    [data-skin="flat"] [class*="bg-blue-6"], [data-skin="compact"] [class*="bg-blue-6"],
+    [data-skin="flat"] [class*="bg-purple-6"], [data-skin="compact"] [class*="bg-purple-6"],
+    [data-skin="flat"] [class*="bg-fuchsia-6"], [data-skin="compact"] [class*="bg-fuchsia-6"],
+    [data-skin="flat"] [class*="bg-pink-6"], [data-skin="compact"] [class*="bg-pink-6"],
+    [data-skin="flat"] [class*="bg-gray-8"], [data-skin="compact"] [class*="bg-gray-8"],
+    [data-skin="flat"] [class*="bg-gray-9"], [data-skin="compact"] [class*="bg-gray-9"] { background-image: none !important; }
+    /* হোভারে লাফানো বাদ, শুধু একটু উজ্জ্বল */
+    [data-skin="flat"] a:hover, [data-skin="flat"] button:hover,
+    [data-skin="compact"] a:hover, [data-skin="compact"] button:hover { transform: none !important; }
+
+    /* সাইডবার — সমতল প্যানেল, ছায়া নেই */
+    [data-skin="flat"] .admin-sidebar, [data-skin="compact"] .admin-sidebar {
+        background: rgb(var(--c-surface-2)); box-shadow: none;
+    }
+    [data-skin="flat"] .nav-link.active, [data-skin="compact"] .nav-link.active {
+        background: rgb(var(--c-primary)); box-shadow: none;
+    }
+    [data-skin="flat"] .nav-link, [data-skin="compact"] .nav-link,
+    [data-skin="flat"] .nav-pin > button, [data-skin="compact"] .nav-pin > button { border-radius: 6px; }
+
+    /* ছোট কম্পোনেন্টের কোণও সমান করা */
+    [data-skin="flat"] .avatar, [data-skin="compact"] .avatar { background: rgb(var(--c-primary)); }
+    [data-skin="flat"] .toast, [data-skin="compact"] .toast,
+    [data-skin="flat"] .list-search, [data-skin="compact"] .list-search,
+    [data-skin="flat"] .empty-state .empty-ic, [data-skin="compact"] .empty-state .empty-ic,
+    [data-skin="flat"] .fp-list, [data-skin="compact"] .fp-list { border-radius: 8px; }
+
+    /* টেবিলে সারি-বিভাজক স্পষ্ট (ছায়া নেই বলে ভরসা এখন রেখার উপর) */
+    [data-skin="flat"] main table tbody tr, [data-skin="compact"] main table tbody tr { border-bottom: 1px solid rgb(var(--c-border)); }
+    [data-skin="flat"] main table thead th, [data-skin="compact"] main table thead th { border-bottom: 2px solid rgb(var(--c-border)); }
+
+    /* ── 📏 ঘন — শুধু এখানেই বাড়তি (এক পর্দায় বেশি সারি) ──────────────────────── */
+
+    /* 🔴 `line-height` ১.৭৫ → ১.৬-এর নিচে **কখনো নামাবেন না** — বাংলার মাত্রা ও যুক্তাক্ষরের
+       জায়গা লাগে, নাহলে অক্ষর একটার উপর আরেকটা চেপে বসে (উপরের body-র কমেন্টও দেখুন)। */
+    [data-skin="compact"] body { font-size: 13.5px; line-height: 1.62; }
+    [data-skin="compact"] main table { font-size: 13px; }
+    [data-skin="compact"] main table th, [data-skin="compact"] main table td { padding-top: .42rem; padding-bottom: .42rem; line-height: 1.5; }
+    /* সারির ভেতরের দ্বিতীয়/তৃতীয় লাইন (ফোন · ঠিকানার ইঙ্গিত · ব্যাচ) একটু কাছাকাছি */
+    [data-skin="compact"] main table td .text-xs, [data-skin="compact"] main table td .text-\[11px\] { line-height: 1.45; }
+    [data-skin="compact"] .nav-link { padding: 7px 11px; font-size: 13px; }
+    [data-skin="compact"] .nav-section { padding: 11px 14px 3px; }
+    /* কার্ডের ভেতরের ফাঁকা জায়গা — Tailwind-এর p-* ক্লাস ধরে কমানো (একই এলিমেন্টে বসে বলে
+       শুধু `[data-skin]` প্রিফিক্সেই specificity জিতে যায়) */
+    [data-skin="compact"] main .bg-white.p-6 { padding: 1rem; }
+    [data-skin="compact"] main .bg-white.p-5 { padding: .85rem; }
+    [data-skin="compact"] main .bg-white.p-4 { padding: .7rem; }
+    /* সাইডবার ১৬rem → ১৪rem (মোবাইলে `-translate-x-full` শতকরা হিসাবে, তাই অক্ষত থাকে) */
+    @media (min-width: 768px) { [data-skin="compact"] .admin-sidebar { width: 14rem; } }
 
     /* ══════════════════════════════════════════════════════════════════════════
        🖐️ ছোঁয়া-পর্দা, বেশি কনট্রাস্ট ও ছাপার আলাদা চেহারা (২০২৬-১০-০৪)
@@ -503,6 +619,12 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                 <button type="button" class="theme-dot" data-theme-id="teal"     style="background:#2DD4BF" title="Teal (dark)"></button>
                 <button type="button" class="theme-dot" data-theme-id="carbon"   style="background:#F59E0B" title="Carbon (dark)"></button>
             </div>
+            <div class="px-1.5 mt-2"><?php // 🎨 চেহারা পিকার — `[data-skin-picker]` দিয়ে চিহ্নিত, দুটো ইনস্ট্যান্স layout-bottom-এর JS একসাথে সিঙ্কে রাখে ?>
+<div class="skin-picker" data-skin-picker title="চেহারা বেছে নিন">
+    <button type="button" class="skin-btn" data-skin-id="classic" title="আজকের চেহারা — ছায়া, গোল কোণ, গ্রেডিয়েন্ট">ক্লাসিক</button>
+    <button type="button" class="skin-btn" data-skin-id="flat"    title="সমতল — ছায়া নেই, একরঙা বোতাম, পড়তে সহজ">শান্ত</button>
+    <button type="button" class="skin-btn" data-skin-id="compact" title="ঘন — এক পর্দায় বেশি সারি">ঘন</button>
+</div></div>
         </div>
         <div class="p-3 border-t border-gray-200">
             <div class="flex items-center gap-2.5 px-1.5 py-1.5">
@@ -546,6 +668,12 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                  হেডারের জায়গা নিয়ে পেজ টাইটেল চাপা দিত। থিম বদলানো ট্যাবলেট/ডেস্কটপে (sm+) থাকবে। -->
             <div class="hidden sm:flex items-center gap-3 flex-shrink-0">
                 <!-- থিম পিকার — রঙের বিন্দুতে ক্লিক করলে পুরো প্যানেলের থিম বদলায় (localStorage এ সেভ হয়) -->
+<?php // 🎨 চেহারা পিকার — `[data-skin-picker]` দিয়ে চিহ্নিত, দুটো ইনস্ট্যান্স layout-bottom-এর JS একসাথে সিঙ্কে রাখে ?>
+                <div class="skin-picker" data-skin-picker title="চেহারা বেছে নিন">
+                    <button type="button" class="skin-btn" data-skin-id="classic" title="আজকের চেহারা — ছায়া, গোল কোণ, গ্রেডিয়েন্ট">ক্লাসিক</button>
+                    <button type="button" class="skin-btn" data-skin-id="flat"    title="সমতল — ছায়া নেই, একরঙা বোতাম, পড়তে সহজ">শান্ত</button>
+                    <button type="button" class="skin-btn" data-skin-id="compact" title="ঘন — এক পর্দায় বেশি সারি">ঘন</button>
+                </div>
                 <div class="theme-picker" id="admin-theme-picker" data-theme-picker title="থিম বেছে নিন">
                     <button type="button" class="theme-dot" data-theme-id="indigo"  style="background:#4F46E5" title="Indigo"></button>
                     <button type="button" class="theme-dot" data-theme-id="emerald" style="background:#059669" title="Emerald"></button>
