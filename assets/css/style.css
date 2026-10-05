@@ -762,6 +762,32 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
     .ft-brand, .ft-contact { grid-column: auto; }
 }
 
+/* ── 📊 ট্রাস্ট-সারি (২০২৬-১০-০৫) — হোমপেজের "সংখ্যায় সাফল্য"-এর একই চারটা সংখ্যা।
+   🔴 হোমপেজে রেন্ডারই হয় না (PHP-তে গার্ড) — ওখানে উপরে বড় করে একই সংখ্যা আছে।
+   সংখ্যাগুলো থিমের রঙে, লেখা ধূসর — ফুটারের গাঢ় ব্যাকগ্রাউন্ডে দুটোই পড়া যায়। ── */
+.ft-trust {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem .5rem;
+    padding: 0 0 1.75rem;
+    margin-bottom: 1.75rem;
+    border-bottom: 1px solid rgb(255 255 255 / .08);
+}
+.ft-tr { min-width: 0; text-align: center; }
+.ft-tr b {
+    display: block; font-size: 1.6rem; font-weight: 800; line-height: 1.2;
+    color: rgb(var(--c-primary-2));
+    font-variant-numeric: tabular-nums;
+}
+.ft-tr span {
+    display: block; margin-top: .2rem; font-size: .82rem; color: #9aa3b2; line-height: 1.5;
+}
+/* ৪৮০px থেকেই চার কলাম — `.ft-grid`-এর একই ব্রেকপয়েন্ট, আর ফোনে ফুটার যত ছোট রাখা যায় */
+@media (min-width: 480px) {
+    .ft-trust { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .ft-tr b { font-size: 1.85rem; }
+}
+
 /* ── ব্র্যান্ড ── */
 .ft-brand { min-width: 0; }
 .ft-logo { display: flex; align-items: center; gap: .75rem; color: inherit; text-decoration: none; }
@@ -770,6 +796,20 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
 .ft-logo b { display: block; font-size: 1.15rem; font-weight: 800; color: #fff; line-height: 1.3; }
 .ft-logo i { display: block; font-style: normal; font-size: .8rem; color: #9aa3b2; }
 .ft-about { margin-top: 1rem; font-size: .92rem; line-height: 1.85; color: #b8c0cd; }
+
+/* 🎓 "এখন N টি কোর্সে ভর্তি চলছে" চিপ (২০২৬-১০-০৫) — গণনা `open_course_count()` থেকে,
+   ০ হলে PHP-ই রেন্ডার করে না। 🔴 ইচ্ছাকৃতভাবে বোতাম নয়, চিপ — WhatsApp বোতামটাই
+   ফুটারের মূল কাজ, দুটো সমান বড় হলে একটা আরেকটাকে খেয়ে ফেলত। */
+.ft-open {
+    display: inline-flex; align-items: center; gap: .4rem; margin-top: .9rem;
+    padding: .35rem .8rem; border-radius: 999px; text-decoration: none;
+    font-size: .84rem; font-weight: 700;
+    color: rgb(var(--c-primary-2));
+    background: rgb(var(--c-primary) / .14);
+    border: 1px solid rgb(var(--c-primary) / .35);
+    transition: background .15s ease, color .15s ease;
+}
+.ft-open:hover { background: rgb(var(--c-primary) / .26); color: #fff; }
 
 /* WhatsApp বোতাম — ফুটারের সবচেয়ে দরকারি কাজ, তাই সবচেয়ে চোখে পড়ে
    (🔴 রঙটা WhatsApp-এর নিজের, থিম-নিরপেক্ষ — মানুষ রঙ দেখেই চেনে) */
@@ -843,7 +883,7 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
 
 /* ছোঁয়া-পর্দায় হোভারের নড়াচড়া বাতিল (উপরের `hover: none` নিয়মের মতোই) */
 @media (hover: none) {
-    .ft-wa:hover, .ft-soc:hover, .ft-col a:hover { transform: none; }
+    .ft-wa:hover, .ft-soc:hover, .ft-col a:hover, .ft-open:hover { transform: none; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════

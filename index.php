@@ -59,23 +59,10 @@ $featuredWorksheets = $db->query('SELECT * FROM worksheets WHERE is_active = 1 O
 $featuredProducts   = $db->query('SELECT * FROM products   WHERE is_active = 1 ORDER BY sort_order ASC, id ASC LIMIT 3')->fetchAll();
 $siteName = get_setting('site_name', 'EduCenter');
 
-// হোমপেজ "সংখ্যায় সাফল্য" স্ট্যাট — অ্যাডমিন সেটিংস থেকে (খালি হলে ডিফল্ট)। [value, label, icon, color]
-$statDefaults = [
-    ['500+', 'সফল শিক্ষার্থী',    'users',           'blue'],
-    ['50+',  'কোর্স সমূহ',         'book-open',       'green'],
-    ['20+',  'অভিজ্ঞ শিক্ষক',     'graduation-cap',  'purple'],
-    ['98%',  'সন্তুষ্ট শিক্ষার্থী', 'heart-handshake', 'red'],
-];
-$stats = [];
-foreach ($statDefaults as $si => $sd) {
-    $sn = $si + 1;
-    $stats[] = [
-        'value' => get_setting("stat{$sn}_value") ?: $sd[0],
-        'label' => get_setting("stat{$sn}_label") ?: $sd[1],
-        'icon'  => $sd[2],
-        'color' => $sd[3],
-    ];
-}
+// হোমপেজ "সংখ্যায় সাফল্য" স্ট্যাট — অ্যাডমিন সেটিংস থেকে (খালি হলে ডিফল্ট)।
+// 🔴 তালিকা ও ডিফল্ট এখন শেয়ার্ড `site_stats()`-এ (functions.php) — ফুটারের ট্রাস্ট-সারিও
+//    এটাই পড়ে, তাই দুই জায়গার সংখ্যা কখনো আলাদা হয়ে যায় না।
+$stats = site_stats();
 
 require __DIR__ . '/includes/site-header.php';
 ?>

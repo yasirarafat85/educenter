@@ -2480,3 +2480,112 @@ function render_course_media(?PDO $db, int $ownerId, string $ownerType = 'course
 
     return $out;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🦶 ফুটারের শেয়ার্ড হেল্পার (২০২৬-১০-০৫)
+//
+// ফুটারে দেখানো লেখা/সংখ্যা যাতে কোডে হার্ডকোড না থাকে — অ্যাডমিন সেটিংস থেকেই আসে,
+// আর খালি থাকলে এখানকার ডিফল্ট দেখায় (🔴 `?:` দিয়ে — `get_setting()`-এর তৃতীয়
+// প্যারামিটার খালি স্ট্রিং কভার করে না, উপরের "get_setting" ঘরের নিয়ম)।
+// সবগুলোই `settings` key-value থেকে, তাই **কোনো মাইগ্রেশন লাগে না**।
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * ফুটারের একদম নিচের কপিরাইট লাইন (HTML, escape করা **নয়** — নিচে দেখুন)।
+ *
+ * 🔴 `{year}` ও `{site}` প্লেসহোল্ডার সাপোর্ট করে — অ্যাডমিন একবার লিখে রাখলে
+ *    প্রতি বছর সাল নিজে থেকেই বদলায়, হাতে কিছু করতে হয় না।
+ * 🔴 `schema.sql`-এর বসানো নমুনা লেখাটা ("© 2025 EduCenter …") অ্যাডমিন নিজে কিছু
+ *    না লিখলে DB-তেই পড়ে থাকে — ফলে লাইভ সাইটে সাল পুরনো আর নামও ভুল দেখাত।
+ *    তাই ঐ নমুনাটা চিনে নিয়ে অটো-লেখায় ফিরিয়ে দেওয়া হয় (SQL চালাতে হয় না)।
+ * 🔴 আউটপুট ইচ্ছাকৃতভাবে escape করা হয় না (আগের আচরণই অপরিবর্তিত) — অ্যাডমিন
+ *    `&copy;` জাতীয় এন্টিটি লিখতে পারেন; তাই `{site}`-এর মানটা আলাদা করে `e()`-তে।
+ */
+function footer_text_html(): string
+{
+    $raw = trim((string) get_setting('footer_text'));
+
+    if ($raw === '' || preg_match('~^(?:©|&copy;)\s*20\d\d\s+EduCenter~iu', $raw)) {
+        $raw = '© {year} {site}. সকল অধিকার সংরক্ষিত।';
+    }
+
+    $name = trim((string) get_setting('site_name')) ?: 'EduCenter';
+
+    return str_replace(['{year}', '{site}'], [date('Y'), e($name)], $raw);
+}
+
+/** ফুটারের ব্র্যান্ড-ব্লকের ছোট বর্ণনা (আগে কোডে হার্ডকোড ছিল)। */
+function footer_about_text(): string
+{
+    return get_setting('footer_about')
+        ?: 'গুণগত শিক্ষার মাধ্যমে উন্নত ভবিষ্যৎ গড়ি। আমাদের লক্ষ্য প্রতিটি শিক্ষার্থীর সম্ভাবনা বিকশিত করা।';
+}
+
+/**
+ * "সংখ্যায় সাফল্য" স্ট্যাট — `[value, label, icon, color]`।
+ *
+ * 🔴 হোমপেজের বড় সেকশন (`index.php`) **ও** ফুটারের ট্রাস্ট-সারি দুটোই এই একটাই
+ *    ফাংশন পড়ে — দুই জায়গায় আলাদা ডিফল্ট রাখলে সময়ের সাথে সংখ্যা দুরকম হয়ে যেত।
+ * ⚠️ icon/color ইচ্ছাকৃতভাবে কোডে (decorative, থিম-নিরপেক্ষ — CLAUDE.md-এর রঙের নিয়ম)।
+ */
+function site_stats(): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    $defaults = [
+        ['500+', 'সফল শিক্ষার্থী',    'users',           'blue'],
+        ['50+',  'কোর্স সমূহ',         'book-open',       'green'],
+        ['20+',  'অভিজ্ঞ শিক্ষক',     'graduation-cap',  'purple'],
+        ['98%',  'সন্তুষ্ট শিক্ষার্থী', 'heart-handshake', 'red'],
+    ];
+
+    $out = [];
+    foreach ($defaults as $si => $sd) {
+        $sn = $si + 1;
+        $out[] = [
+            'value' => get_setting("stat{$sn}_value") ?: $sd[0],
+            'label' => get_setting("stat{$sn}_label") ?: $sd[1],
+            'icon'  => $sd[2],
+            'color' => $sd[3],
+        ];
+    }
+
+    return $cache = $out;
+}
+
+/**
+ * এখন কয়টা কোর্সে ভর্তি চলছে (ফুটারের চিপে)।
+ *
+ * 🔴 গণনা SQL-এ নয়, PHP-তে `course_reg_open()` দিয়ে — ভর্তির শেষ সময় পেরিয়ে যাওয়া
+ *    ব্যাচও DB-তে `registration_open = 1` থাকে, SQL-এ গুনলে সংখ্যাটা বেশি দেখাত
+ *    (`index.php`-এর হুবহু একই নিয়ম; SQL-এ `NOW()` দেওয়া যায় না — MySQL সার্ভারের
+ *    টাইমজোন ঢাকার সাথে না-ও মিলতে পারে)।
+ * 🔴 `SELECT *` — `registration_deadline` মাইগ্রেশনের আগেও যেন কোয়েরিটা না ভাঙে।
+ * 🔴 পুরোটা try/catch-এ + রিকোয়েস্ট-প্রতি একবার (static) — ফুটার **সব** পাবলিক পাতায়
+ *    বসে, তাই এটা ভাঙলে পুরো সাইট ভাঙত।
+ */
+function open_course_count(?PDO $db = null): int
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    $cache = 0;
+    try {
+        $db   = $db ?: get_db();
+        $rows = $db->query('SELECT * FROM course_batches WHERE is_active = 1')->fetchAll();
+        foreach ($rows as $ocRow) {
+            if (course_reg_open($ocRow)) {
+                $cache++;
+            }
+        }
+    } catch (Throwable $e) {
+        $cache = 0;
+    }
+
+    return $cache;
+}

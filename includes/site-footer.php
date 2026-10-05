@@ -14,6 +14,13 @@
     $ftEmail   = get_setting('contact_email');
     $ftAddress = get_setting('contact_address');
     $ftWa      = normalize_bd_whatsapp(get_setting('contact_whatsapp'));
+    $ftHours   = get_setting('contact_hours');         // 🕘 খোলার সময় (ঐচ্ছিক)
+    $ftOpenN   = open_course_count();                  // 🎓 এখন কয়টা কোর্সে ভর্তি চলছে
+
+    // 📊 ট্রাস্ট-সারি — হোমপেজের "সংখ্যায় সাফল্য" সেকশনের হুবহু একই সংখ্যা (`site_stats()`)।
+    // 🔴 হোমপেজে ইচ্ছাকৃতভাবে **দেখানো হয় না** — ওখানে উপরেই বড় করে একই চারটা সংখ্যা
+    //    আছে, ফুটারে আবার দিলে একই পাতায় দুইবার পড়ত।
+    $ftStats = (($activePage ?? '') === 'home') ? [] : site_stats();
 
     // 🔴 দুই কলামের লিংক — নতুন পাবলিক পাতা বানালে এখানেও যোগ করুন (আর sitemap.php-এ)।
     $ftCols = [
@@ -36,6 +43,17 @@
     ?>
     <footer class="ft">
         <div class="container mx-auto px-4">
+            <?php if ($ftStats): ?>
+                <div class="ft-trust">
+                    <?php foreach ($ftStats as $ftSt): ?>
+                        <div class="ft-tr">
+                            <b><?= e($ftSt['value']) ?></b>
+                            <span><?= e($ftSt['label']) ?></span>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
             <div class="ft-grid">
 
                 <?php // ── ব্র্যান্ড ── ?>
@@ -47,7 +65,15 @@
                             <i><?= e($siteTagline) ?></i>
                         </span>
                     </a>
-                    <p class="ft-about">গুণগত শিক্ষার মাধ্যমে উন্নত ভবিষ্যৎ গড়ি। আমাদের লক্ষ্য প্রতিটি শিক্ষার্থীর সম্ভাবনা বিকশিত করা।</p>
+                    <?php // 🔴 লেখাটা অ্যাডমিন সেটিংস → "সাধারণ তথ্য" → ফুটারের বর্ণনা থেকে ?>
+                    <p class="ft-about"><?= e(footer_about_text()) ?></p>
+
+                    <?php if ($ftOpenN > 0): ?>
+                        <a href="courses" class="ft-open">
+                            <span aria-hidden="true">🎓</span>
+                            এখন <?= (int) $ftOpenN ?> টি কোর্সে ভর্তি চলছে
+                        </a>
+                    <?php endif; ?>
 
                     <?php if ($ftWa !== ''): ?>
                         <a href="https://wa.me/<?= e($ftWa) ?>" target="_blank" rel="noopener noreferrer" class="ft-wa">
@@ -112,6 +138,12 @@ $socialIcons = [
                                 <span><?= e($ftAddress) ?></span>
                             </li>
                         <?php endif; ?>
+                        <?php if ($ftHours !== ''): ?>
+                            <li>
+                                <i data-lucide="clock" aria-hidden="true"></i>
+                                <span><?= e($ftHours) ?></span>
+                            </li>
+                        <?php endif; ?>
                         <?php if ($ftPhone !== ''): ?>
                             <li>
                                 <i data-lucide="phone" aria-hidden="true"></i>
@@ -129,7 +161,8 @@ $socialIcons = [
             </div>
 
             <div class="ft-bottom">
-                <p><?= get_setting('footer_text', '&copy; 2025 EduCenter. সকল অধিকার সংরক্ষিত।') ?></p>
+                <?php // 🔴 সাল ও সাইটের নাম অটো — `footer_text_html()` (functions.php) ?>
+                <p><?= footer_text_html() ?></p>
                 <?php // 🔴 sitemap.php ইচ্ছাকৃতভাবে এখানে লিংক করা হয়নি — ওটা কাঁচা XML,
                       //    অভিভাবকের কাজে লাগে না (গুগলের জন্য robots.txt-এ বলা আছে)। ?>
                 <div class="ft-bottom-links">
