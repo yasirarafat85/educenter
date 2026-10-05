@@ -229,6 +229,21 @@ $short_label = fn(string $s): string => trim(preg_replace('/\s*\(.*$/u', '', $s)
                     <?php if (is_array($field) && !empty($field['help'])): ?>
                         <p class="text-xs text-gray-500 mt-1"><?= e($field['help']) ?></p>
                     <?php endif; ?>
+                    <?php
+                    // ⚠️ ফুটারের লেখায় **হাতে লেখা সাল** পড়ে আছে কিনা (২০২৬-১০-০৫, ইউজারের স্ক্রিনশট থেকে)।
+                    // 🔴 অ্যাডমিনের নিজের লেখা কোড **কখনো নিজে থেকে বদলায় না** (footer_text_html()-এর নিয়ম) —
+                    //    তাই নিজে লেখা "© 2021 …" বছরের পর বছর পুরনো হয়েই থাকত। এখানে শুধু **মনে করিয়ে দেওয়া**
+                    //    হয়; বোতামটা ইনপুটের লেখায় `{year}` বসায়, সেভ করা না করা অ্যাডমিনের হাতেই।
+                    if ($key === 'footer_text' && $val !== '' && strpos($val, '{year}') === false
+                        && preg_match('/\b(20\d\d)\b/', $val, $fyM) && $fyM[1] !== date('Y')):
+                        $fyFixed = preg_replace('/\b' . preg_quote($fyM[1], '/') . '\b/', '{year}', $val, 1);
+                    ?>
+                        <div class="text-xs mt-2 px-3 py-2 rounded-xl" style="background:#fffbeb;border:1px solid #fcd34d;color:#78350f;line-height:1.9;">
+                            ⚠️ এখানে সাল লেখা আছে <b><?= e($fyM[1]) ?></b>, অথচ এখন <b><?= date('Y') ?></b> সাল।
+                            <button type="button" class="font-bold underline" data-fix-year="<?= e($fyFixed) ?>">সাল অটো করে দিন</button>
+                            — চাপলে ঐ জায়গায় <b>{year}</b> বসবে, তারপর নিচের "সেভ করুন" চাপুন। এরপর প্রতি বছর সাল নিজে থেকেই বদলাবে।
+                        </div>
+                    <?php endif; ?>
                 </div>
             <?php endforeach; ?>
         </div>
@@ -239,6 +254,14 @@ $short_label = fn(string $s): string => trim(preg_replace('/\s*\(.*$/u', '', $s)
 </div>
 
 <script>
+// ⚠️ "সাল অটো করে দিন" — শুধু ইনপুটের লেখায় {year} বসায়, সেভ অ্যাডমিন নিজে করেন
+document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-fix-year]');
+    if (!b) { return; }
+    var inp = b.closest('div').parentElement.querySelector('input[name="footer_text"]');
+    if (inp) { inp.value = b.getAttribute('data-fix-year'); inp.focus(); b.closest('div').remove(); }
+});
+
 // জাম্প-মেনু ও সেকশন অফসেট হেডারের প্রকৃত উচ্চতার সাথে সিঙ্ক করা হয় (hardcode px না) —
 // মেনু হেডারের ঠিক নিচে ফ্লাশ বসে (মাঝে ফাঁক থাকে না, পেছনের বাটন উঁকি দেয় না), আর অ্যাংকর জাম্পে
 // সেকশন হেডার+মেনুর (২ লাইন হলেও) ঠিক নিচে এসে থামে।
