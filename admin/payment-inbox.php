@@ -15,6 +15,7 @@
 
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/../includes/payment-sms.php';
+require_once __DIR__ . '/../includes/payment-claim.php';
 admin_require_login();
 
 $db = get_db();
@@ -49,15 +50,96 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('payment-inbox.php');
     }
 
-    // একটা আসা SMS মুছে ফেলা (স্প্যাম/ভুল করে ঢোকা বার্তা)
+    /* 🗑️ মুছে ফেলা — SMS অথবা দাবি
+     * 🔴 মার্কারটা ইচ্ছাকৃতভাবে বিদ্যমান `delete`-ই (group-match.php-এর মতো):
+     *    `admin_delete_actions()`-এ নতুন কিছু যোগ করতে হয়নি আর কেন্দ্রীয় গার্ড
+     *    এমনিতেই **delete cap** চায়। কোনটা মুছবে সেটা `what` বলে। */
     if ($act === 'delete') {
-        $id = (int) ($_POST['id'] ?? 0);
+        $id   = (int) ($_POST['id'] ?? 0);
+        $what = (string) ($_POST['what'] ?? 'sms');
+
+        if ($what === 'claim') {
+            /* 🔴 দাবি মোছা নিরাপদ ও কখনো কখনো দরকারি: এটা নিছক অভিভাবকের লেখা
+             *    একটা দাবি, টাকার প্রমাণ নয়। মুছলে —
+             *      (ক) `UNIQUE(trxid_norm)` ছেড়ে যায়, তাই ভুল TrxID লিখে ফেললে
+             *          অভিভাবক ঠিকটা আবার লিখতে পারেন (নাহলে চিরতরে আটকে থাকতেন),
+             *      (খ) জোড়া লাগা SMS থাকলে FK `ON DELETE SET NULL`-এ সেটা নিজে
+             *          থেকেই "অদাবিকৃত টাকা" তালিকায় ফিরে যায়।
+             *    টাকার খাতা/আয় এখানে ছোঁয়াই হয় না। */
+            try {
+                $db->prepare('DELETE FROM payment_claims WHERE id = :id')->execute(['id' => $id]);
+                set_flash('success', 'দাবিটা মুছে ফেলা হলো। একই TrxID এখন আবার লেখা যাবে।');
+            } catch (Throwable $e) {
+                set_flash('error', 'মুছতে সমস্যা হয়েছে।');
+            }
+            redirect('payment-inbox.php');
+        }
+
         try {
             // 🔴 দাবির সাথে জোড়া লেগে যাওয়া SMS মোছা যাবে না — ওটা টাকার প্রমাণ
             $db->prepare('DELETE FROM payment_sms WHERE id = :id AND claim_id IS NULL')->execute(['id' => $id]);
             set_flash('success', 'বার্তাটা মুছে ফেলা হয়েছে।');
         } catch (Throwable $e) {
             set_flash('error', 'মুছতে সমস্যা হয়েছে।');
+        }
+        redirect('payment-inbox.php');
+    }
+
+    /* ✅ হাতে মিলিয়ে দেওয়া  (২০২৬-১০-০৬)
+     *
+     * অটো-মিল না হলে অ্যাডমিন নিজে চোখে দেখে সিদ্ধান্ত নেন — এটাই সেই বোতাম।
+     * `sms_id` দিলে ঐ বার্তাটাও দাবির সাথে জোড়া লেগে যায় (তখন ওটা আর
+     * "অদাবিকৃত টাকা" তালিকায় দেখায় না, আর দুইবার গোনার ভয় থাকে না)।
+     *
+     * 🔴🔴 এখানেও টাকার খাতায় (`registration_payments`) বা আয়ে কিচ্ছু বসে না —
+     *      শুধু দাবির `status` বদলায়। খাতায় বসানো অ্যাডমিনের নিজের কাজ (ধাপ ৩)।
+     * 🔴 মার্কারটা delete-সেটে নেই, তাই কেন্দ্রীয় গার্ড **edit cap** চায় — ঠিকই
+     *    আছে, কিছু মোছা হচ্ছে না।
+     */
+    if ($act === 'claim-ok') {
+        $id    = (int) ($_POST['id'] ?? 0);
+        $smsId = (int) ($_POST['sms_id'] ?? 0);
+        try {
+            $st = $db->prepare('SELECT * FROM payment_claims WHERE id = :id LIMIT 1');
+            $st->execute(['id' => $id]);
+            $claim = $st->fetch();
+            if (!$claim) {
+                set_flash('error', 'দাবিটা পাওয়া যায়নি।');
+                redirect('payment-inbox.php');
+            }
+
+            $db->beginTransaction();
+
+            if ($smsId > 0) {
+                // 🔴 বার্তাটা সত্যিই আছে ও এখনো অন্য দাবিতে জোড়া লাগেনি — DB থেকে
+                //    যাচাই (POST-এর id-তে কখনো ভরসা নয়)
+                $s2 = $db->prepare('SELECT * FROM payment_sms WHERE id = :s LIMIT 1');
+                $s2->execute(['s' => $smsId]);
+                $sms = $s2->fetch();
+                if ($sms && (empty($sms['claim_id']) || (int) $sms['claim_id'] === $id)) {
+                    $db->prepare('UPDATE payment_claims SET matched_sms_id = :s WHERE id = :id')
+                       ->execute(['s' => $smsId, 'id' => $id]);
+                    // 🔴 একই নামের প্লেসহোল্ডার দুইবার দেওয়া যায় না (ATTR_EMULATE_PREPARES=false
+                    //    হলে MySQL `SQLSTATE[HY093]` ছোঁড়ে) — তাই :c ও :c2
+                    $db->prepare('UPDATE payment_sms SET claim_id = :c WHERE id = :s AND (claim_id IS NULL OR claim_id = :c2)')
+                       ->execute(['c' => $id, 'c2' => $id, 's' => $smsId]);
+                } else {
+                    $smsId = 0; // নীরবে বাদ — দাবিটা তবু "মিলিয়ে দেওয়া" হবে
+                }
+            }
+
+            $note = '✋ হাতে মিলিয়ে দেওয়া হয়েছে' . ($smsId > 0 ? ' (বার্তা #' . $smsId . ')' : '');
+            $old  = trim((string) ($claim['admin_note'] ?? ''));
+            $db->prepare('UPDATE payment_claims SET status = \'verified\', admin_note = :n WHERE id = :id')
+               ->execute(['n' => mb_substr($old === '' ? $note : $note . ' · ' . $old, 0, 500), 'id' => $id]);
+
+            $db->commit();
+            set_flash('success', 'দাবিটা "যাচাই হয়েছে" হিসেবে চিহ্নিত হলো। 🔴 টাকাটা অর্ডারের "টাকা" খাতায় নিজে বসিয়ে দিন — এই পাতা খাতায় কিছু লেখে না।');
+        } catch (Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            set_flash('error', 'সংরক্ষণে সমস্যা হয়েছে।');
         }
         redirect('payment-inbox.php');
     }
@@ -71,7 +153,7 @@ $lastSms  = $ready ? psms_last_received($db) : null;
 $stale    = $ready ? psms_heartbeat_stale($db) : false;
 $endpoint = rtrim(SITE_URL, '/') . '/sms-in.php';
 
-$unclaimed = $unparsed = $claims = [];
+$unclaimed = $unparsed = $claims = $nearBy = [];
 $counts = ['sms' => 0, 'unclaimed' => 0, 'unparsed' => 0, 'claims' => 0, 'untrusted' => 0];
 
 if ($ready) {
@@ -94,6 +176,10 @@ if ($ready) {
         $claims = $db->query("SELECT * FROM payment_claims
                               WHERE status IN ('new', 'verified') ORDER BY created_at DESC LIMIT 100")->fetchAll();
         $counts['claims'] = count($claims);
+
+        /* 🔎 "প্রায় মিলেছে" — I↔1 / O↔0 গুলিয়ে ফেলা TrxID ধরার জন্য।
+         * 🔴 শুধু ইঙ্গিত; অ্যাডমিন না চাপলে কিচ্ছু হয় না (উপরের ইঞ্জিনের ঘর দেখুন)। */
+        $nearBy = pclaim_near_matches($db, $claims);
 
         // 🛡️ এই তালিকায় কয়টা SMS অবিশ্বস্ত প্রেরক থেকে এসেছে
         // 🔴 গণনা PHP-তে, SQL-এ নয় — তালিকাটা settings থেকে আসে, আর অ্যাডমিন
@@ -374,7 +460,7 @@ require_once __DIR__ . '/includes/layout-top.php';
                 <th class="px-3 py-2">টাকা</th>
                 <th class="px-3 py-2">TrxID</th>
                 <th class="px-3 py-2">অবস্থা</th>
-                <th class="px-3 py-2">কখন</th>
+                <th class="px-3 py-2">অ্যাকশন</th>
             </tr>
         </thead>
         <tbody>
@@ -407,7 +493,33 @@ require_once __DIR__ . '/includes/layout-top.php';
                     </div>
                 </td>
                 <td class="px-3 py-2 font-bold"><?= e(pi_money($c['amount'])) ?></td>
-                <td class="px-3 py-2" style="font-family:monospace"><?= e($c['trxid_norm']) ?></td>
+                <td class="px-3 py-2">
+                    <div class="min-w-0">
+                        <span style="font-family:monospace"><?= e($c['trxid_norm']) ?></span>
+                        <?php $near = $nearBy[(int) $c['id']] ?? []; ?>
+                        <?php foreach ($near as $nm): $ns = $nm['sms']; ?>
+                            <?php /* 🔎 প্রায় একই TrxID — বড় হাতের I আর 1, O আর 0 প্রায় একই দেখায় */ ?>
+                            <div class="mt-1 text-xs bg-amber-50 border border-amber-200 rounded p-2">
+                                <div class="text-amber-800 font-bold">🔎 প্রায় একই TrxID-র একটা বার্তা আছে</div>
+                                <?php if (trim((string) ($ns['trxid_norm'] ?? '')) !== ''): ?>
+                                    <div style="font-family:monospace" class="text-gray-800"><?= e((string) $ns['trxid_norm']) ?></div>
+                                <?php else: ?>
+                                    <div class="text-amber-800">⚠️ বার্তাটা এখনো <b>পড়া যায়নি</b> (কোনো ছাঁচে মেলেনি)</div>
+                                <?php endif; ?>
+                                <div class="text-gray-600 mt-1" style="word-break:break-word"><?= e(text_excerpt((string) ($ns['raw_text'] ?? ''), 120)) ?></div>
+                                <?php if (admin_can('orders', 'edit')): ?>
+                                <form method="post" action="payment-inbox.php?action=claim-ok" class="inline mt-1"
+                                      onsubmit="return confirmSubmit(this, 'এই বার্তাটাই এই দাবির টাকা — এভাবে মিলিয়ে দেবেন? টাকার খাতায় কিছু বসবে না, সেটা আপনাকে অর্ডারে গিয়ে করতে হবে।')">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="id" value="<?= (int) $c['id'] ?>">
+                                    <input type="hidden" name="sms_id" value="<?= (int) $ns['id'] ?>">
+                                    <button type="submit" class="text-green-700 font-bold text-xs">✅ এটাই — মিলিয়ে দিন</button>
+                                </form>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </td>
                 <td class="px-3 py-2">
                     <div class="min-w-0">
                         <?php $sl = ['new' => '⏳ যাচাই চলছে', 'verified' => '✅ যাচাই হয়েছে — খাতায় বসানো বাকি', 'posted' => '✔ খাতায় বসানো হয়েছে']; ?>
@@ -418,9 +530,32 @@ require_once __DIR__ . '/includes/layout-top.php';
                         <?php if (trim((string) ($c['admin_note'] ?? '')) !== ''): ?>
                             <div class="text-xs text-amber-800 mt-0.5">⚠️ <?= e((string) $c['admin_note']) ?></div>
                         <?php endif; ?>
+                        <?php /* ⚠️ সময়টা ইচ্ছাকৃতভাবে এখানেই — আলাদা কলাম করলে ৭৬৮px-এ
+                                 টেবিল ভিউপোর্ট ছাড়িয়ে যেত (মেপে দেখা) */ ?>
+                        <div class="text-xs text-gray-500 mt-0.5" title="<?= e((string) $c['created_at']) ?>"><?= e(pi_ago($c['created_at'])) ?></div>
                     </div>
                 </td>
-                <td class="px-3 py-2 text-xs text-gray-600"><?= e(pi_ago($c['created_at'])) ?></td>
+                <td class="px-3 py-2">
+                    <div class="min-w-0">
+                        <?php if ($c['status'] === 'new' && admin_can('orders', 'edit')): ?>
+                        <form method="post" action="payment-inbox.php?action=claim-ok" class="inline"
+                              onsubmit="return confirmSubmit(this, 'নিজে দেখে নিশ্চিত হয়েছেন যে টাকাটা এসেছে? দাবিটা “যাচাই হয়েছে” হয়ে যাবে। 🔴 টাকার খাতায় কিছুই বসবে না — সেটা অর্ডারে গিয়ে নিজে বসাতে হবে।')">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="id" value="<?= (int) $c['id'] ?>">
+                            <button type="submit" class="text-green-700 font-bold text-xs">✅ মিলিয়ে দিলাম</button>
+                        </form>
+                        <?php endif; ?>
+                        <?php if (admin_can('orders', 'delete')): ?>
+                        <form method="post" action="payment-inbox.php?action=delete" class="inline"
+                              onsubmit="return confirmSubmit(this, 'দাবিটা মুছে ফেলবেন? জোড়া লাগা বার্তা থাকলে সেটা আবার “অদাবিকৃত টাকা” তালিকায় ফিরে যাবে, আর একই TrxID আবার লেখা যাবে। টাকার হিসাবে কিছু বদলায় না।')">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="what" value="claim">
+                            <input type="hidden" name="id" value="<?= (int) $c['id'] ?>">
+                            <button type="submit" class="text-red-600 font-bold text-xs">✕ দাবিটা মুছুন</button>
+                        </form>
+                        <?php endif; ?>
+                    </div>
+                </td>
             </tr>
         <?php endforeach; ?>
         </tbody>

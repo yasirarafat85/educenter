@@ -425,6 +425,19 @@ function psms_default_patterns(): array
             'is_customer_payment' => 1,
             'sort_order' => 4,
         ],
+        /* 🏦 ব্যাংক থেকে নিজের বিকাশে Add Money — **গ্রাহকের পেমেন্ট নয়**
+         * (২০২৬-১০-০৬ এ ইউজারের আসল বার্তা থেকে হুবহু)। ছাঁচটা না থাকলে এই
+         * বার্তাগুলো "পড়া যায়নি" তালিকা ভরিয়ে রাখে আর আসল সমস্যা চোখে পড়ে না।
+         * 🔴 এতে পাঠানোর নম্বর থাকে না (ব্যাংক), তাই `{number}` নেই — আর সেজন্যই
+         *    `is_customer_payment = 0` জরুরি: নম্বর-মিলের গার্ডটা এখানে কাজ করত না। */
+        [
+            'label'      => 'বিকাশ — ব্যাংক থেকে Add Money (নিজের টাকা)',
+            'provider'   => 'bkash',
+            'template'   => 'You have received deposit from iBanking of Tk {amount} from {*}TrxID {trxid} at {datetime}',
+            'sample_sms' => 'You have received deposit from iBanking of Tk 200.00 from Islami Bank. Fee Tk 0.00. Balance Tk 280.61. TrxID DJ69I7LWRJ at 06/10/2026 19:09',
+            'is_customer_payment' => 0,
+            'sort_order' => 5,
+        ],
     ];
 }
 

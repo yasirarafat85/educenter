@@ -524,3 +524,69 @@ function pclaim_whatsapp_url(array $ctx = []): string
     }
     return 'https://wa.me/' . $wa . '?text=' . rawurlencode(implode("\n", $lines));
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * 🔎 "প্রায় মিলেছে" ইঙ্গিত — অ্যাডমিন-কিউয়ের জন্য  (২০২৬-১০-০৬)
+ *
+ * 🔴🔴 শুধু **দেখানোর** জন্য — অটো-অনুমোদনে এটা কখনো ব্যবহার করা যাবে না।
+ *      টাকার হিসাবে O↔0 / I↔1 অনুমান করা নিষিদ্ধ (`psms_trx_norm()` হুবহু রাখে);
+ *      `psms_trx_loose()` আছে ঠিক এই একটাই কাজের জন্য।
+ *
+ * কেন দরকার (২০২৬-১০-০৬ এ ইউজারের প্রথম আসল টেস্টেই ধরা পড়েছে): অভিভাবক SMS
+ * দেখে TrxID টাইপ করেন, আর `DJ69I7LWRJ`-এর বড় হাতের **I** প্রায় সব ফন্টে
+ * **1**-এর মতো দেখায় — তিনি লিখলেন `DJ6917LWRJ`। হুবহু না মেলায় দাবিটা
+ * "⏳ যাচাই চলছে"-তেই বসে রইল, অথচ টাকাটা সত্যিই এসেছে — আর অ্যাডমিনের পক্ষে
+ * দুই তালিকা চোখে মিলিয়ে ধরা প্রায় অসম্ভব।
+ *
+ * 🔑 **পড়া যায়নি এমন বার্তাও খোঁজা হয়** — ঐ টেস্টে বার্তাটা কোনো ছাঁচে মেলেনি
+ *    (ব্যাংক থেকে Add Money), তাই `trxid_norm` খালিই ছিল; কাঁচা লেখার ভেতরে
+ *    খুঁজলে তবেই পাওয়া যায়। এই অংশটা সরাবেন না।
+ *
+ * ফেরত: [claim_id => [ ['sms' => <row>, 'why' => 'loose'|'raw'], … ], …]
+ * ──────────────────────────────────────────────────────────────────────────── */
+function pclaim_near_matches(PDO $db, array $claims, int $scan = 200): array
+{
+    // যেসব দাবি এখনো কোনো SMS-এর সাথে জোড়া লাগেনি, শুধু সেগুলোই
+    $want = [];
+    foreach ($claims as $c) {
+        if (!empty($c['matched_sms_id'])) {
+            continue;
+        }
+        $key = psms_trx_loose((string) ($c['trxid_norm'] ?? ''));
+        if ($key !== '' && strlen($key) >= PCLAIM_MIN_TRX) {
+            $want[(int) $c['id']] = $key;
+        }
+    }
+    if (!$want) {
+        return [];
+    }
+
+    try {
+        $st = $db->prepare('SELECT * FROM payment_sms WHERE claim_id IS NULL
+                            ORDER BY id DESC LIMIT ' . max(1, min(500, $scan)));
+        $st->execute();
+        $rows = $st->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+
+    $out = [];
+    foreach ($rows as $sms) {
+        $exact = psms_trx_loose((string) ($sms['trxid_norm'] ?? ''));
+        $body  = psms_trx_loose((string) ($sms['raw_text'] ?? ''));
+        foreach ($want as $cid => $key) {
+            if ($exact !== '' && $exact === $key) {
+                $out[$cid][] = ['sms' => $sms, 'why' => 'loose'];
+            } elseif ($body !== '' && strpos($body, $key) !== false) {
+                $out[$cid][] = ['sms' => $sms, 'why' => 'raw'];
+            }
+        }
+    }
+
+    // শক্ত মিল আগে, আর দাবিপ্রতি সর্বোচ্চ ৩টা (তালিকা যেন ভরে না যায়)
+    foreach ($out as $cid => $list) {
+        usort($list, static fn($a, $b) => ($a['why'] === 'loose' ? 0 : 1) <=> ($b['why'] === 'loose' ? 0 : 1));
+        $out[$cid] = array_slice($list, 0, 3);
+    }
+    return $out;
+}
