@@ -153,7 +153,7 @@ $lastSms  = $ready ? psms_last_received($db) : null;
 $stale    = $ready ? psms_heartbeat_stale($db) : false;
 $endpoint = rtrim(SITE_URL, '/') . '/sms-in.php';
 
-$unclaimed = $unparsed = $claims = $nearBy = [];
+$unclaimed = $unparsed = $claims = $nearBy = $matchedBy = [];
 $counts = ['sms' => 0, 'unclaimed' => 0, 'unparsed' => 0, 'claims' => 0, 'untrusted' => 0];
 
 if ($ready) {
@@ -180,6 +180,10 @@ if ($ready) {
         /* 🔎 "প্রায় মিলেছে" — I↔1 / O↔0 গুলিয়ে ফেলা TrxID ধরার জন্য।
          * 🔴 শুধু ইঙ্গিত; অ্যাডমিন না চাপলে কিচ্ছু হয় না (উপরের ইঞ্জিনের ঘর দেখুন)। */
         $nearBy = pclaim_near_matches($db, $claims);
+
+        /* 🔗 যেসব দাবির TrxID মিলেছিল কিন্তু কোনো শর্তে আটকে গেছে — ঐ বার্তাটা
+         * পাশে দেখানোর জন্য (নাহলে কোন বার্তার কথা বলা হচ্ছে বোঝাই যেত না)। */
+        $matchedBy = pclaim_matched_sms($db, $claims);
 
         // 🛡️ এই তালিকায় কয়টা SMS অবিশ্বস্ত প্রেরক থেকে এসেছে
         // 🔴 গণনা PHP-তে, SQL-এ নয় — তালিকাটা settings থেকে আসে, আর অ্যাডমিন
@@ -496,10 +500,47 @@ require_once __DIR__ . '/includes/layout-top.php';
                 <td class="px-3 py-2">
                     <div class="min-w-0">
                         <span style="font-family:monospace"><?= e($c['trxid_norm']) ?></span>
+                        <?php /* 🔗 TrxID মিলেছিল, কিন্তু কোনো শর্তে আটকে গেছে — কোন বার্তাটা, সেটা দেখানো */ ?>
+                        <?php $mSms = $matchedBy[(int) $c['id']] ?? null; ?>
+                        <?php if ($mSms):
+                            $linked  = (int) ($mSms['claim_id'] ?? 0) === (int) $c['id'];
+                            $smsPh   = psms_phone_norm((string) ($mSms['sender_number'] ?? ''));
+                            $clPh    = psms_phone_norm((string) ($c['phone'] ?? ''));
+                            $phDiff  = $smsPh !== '' && $clPh !== '' && $smsPh !== $clPh;
+                            $amtDiff = (float) ($c['amount'] ?? 0) > 0.009
+                                       && abs((float) $c['amount'] - (float) ($mSms['amount'] ?? 0)) > 0.5;
+                        ?>
+                            <div class="mt-1 text-xs <?= $linked ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200' ?> border rounded p-2" style="max-width:300px">
+                                <div class="<?= $linked ? 'text-green-800' : 'text-amber-800' ?> font-bold">
+                                    <?= $linked ? '🔗 এই বার্তাটার সাথে জোড়া লাগানো আছে' : '🔗 এই বার্তাটার সাথে মিলেছে — তবে গরমিল আছে' ?>
+                                </div>
+                                <div class="text-gray-800 mt-0.5">
+                                    টাকা এসেছে <b><?= e(pi_money($mSms['amount'])) ?></b>
+                                    <?php if ($amtDiff): ?><span class="text-red-700">(অভিভাবক লিখেছেন <?= e(pi_money($c['amount'])) ?>)</span><?php endif; ?>
+                                </div>
+                                <div class="text-gray-800">
+                                    যে নম্বর থেকে: <b><?= e((string) ($mSms['sender_number'] ?: '—')) ?></b>
+                                    <?php if ($phDiff): ?>
+                                        <div class="text-red-700">🔴 রেজিস্ট্রেশনের নম্বর <?= e((string) $c['phone']) ?> — দুটো আলাদা, তাই নিজে থেকে যাচাই হয়নি</div>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if (!$linked && admin_can('orders', 'edit')): ?>
+                                <?php /* 🔴 sms_id সহ পাঠানো হয় — নাহলে অনুমোদনের পরেও বার্তাটা
+                                         "দাবি হয়নি এমন টাকা" তালিকায় পড়ে থাকত (এক টাকা দুইবার গোনার ঝুঁকি) */ ?>
+                                <form method="post" action="payment-inbox.php?action=claim-ok" class="inline mt-1"
+                                      onsubmit="return confirmSubmit(this, 'নিজে দেখে নিশ্চিত হয়েছেন যে টাকাটা এসেছে? বার্তাটা এই দাবির সাথে জোড়া লেগে যাবে। 🔴 টাকার খাতায় কিছুই বসবে না — সেটা অর্ডারে গিয়ে নিজে বসাতে হবে।')">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="id" value="<?= (int) $c['id'] ?>">
+                                    <input type="hidden" name="sms_id" value="<?= (int) $mSms['id'] ?>">
+                                    <button type="submit" class="text-green-700 font-bold text-xs">✅ ঠিক আছে — মিলিয়ে দিন</button>
+                                </form>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
                         <?php $near = $nearBy[(int) $c['id']] ?? []; ?>
                         <?php foreach ($near as $nm): $ns = $nm['sms']; ?>
                             <?php /* 🔎 প্রায় একই TrxID — বড় হাতের I আর 1, O আর 0 প্রায় একই দেখায় */ ?>
-                            <div class="mt-1 text-xs bg-amber-50 border border-amber-200 rounded p-2">
+                            <div class="mt-1 text-xs bg-amber-50 border border-amber-200 rounded p-2" style="max-width:300px">
                                 <div class="text-amber-800 font-bold">🔎 প্রায় একই TrxID-র একটা বার্তা আছে</div>
                                 <?php if (trim((string) ($ns['trxid_norm'] ?? '')) !== ''): ?>
                                     <div style="font-family:monospace" class="text-gray-800"><?= e((string) $ns['trxid_norm']) ?></div>
@@ -537,7 +578,11 @@ require_once __DIR__ . '/includes/layout-top.php';
                 </td>
                 <td class="px-3 py-2">
                     <div class="min-w-0">
-                        <?php if ($c['status'] === 'new' && admin_can('orders', 'edit')): ?>
+                        <?php /* 🔴 মিলে যাওয়া বার্তা থাকলে এখানে সাধারণ বোতামটা দেখানো হয় না —
+                                 তাহলে অ্যাডমিন ভুল করে বার্তাটা না-জুড়েই অনুমোদন করে ফেলতেন
+                                 (বার্তাটা অদাবিকৃত তালিকায় পড়ে থেকে দুইবার গোনা হতো)।
+                                 ঐ ক্ষেত্রে TrxID-র ঘরের বোতামটাই ব্যবহার করতে হবে। */ ?>
+                        <?php if ($c['status'] === 'new' && empty($matchedBy[(int) $c['id']]) && admin_can('orders', 'edit')): ?>
                         <form method="post" action="payment-inbox.php?action=claim-ok" class="inline"
                               onsubmit="return confirmSubmit(this, 'নিজে দেখে নিশ্চিত হয়েছেন যে টাকাটা এসেছে? দাবিটা “যাচাই হয়েছে” হয়ে যাবে। 🔴 টাকার খাতায় কিছুই বসবে না — সেটা অর্ডারে গিয়ে নিজে বসাতে হবে।')">
                             <?= csrf_field() ?>

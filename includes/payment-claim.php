@@ -590,3 +590,50 @@ function pclaim_near_matches(PDO $db, array $claims, int $scan = 200): array
     }
     return $out;
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * 🔗 "মিলেছে কিন্তু গরমিল আছে" — দাবির সাথে যে বার্তাটা মিলেছিল  (২০২৬-১০-০৬)
+ *
+ * `pclaim_link()` TrxID মিলে গেলে `matched_sms_id` **সবসময়** বসায়, কিন্তু
+ * `payment_sms.claim_id` শুধু **নিশ্চিত** হলে। অর্থাৎ চারটা শর্তের একটা ফেল
+ * করলে (যেমন টাকা অন্য নম্বর থেকে এসেছে) দাবিটা "⏳ যাচাই চলছে"-তেই থাকে আর
+ * বার্তাটা "দাবি হয়নি এমন টাকা" তালিকায় পড়ে থাকে — অ্যাডমিনের পক্ষে **কোন
+ * বার্তাটার কথা বলা হচ্ছে সেটা বোঝার উপায় ছিল না**, আর হাতে "মিলিয়ে দিলাম"
+ * চাপলে বার্তাটা অদাবিকৃতই থেকে যেত (এক টাকা দুইবার গোনার ঝুঁকি)।
+ *
+ * এই হেল্পার ঐ বার্তাটা ফিরিয়ে আনে, যাতে ইনবক্সে পাশাপাশি দেখানো যায় ও
+ * অনুমোদনের সময় `sms_id` সহ জোড়া লাগানো যায়।
+ * ফেরত: [claim_id => <payment_sms row>, …]
+ * ──────────────────────────────────────────────────────────────────────────── */
+function pclaim_matched_sms(PDO $db, array $claims): array
+{
+    $ids = [];
+    foreach ($claims as $c) {
+        $sid = (int) ($c['matched_sms_id'] ?? 0);
+        if ($sid > 0) {
+            $ids[$sid] = $sid;
+        }
+    }
+    if (!$ids) {
+        return [];
+    }
+    try {
+        // 🔴 আইডিগুলো int-কাস্ট করে সরাসরি SQL-এ (IN-এ প্লেসহোল্ডারের সংখ্যা
+        //    বদলায়, আর এগুলো DB থেকেই আসা সংখ্যা — ইউজার-ইনপুট নয়)
+        $rows = $db->query('SELECT * FROM payment_sms WHERE id IN (' . implode(',', array_map('intval', $ids)) . ')')->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+    $byId = [];
+    foreach ($rows as $r) {
+        $byId[(int) $r['id']] = $r;
+    }
+    $out = [];
+    foreach ($claims as $c) {
+        $sid = (int) ($c['matched_sms_id'] ?? 0);
+        if ($sid > 0 && isset($byId[$sid])) {
+            $out[(int) $c['id']] = $byId[$sid];
+        }
+    }
+    return $out;
+}
