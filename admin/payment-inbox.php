@@ -72,7 +72,7 @@ $stale    = $ready ? psms_heartbeat_stale($db) : false;
 $endpoint = rtrim(SITE_URL, '/') . '/sms-in.php';
 
 $unclaimed = $unparsed = $claims = [];
-$counts = ['sms' => 0, 'unclaimed' => 0, 'unparsed' => 0, 'claims' => 0];
+$counts = ['sms' => 0, 'unclaimed' => 0, 'unparsed' => 0, 'claims' => 0, 'untrusted' => 0];
 
 if ($ready) {
     try {
@@ -94,6 +94,15 @@ if ($ready) {
         $claims = $db->query("SELECT * FROM payment_claims
                               WHERE status IN ('new', 'verified') ORDER BY created_at DESC LIMIT 100")->fetchAll();
         $counts['claims'] = count($claims);
+
+        // 🛡️ এই তালিকায় কয়টা SMS অবিশ্বস্ত প্রেরক থেকে এসেছে
+        // 🔴 গণনা PHP-তে, SQL-এ নয় — তালিকাটা settings থেকে আসে, আর অ্যাডমিন
+        //    নাম যোগ/বাদ দিলে সাথে সাথেই এখানে প্রতিফলিত হওয়া দরকার।
+        foreach ($unclaimed as $u) {
+            if (psms_sender_status((string) ($u['sender'] ?? '')) !== 'trusted') {
+                $counts['untrusted']++;
+            }
+        }
     } catch (Throwable $e) {
         // 🔴 পুরো ব্লক try/catch-এ — একটা কোয়েরি ব্যর্থ হলেও পাতা খোলে
     }
@@ -103,6 +112,29 @@ if ($ready) {
 function pi_money($v): string
 {
     return $v === null ? '—' : '৳' . number_format((float) $v, 2);
+}
+
+/* 🛡️ প্রেরকের রায় → একটা ছোট চিপ
+ * 🔴 শুধু "trusted" মানেই নিশ্চিত — বাকি তিনটা অবস্থাতেই অ্যাডমিনকে নিজে যাচাই
+ *    করতে হবে, কারণ ফোন নম্বর থেকে যে কেউ নকল বার্তা পাঠাতে পারে।
+ */
+function pi_sender_chip(?string $sender): string
+{
+    $st  = psms_sender_status((string) $sender);
+    $raw = trim((string) $sender);
+    $map = [
+        'trusted' => ['✅', 'bg-green-50 text-green-800 border-green-200',   'অপারেটরের নিবন্ধিত নাম — নকল করা যায় না'],
+        'number'  => ['⚠️', 'bg-red-50 text-red-800 border-red-200',        'একটা ফোন নম্বর থেকে এসেছে — যে কেউ এমন বার্তা পাঠাতে পারে, যাচাই না করে টাকা ধরবেন না'],
+        'unknown' => ['❓', 'bg-amber-50 text-amber-800 border-amber-200',  'এই নামটা বিশ্বস্ত তালিকায় নেই — আসল হলে সাইট সেটিংস → "টাকার SMS — বিশ্বস্ত প্রেরক"-এ যোগ করুন'],
+        'missing' => ['❓', 'bg-gray-50 text-gray-600 border-gray-200',     'ফোন প্রেরকের নামই পাঠায়নি — MacroDroid-এর Body-তে Incoming SMS number বসানো আছে কিনা দেখুন'],
+    ];
+    [$ic, $cls, $why] = $map[$st] ?? $map['missing'];
+    $label = $raw !== '' ? $raw : 'নাম নেই';
+
+    // ⚠️ `py-0.5` কম্পাইলড অ্যাডমিন CSS-এ নেই — তাই inline (Tailwind রিবিল্ড এড়াতে)
+    return '<span class="inline-flex items-center gap-1 border rounded-full px-2 text-xs ' . $cls . '"'
+        . ' style="padding-top:2px;padding-bottom:2px"'
+        . ' title="' . e($why) . '">' . $ic . ' ' . e($label) . '</span>';
 }
 
 // "৩ ঘণ্টা আগে" ধরনের লেখা
@@ -136,7 +168,7 @@ require_once __DIR__ . '/includes/layout-top.php';
 </div>
 
 <?php if (!$ready): ?>
-    <div class="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 mb-6 text-sm">
+    <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 mb-6 text-sm">
         ⚠️ এই অংশটা এখনো চালু হয়নি — phpMyAdmin-এ একবার
         <code class="bg-white px-1 rounded">database/migrate-payment-sms.sql</code> চালাতে হবে
         (লাইভ ও লোকাল দুটোতেই)। ততক্ষণ সাইটের বাকি সব আগের মতোই চলবে।
@@ -166,7 +198,7 @@ require_once __DIR__ . '/includes/layout-top.php';
     <?php if (!$ready): ?>
         <p class="text-sm text-gray-500">মাইগ্রেশন চালানোর পর এখানে দেখা যাবে।</p>
     <?php elseif ($secret === ''): ?>
-        <div class="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-3 text-sm">
+        <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3 text-sm">
             🔑 এখনো কোনো গোপন চাবি তৈরি হয়নি — তাই <b>কোনো SMS গ্রহণ করা হচ্ছে না</b>।
             নিচের ঘর থেকে একটা চাবি বানিয়ে ফোনের MacroDroid-এ বসান।
         </div>
@@ -200,7 +232,11 @@ require_once __DIR__ . '/includes/layout-top.php';
     <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm space-y-2 mb-4">
         <div>
             <p class="text-xs text-gray-500 mb-1">Trigger</p>
-            <p class="font-bold">SMS Received — প্রেরকে <code>bKash</code> ও আরেকটা macro-তে <code>NAGAD</code></p>
+            <p class="font-bold">SMS Received → Any Number → SMS Content: <b>Contains</b> <code>TrxID</code></p>
+            <p class="text-xs text-gray-500 mt-1">
+                একই macro-তে আরেকটা Trigger যোগ করুন <code>TxnID</code> দিয়ে (বিকাশ লেখে TrxID, নগদ লেখে TxnID)।
+                এতে শুধু টাকার বার্তাই সার্ভারে আসে, ব্যক্তিগত SMS নয়।
+            </p>
         </div>
         <div>
             <p class="text-xs text-gray-500 mb-1">Action → HTTP Request (POST)</p>
@@ -210,8 +246,14 @@ require_once __DIR__ . '/includes/layout-top.php';
             </div>
         </div>
         <div>
-            <p class="text-xs text-gray-500 mb-1">Body (URL encoded)</p>
-            <code class="bg-white border rounded px-2 py-1 text-xs block" style="word-break:break-all">key=&lt;চাবি&gt;&amp;sender=[sms_sender]&amp;text=[sms_message]</code>
+            <p class="text-xs text-gray-500 mb-1">Content Body — <code>application/x-www-form-urlencoded</code></p>
+            <code class="bg-white border rounded px-2 py-1 text-xs block" style="word-break:break-all">key=&lt;চাবি&gt;&amp;sender={sms_number}&amp;text={sms_message}</code>
+            <p class="text-xs text-gray-500 mt-1">
+                🔴 বন্ধনীর অংশ দুটো হাতে লিখবেন না — ঘরের পাশের <b>…</b> বোতাম চেপে
+                <b>Incoming SMS number</b> ও <b>Incoming SMS message</b> বেছে নিন
+                (MacroDroid-এর ভার্সনভেদে বন্ধনী <code>{ }</code> বা <code>[ ]</code> হতে পারে, অ্যাপ নিজে যা বসায় সেটাই ঠিক)।
+                ⚠️ <b>Incoming SMS contact</b> নয় — ওটা ফোনবুকে সেভ করা নাম, bKash/NAGAD সেভ না থাকলে খালি আসে।
+            </p>
         </div>
         <div>
             <p class="text-xs text-gray-500 mb-1">গোপন চাবি</p>
@@ -257,6 +299,20 @@ require_once __DIR__ . '/includes/layout-top.php';
         সাথে জোড়া লাগে না — সেটা ধাপ ২ ও ৩-এর কাজ।
     </p>
 </div>
+<?php if ($counts['untrusted'] > 0): ?>
+<div class="bg-red-50 border border-red-200 rounded-xl p-4 mb-3">
+    <p class="font-bold text-red-800">⚠️ এই তালিকায় <?= (int) $counts['untrusted'] ?>টি বার্তার প্রেরক বিশ্বস্ত নয়</p>
+    <p class="text-xs text-red-800 mt-1">
+        বিকাশ/নগদের বার্তা অপারেটরের <b>নিবন্ধিত নাম</b> (<code>bKash</code> / <code>NAGAD</code>) দিয়ে আসে —
+        ঐ নামে সাধারণ মোবাইল থেকে SMS পাঠানো যায় না। কিন্তু <b>একটা ফোন নম্বর থেকে যে কেউ</b> হুবহু একই রকম
+        লেখা বানিয়ে পাঠাতে পারে। লাল চিপওয়ালা বার্তাগুলো তাই <b>টাকা এসেছে ধরে নেবেন না</b> —
+        বিকাশ/নগদ অ্যাপে মিলিয়ে দেখুন।
+    </p>
+    <p class="text-xs text-red-800 mt-1">
+        নামটা আসলেই আসল কোনো সেবার হলে <a href="settings.php" class="font-bold underline">সাইট সেটিংস → "টাকার SMS — বিশ্বস্ত প্রেরক"</a>-এ হুবহু যোগ করে দিন।
+    </p>
+</div>
+<?php endif; ?>
 <div class="bg-white rounded-2xl shadow overflow-x-auto mb-6">
     <table class="w-full text-sm">
         <thead class="bg-gray-50 text-left">
@@ -264,7 +320,7 @@ require_once __DIR__ . '/includes/layout-top.php';
                 <th class="px-3 py-2">টাকা</th>
                 <th class="px-3 py-2">TrxID</th>
                 <th class="px-3 py-2">যে নম্বর থেকে</th>
-                <th class="px-3 py-2">সেবা</th>
+                <th class="px-3 py-2">প্রেরক</th>
                 <th class="px-3 py-2">কখন পাঠানো</th>
                 <th class="px-3 py-2">আমরা পেলাম</th>
                 <th class="px-3 py-2">অ্যাকশন</th>
@@ -281,7 +337,7 @@ require_once __DIR__ . '/includes/layout-top.php';
                 <td class="px-3 py-2 font-bold text-green-700"><?= e(pi_money($s['amount'])) ?></td>
                 <td class="px-3 py-2" style="font-family:monospace"><?= e($s['trxid_norm']) ?></td>
                 <td class="px-3 py-2"><?= e($s['sender_number'] ?: '—') ?></td>
-                <td class="px-3 py-2"><?= e($s['provider'] ?: '—') ?></td>
+                <td class="px-3 py-2"><?= pi_sender_chip($s['sender'] ?? '') ?></td>
                 <td class="px-3 py-2 text-xs text-gray-600"><?= e($s['sent_at'] ?: '—') ?></td>
                 <td class="px-3 py-2 text-xs text-gray-600" title="<?= e($s['received_at']) ?>"><?= e(pi_ago($s['received_at'])) ?></td>
                 <td class="px-3 py-2">
@@ -377,7 +433,7 @@ require_once __DIR__ . '/includes/layout-top.php';
         <tbody>
         <?php foreach ($unparsed as $s): ?>
             <tr class="border-t">
-                <td class="px-3 py-2"><?= e($s['sender'] ?: ($s['provider'] ?: '—')) ?></td>
+                <td class="px-3 py-2"><?= pi_sender_chip($s['sender'] ?? '') ?></td>
                 <td class="px-3 py-2">
                     <div class="min-w-0" style="max-width:520px;word-break:break-word;font-family:monospace;font-size:12px">
                         <?= e(mb_substr((string) $s['raw_text'], 0, 300)) ?>

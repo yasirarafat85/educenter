@@ -191,7 +191,7 @@ require_once __DIR__ . '/includes/layout-top.php';
 </div>
 
 <?php if (!$ready): ?>
-    <div class="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 mb-6 text-sm">
+    <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 mb-6 text-sm">
         ⚠️ এই অংশটা এখনো চালু হয়নি — phpMyAdmin-এ একবার
         <code class="bg-white px-1 rounded">database/migrate-payment-sms.sql</code> চালাতে হবে
         (লাইভ ও লোকাল দুটোতেই)। ততক্ষণ সাইটের বাকি সব আগের মতোই চলবে।

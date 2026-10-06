@@ -297,6 +297,81 @@ function psms_fingerprint(string $text): string
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
+ * 🛡️ প্রেরক যাচাই — "SMS-টা সত্যিই বিকাশ/নগদ থেকে এসেছে তো?"  (২০২৬-১০-০৬)
+ *
+ * 🔴🔴 কেন দরকার: আমাদের ফোনে **যে কেউ** SMS পাঠাতে পারে। কেউ অন্যের আসল
+ *      বার্তা কপি করে, বা TrxID বসিয়ে নিজে একটা বার্তা বানিয়ে পাঠালে সেটাও
+ *      ছাঁচে মিলে যেত আর "টাকা এসেছে" হিসেবে বসত।
+ *
+ * 🔑 আসল প্রতিরক্ষা অপারেটরের কাছেই আছে: বিকাশ/নগদের বার্তা আসে **নিবন্ধিত
+ *    নাম-মাস্ক** দিয়ে (`bKash`, `NAGAD`) — সাধারণ মোবাইল থেকে ঐ নামে SMS
+ *    পাঠানো **যায় না**। নকল করতে গেলে প্রেরক হয় `+8801XXXXXXXXX`, অর্থাৎ
+ *    একটা ফোন নম্বর — দেখলেই আলাদা।
+ *
+ * 🔴 তাই নিয়ম: **হুবহু নাম মিললে তবেই বিশ্বস্ত** (অংশ-মিল নয়) — নাহলে
+ *    `bkash-refund` বা `NAGADX` জাতীয় নামও পাস করে যেত।
+ * 🔴 অবিশ্বস্ত SMS **কখনো ফেলে দেওয়া হয় না** — জমা হয়, শুধু চিহ্নিত থাকে
+ *    (পুরো প্রজেক্টের "কাঁচা SMS হারানো যাবে না" নিয়ম)।
+ * 🔴 ধাপ ২-এর নিয়ম: **`psms_sender_status() === 'trusted'` না হলে কোনো দাবি
+ *    অটো-অনুমোদন পাবে না** — অ্যাডমিন নিজে দেখে সিদ্ধান্ত নেবেন।
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const PSMS_SENDER_MAX   = 60; // একটা প্রেরকের নামের সর্বোচ্চ দৈর্ঘ্য
+const PSMS_SENDER_LIMIT = 30; // হোয়াইটলিস্টে সর্বোচ্চ কয়টা নাম
+
+// ডিফল্ট বিশ্বস্ত প্রেরক (অ্যাডমিন সেটিংসে না লিখলে এগুলোই)
+function psms_default_trusted_senders(): array
+{
+    return ['bKash', 'NAGAD', 'Rocket', 'upay'];
+}
+
+// নাম স্বাভাবিক করা — ছোট হাতের, অক্ষর/সংখ্যা ছাড়া সব বাদ
+// ("bKash" · "BKASH" · " bkash " তিনটাই এক; "-"/"."/স্পেস উপেক্ষিত)
+function psms_sender_norm(string $s): string
+{
+    return (string) preg_replace('/[^a-z0-9]+/', '', strtolower(trim($s)));
+}
+
+// প্রেরকটা কি নিছক একটা ফোন নম্বর? (নাম-মাস্ক নয় — অর্থাৎ যে কেউ পাঠাতে পারে)
+function psms_sender_is_number(string $s): bool
+{
+    $n = psms_sender_norm($s);
+    return $n !== '' && strlen($n) >= 4 && ctype_digit($n);
+}
+
+// অ্যাডমিনের লেখা তালিকা (কমা/সেমিকোলন/নতুন লাইন — যেভাবেই লিখুন) → অ্যারে
+function psms_parse_sender_list(string $raw): array
+{
+    $out = [];
+    foreach (preg_split('/[,;\r\n]+/', $raw) ?: [] as $p) {
+        $p = trim($p);
+        if ($p === '') {
+            continue;
+        }
+        $out[] = mb_substr($p, 0, PSMS_SENDER_MAX);
+        if (count($out) >= PSMS_SENDER_LIMIT) {
+            break;
+        }
+    }
+    return $out;
+}
+
+// 🔴 হুবহু মিল (স্বাভাবিক করার পর) — অংশ-মিল ইচ্ছাকৃতভাবে নয়
+function psms_sender_trusted(string $sender, array $trusted): bool
+{
+    $n = psms_sender_norm($sender);
+    if ($n === '') {
+        return false;
+    }
+    foreach ($trusted as $t) {
+        if (psms_sender_norm((string) $t) === $n) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
  * বিল্ট-ইন প্যাটার্ন — বিকাশের দুই রকম + নগদ
  *
  * 🔴 ছাঁচগুলো ইউজারের পাঠানো **আসল** SMS থেকে লেখা (কল্পনা করা নয়) —
@@ -506,6 +581,40 @@ function psms_guess_provider(string $sender, string $text): string
         return 'rocket';
     }
     return '';
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * বিশ্বস্ত প্রেরকের তালিকা ও রায়
+ * 🔴 `get_setting($k) ?: $default` প্যাটার্ন — তৃতীয় প্যারামিটারের উপর ভরসা নয়
+ *    (settings-এ খালি স্ট্রিং সেভ হয়ে থাকলে ডিফল্ট আর আসত না; প্রজেক্টের নিয়ম)।
+ * ⚠️ `settings` key-value বলে **মাইগ্রেশন লাগে না**।
+ * ──────────────────────────────────────────────────────────────────────────── */
+function psms_trusted_senders(): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+    $raw  = function_exists('get_setting') ? trim((string) get_setting('sms_trusted_senders')) : '';
+    $list = psms_parse_sender_list($raw);
+    return $cache = ($list ?: psms_default_trusted_senders());
+}
+
+/* একটা SMS-এর প্রেরক নিয়ে রায়:
+ *   'trusted' — নিবন্ধিত নাম-মাস্ক, অপারেটর ছাড়া কেউ পাঠাতে পারে না
+ *   'number'  — একটা ফোন নম্বর থেকে এসেছে (🔴 যে কেউ পাঠাতে পারে)
+ *   'unknown' — নাম আছে কিন্তু তালিকায় নেই (নতুন সেবা হতে পারে, যাচাই করুন)
+ *   'missing' — ফোন প্রেরকের নামই পাঠায়নি (MacroDroid-এর ঘর ঠিক নেই)
+ */
+function psms_sender_status(string $sender): string
+{
+    if (trim($sender) === '') {
+        return 'missing';
+    }
+    if (psms_sender_trusted($sender, psms_trusted_senders())) {
+        return 'trusted';
+    }
+    return psms_sender_is_number($sender) ? 'number' : 'unknown';
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
