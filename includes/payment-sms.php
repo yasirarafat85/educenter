@@ -561,6 +561,18 @@ function psms_store(PDO $db, string $rawText, string $sender = '', ?string $sent
             'st'   => $hit ? 'parsed' : 'unparsed',
         ]);
         $out = ['ok' => true, 'id' => (int) $db->lastInsertId(), 'dup' => false, 'parsed' => (bool) $hit, 'reason' => ''];
+
+        // 🔑 অভিভাবক আগে TrxID দিয়ে থাকলে (SMS তখনো আসেনি) এই বার্তাটা আসা মাত্রই
+        //    ঐ অপেক্ষমাণ দাবিটা নিজে থেকেই মিলে যাবে — তাই তাঁকে আর কিছু করতে হয় না।
+        // 🔴 নিজের try/catch-এ ও `function_exists` গার্ডে: মেলানো কখনো SMS জমা
+        //    হওয়া ভাঙতে পারবে না (এটাই এই এন্ডপয়েন্টের একমাত্র কাজ)।
+        if ($hit && function_exists('pclaim_rematch')) {
+            try {
+                pclaim_rematch($db, (string) $hit['trxid_norm']);
+            } catch (Throwable $e) {
+                // চুপচাপ
+            }
+        }
     } catch (Throwable $e) {
         $out['reason'] = 'db_error';
     }

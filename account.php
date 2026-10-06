@@ -283,6 +283,14 @@ require __DIR__ . '/includes/site-header.php';
     </div>
     <?php endif; ?>
 
+    <!-- 💳 পেমেন্ট জানিয়ে দেওয়ার তৃতীয় দরজা (অন্য দুটো: রেজিস্ট্রেশনের পরপরই `pay`,
+         আর ফুটারের `payment` লিংক) — ইঞ্জিন একটাই, শুধু প্রবেশপথ আলাদা -->
+    <div class="bg-white rounded-2xl shadow p-5">
+        <h2 class="font-bold text-gray-900 mb-1 flex items-center gap-2"><i data-lucide="credit-card" class="w-5 h-5 text-green-600"></i> টাকা পাঠিয়েছেন?</h2>
+        <p class="text-gray-400 text-xs mb-4">বিকাশ/নগদে পাঠিয়ে থাকলে TrxID দিয়ে জানিয়ে দিন — আমরা মিলিয়ে দেখে নিশ্চিত করব।</p>
+        <a href="payment" class="inline-block bg-green-600 text-white font-bold px-5 py-2.5 rounded-xl text-sm">💳 পেমেন্ট জানিয়ে দিন</a>
+    </div>
+
     <!-- তথ্য সংশোধনের অনুরোধ / মন্তব্য -->
     <div class="bg-white rounded-2xl shadow p-5">
         <h2 class="font-bold text-gray-900 mb-1 flex items-center gap-2"><i data-lucide="message-square" class="w-5 h-5 text-indigo-500"></i> কিছু জানাতে চান?</h2>

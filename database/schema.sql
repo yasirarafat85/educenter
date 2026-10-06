@@ -553,6 +553,7 @@ CREATE TABLE payment_methods (
     channel VARCHAR(20) NOT NULL DEFAULT 'bkash',   -- bkash / nagad / rocket / bank / whatsapp / other
     value VARCHAR(150) NOT NULL,                     -- নাম্বার অথবা অ্যাকাউন্ট
     instruction VARCHAR(255) DEFAULT NULL,           -- নির্দেশনা/নোট
+    qr_image VARCHAR(255) NOT NULL DEFAULT '',        -- অ্যাডমিনের নিজের bKash/নগদ অ্যাপ থেকে নামানো QR ছবি (ঐচ্ছিক)
     scope_all TINYINT(1) NOT NULL DEFAULT 1,         -- 1 = সব আইটেমে; 0 = নির্দিষ্ট আইটেমে
     scope_items TEXT DEFAULT NULL,                   -- JSON টোকেন লিস্ট (scope_all=0 হলে): ["course:5","product:2"]
     is_active TINYINT(1) NOT NULL DEFAULT 1,

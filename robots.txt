@@ -12,6 +12,10 @@ Disallow: /log-download.php
 Disallow: /ajax-lookup-registration.php
 Disallow: /ajax-lookup-interest.php
 Disallow: /sms-in.php
+Disallow: /pay
+Disallow: /payment
+Disallow: /pay-submit.php
+Disallow: /pay-status.php
 
 # অভিভাবকের ব্যক্তিগত পাতা — এগুলো সার্চে আসার কিছু নেই
 Disallow: /account

@@ -22,6 +22,8 @@
 
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/payment-sms.php';
+// 🔑 দেরিতে আসা SMS অপেক্ষমাণ দাবির সাথে নিজে থেকেই মিলিয়ে দেওয়ার জন্য
+require_once __DIR__ . '/includes/payment-claim.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Robots-Tag: noindex, nofollow');

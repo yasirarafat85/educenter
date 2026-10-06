@@ -1,12 +1,19 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/payment-claim.php';
 
+/* 🔴🔴 আগে এখানে `unset($_SESSION['registration_success'])` ছিল — পাতাটা একবারই
+ *      খুলত। অভিভাবক পেমেন্ট করতে bKash অ্যাপে গিয়ে ফিরে এসে রিফ্রেশ দিলেই
+ *      হোমপেজে ছিটকে যেতেন। এখন সেশনে থেকেই যায় (ব্রাউজার বন্ধ হলে মুছবে), আর
+ *      আসল স্থায়ী ঠিকানা হলো `pay?r=…&k=…` (HMAC চাবি, মাইগ্রেশন লাগে না)। */
 $success = $_SESSION['registration_success'] ?? null;
-unset($_SESSION['registration_success']);
 
 if (!$success) {
     redirect('index.php');
 }
+
+$regRef  = (int) ($success['ref'] ?? 0);
+$payUrl  = pay_link_url($regRef);
 
 $isCourse = $success['type'] === 'course';
 $pageTitle = 'ধন্যবাদ';
@@ -67,13 +74,33 @@ require __DIR__ . '/includes/site-header.php';
         </button>
     </div>
 
-    <!-- অ্যাডমিন-নিয়ন্ত্রিত পেমেন্ট বক্স — এই আইটেমে প্রযোজ্য নাম্বার/WhatsApp দেখায় (per-course scope) -->
     <?php
+        /* 💳 পেমেন্টের ধাপ — এখন একটা আলাদা পাতায় (`pay.php`): চ্যানেল বাছা →
+         * নম্বর/QR → TrxID দিয়ে যাচাই। এখানে শুধু একটা বড় বোতাম।
+         * 🔴 পুরনো `render_payment_box()` ফলব্যাক হিসেবে থেকেই যায় — SMS-যাচাই
+         *    চালু না থাকলে (বা কোনো bKash/নগদ নাম্বার সেট না থাকলে) অভিভাবক যেন
+         *    অন্তত নাম্বারগুলো দেখতে পান। **এই ফলব্যাক সরাবেন না।** */
         $payReg = get_db()->prepare('SELECT type, item_id FROM registrations WHERE id = :id');
-        $payReg->execute(['id' => (int) $success['ref']]);
+        $payReg->execute(['id' => $regRef]);
         $payRow = $payReg->fetch() ?: [];
-        echo render_payment_box($payRow['type'] ?? '', (int) ($payRow['item_id'] ?? 0));
+
+        $payReady = $payUrl !== ''
+            && psms_ready(get_db())
+            && pclaim_methods(get_db(), (string) ($payRow['type'] ?? ''), (int) ($payRow['item_id'] ?? 0));
     ?>
+    <?php if ($payReady): ?>
+        <div class="mt-8 text-center">
+            <a href="<?= e($payUrl) ?>" class="pay-go" style="display:inline-block;width:auto;padding:16px 32px;text-decoration:none;">
+                💳 এখনই পেমেন্ট করুন
+            </a>
+            <p class="text-xs text-gray-500 mt-3">
+                বিকাশ/নগদে টাকা পাঠিয়ে TrxID দিলেই সাথে সাথে যাচাই হয়ে যাবে।
+                <br>পরে করতে চাইলেও সমস্যা নেই — আপনার রেজিস্ট্রেশন অক্ষত থাকবে।
+            </p>
+        </div>
+    <?php else: ?>
+        <?= render_payment_box($payRow['type'] ?? '', (int) ($payRow['item_id'] ?? 0)) ?>
+    <?php endif; ?>
 </div>
 
 <script src="assets/js/html2canvas.min.js?v=<?= @filemtime(__DIR__ . '/assets/js/html2canvas.min.js') ?: '1' ?>"></script>

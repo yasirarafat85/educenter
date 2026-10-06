@@ -360,8 +360,9 @@ require_once __DIR__ . '/includes/layout-top.php';
 <div class="mb-3">
     <h2 class="font-bold text-gray-800">📝 অমীমাংসিত দাবি (<?= (int) $counts['claims'] ?>)</h2>
     <p class="text-xs text-gray-500 mt-1">
-        অভিভাবক TrxID দিয়ে জানিয়েছেন কিন্তু SMS-এর সাথে এখনো মেলেনি।
-        <b>ধাপ ২-এ পাবলিক ফর্ম চালু হলে এখানে আসতে শুরু করবে।</b>
+        অভিভাবক নিজে TrxID দিয়ে জানিয়েছেন। ⏳ মানে SMS-এর সাথে এখনো মেলেনি বা কোথাও গরমিল আছে
+        (কারণটা "নোট" ঘরে লেখা), ✅ মানে মিলে গেছে — এখন শুধু টাকার খাতায় বসানো বাকি।
+        🔴 <b>এই পাতা থেকে খাতায় কিছুই বসে না</b> — সেটা ধাপ ৩-এর কাজ।
     </p>
 </div>
 <div class="bg-white rounded-2xl shadow overflow-x-auto mb-6">
@@ -369,9 +370,9 @@ require_once __DIR__ . '/includes/layout-top.php';
         <thead class="bg-gray-50 text-left">
             <tr>
                 <th class="px-3 py-2">কোর্স / অর্ডার</th>
+                <th class="px-3 py-2">যিনি জানিয়েছেন</th>
                 <th class="px-3 py-2">টাকা</th>
                 <th class="px-3 py-2">TrxID</th>
-                <th class="px-3 py-2">মাধ্যম</th>
                 <th class="px-3 py-2">অবস্থা</th>
                 <th class="px-3 py-2">কখন</th>
             </tr>
@@ -396,12 +397,28 @@ require_once __DIR__ . '/includes/layout-top.php';
                         <?php endif; ?>
                     </div>
                 </td>
+                <td class="px-3 py-2">
+                    <div class="min-w-0">
+                        <a href="tel:<?= e($c['phone']) ?>" class="font-bold text-gray-800"><?= e($c['phone'] ?: '—') ?></a>
+                        <?php if (!empty($c['channel'])): ?>
+                            <?php [$chL, $chC] = payment_channel_meta((string) $c['channel']); ?>
+                            <div><span class="text-white text-xs font-bold px-2 rounded" style="background:<?= e($chC) ?>;padding-top:1px;padding-bottom:1px"><?= e($chL) ?></span></div>
+                        <?php endif; ?>
+                    </div>
+                </td>
                 <td class="px-3 py-2 font-bold"><?= e(pi_money($c['amount'])) ?></td>
                 <td class="px-3 py-2" style="font-family:monospace"><?= e($c['trxid_norm']) ?></td>
-                <td class="px-3 py-2"><?= e($c['channel'] ?: '—') ?></td>
                 <td class="px-3 py-2">
-                    <?php $sl = ['new' => '⏳ যাচাই চলছে', 'verified' => '✅ যাচাই হয়েছে — খাতায় বসানো বাকি']; ?>
-                    <span class="text-xs font-bold"><?= e($sl[$c['status']] ?? $c['status']) ?></span>
+                    <div class="min-w-0">
+                        <?php $sl = ['new' => '⏳ যাচাই চলছে', 'verified' => '✅ যাচাই হয়েছে — খাতায় বসানো বাকি', 'posted' => '✔ খাতায় বসানো হয়েছে']; ?>
+                        <span class="text-xs font-bold"><?= e($sl[$c['status']] ?? $c['status']) ?></span>
+                        <?php if (!empty($c['auto_confirmed'])): ?>
+                            <div class="text-xs text-green-700">অর্ডার অটো-কনফার্ম হয়েছে</div>
+                        <?php endif; ?>
+                        <?php if (trim((string) ($c['admin_note'] ?? '')) !== ''): ?>
+                            <div class="text-xs text-amber-800 mt-0.5">⚠️ <?= e((string) $c['admin_note']) ?></div>
+                        <?php endif; ?>
+                    </div>
                 </td>
                 <td class="px-3 py-2 text-xs text-gray-600"><?= e(pi_ago($c['created_at'])) ?></td>
             </tr>

@@ -4,10 +4,17 @@
 // দেখাবে সেটা সেট করা যায় (payment_methods টেবিল, scope_all/scope_items)।
 
 require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/../includes/upload.php';
+require_once __DIR__ . '/includes/form-helpers.php';   // admin_image_src() — QR প্রিভিউ
 admin_require_login();
 
 $db = get_db();
 $pageTitle = 'পেমেন্ট মেথড';
+
+/* 🔴 মাইগ্রেশনের আগে না ভাঙা: `migrate-payment-qr.sql` না চালানো থাকলে QR-এর ঘরটা
+ *    ফর্ম ও কোয়েরি দুই জায়গা থেকেই বাদ যায়, বাকি পাতা আগের মতোই চলে।
+ *    **এই গার্ডটা সরাবেন না** (এই প্রজেক্টে ফাইল আগে ডিপ্লয় হয়, SQL পরে চলে)। */
+$hasQr = db_has_column($db, 'payment_methods', 'qr_image');
 $action = $_GET['action'] ?? 'list';
 
 $channels = [
@@ -45,6 +52,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'save') {
     $channel = in_array($_POST['channel'] ?? '', array_keys($channels), true) ? $_POST['channel'] : 'other';
     $value = trim($_POST['value'] ?? '');
     $instruction = trim($_POST['instruction'] ?? '');
+
+    /* 📷 QR ছবি — 🔴 আমরা নিজে bKash/নগদের QR বানাতে পারি না (ওদের অ্যাপ শুধু
+     *    নিজেদের ফরম্যাট চেনে), তাই অ্যাডমিন নিজের অ্যাপ থেকে নামানো ছবিটাই
+     *    আপলোড করেন। খালি থাকলে পাতায় শুধু নম্বর + কপি বোতাম — সেটাই যথেষ্ট। */
+    $qrImage = '';
+    if ($hasQr) {
+        $qrImage = trim((string) ($_POST['qr_existing'] ?? ''));
+        if (!empty($_POST['qr_clear'])) {
+            $qrImage = '';
+        }
+        try {
+            // 🔴 QR চৌকো — তাই `$pad = false` (৪:৩ সাদা ক্যানভাসে বসালে দুই পাশে
+            //    বড় ফাঁকা পড়ত আর QR ছোট হয়ে স্ক্যান করা কঠিন হতো)
+            $newPath = handle_image_upload('qr_file', 'payment-qr', false, 800, 800);
+            if ($newPath !== null) {
+                $qrImage = $newPath;
+            }
+        } catch (Throwable $e) {
+            set_flash('error', 'QR ছবি আপলোড হয়নি: ' . $e->getMessage());
+        }
+    }
     $scopeAll = (($_POST['scope'] ?? 'all') === 'all') ? 1 : 0;
     $scopeItems = $scopeAll ? null : json_encode(array_values(array_filter((array) ($_POST['scope_items'] ?? []))), JSON_UNESCAPED_UNICODE);
     $isActive = isset($_POST['is_active']) ? 1 : 0;
@@ -56,14 +84,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'save') {
     }
 
     if ($id) {
-        $db->prepare('UPDATE payment_methods SET channel=:ch, value=:v, instruction=:ins, scope_all=:sa, scope_items=:si, is_active=:ia, sort_order=:so WHERE id=:id')
-           ->execute(['ch' => $channel, 'v' => $value, 'ins' => $instruction ?: null, 'sa' => $scopeAll, 'si' => $scopeItems, 'ia' => $isActive, 'so' => $sortOrder, 'id' => $id]);
+        $db->prepare('UPDATE payment_methods SET channel=:ch, value=:v, instruction=:ins, ' . ($hasQr ? 'qr_image=:qr, ' : '') . 'scope_all=:sa, scope_items=:si, is_active=:ia, sort_order=:so WHERE id=:id')
+           ->execute(['ch' => $channel, 'v' => $value, 'ins' => $instruction ?: null, 'sa' => $scopeAll, 'si' => $scopeItems, 'ia' => $isActive, 'so' => $sortOrder, 'id' => $id]
+               + ($hasQr ? ['qr' => $qrImage] : []));
     } else {
         if ($sortOrder === 0) {
             $sortOrder = (int) $db->query('SELECT COALESCE(MAX(sort_order),0)+1 FROM payment_methods')->fetchColumn();
         }
-        $db->prepare('INSERT INTO payment_methods (channel, value, instruction, scope_all, scope_items, is_active, sort_order) VALUES (:ch,:v,:ins,:sa,:si,:ia,:so)')
-           ->execute(['ch' => $channel, 'v' => $value, 'ins' => $instruction ?: null, 'sa' => $scopeAll, 'si' => $scopeItems, 'ia' => $isActive, 'so' => $sortOrder]);
+        // 🔴 প্লেসহোল্ডারের সেট আর প্যারামিটারের সেট সবসময় একসাথে বদলান —
+        //    non-emulated prepare-এ বাড়তি/অনুপস্থিত প্যারামিটার = SQLSTATE[HY093]
+        $db->prepare('INSERT INTO payment_methods (channel, value, instruction, ' . ($hasQr ? 'qr_image, ' : '') . 'scope_all, scope_items, is_active, sort_order) VALUES (:ch,:v,:ins,' . ($hasQr ? ':qr,' : '') . ':sa,:si,:ia,:so)')
+           ->execute(['ch' => $channel, 'v' => $value, 'ins' => $instruction ?: null, 'sa' => $scopeAll, 'si' => $scopeItems, 'ia' => $isActive, 'so' => $sortOrder]
+               + ($hasQr ? ['qr' => $qrImage] : []));
     }
     set_flash('success', 'পেমেন্ট মেথড সেভ হয়েছে।');
     redirect('payment-methods.php');
@@ -155,7 +187,7 @@ require __DIR__ . '/includes/layout-top.php';
     <div class="mb-5"><a href="payment-methods.php" class="text-gray-500 text-sm">← সব পেমেন্ট মেথড</a></div>
     <div class="bg-white rounded-2xl shadow p-6 max-w-2xl">
         <h3 class="text-lg font-bold text-gray-800 mb-4"><?= $editRow ? 'পেমেন্ট মেথড সম্পাদনা' : 'নতুন পেমেন্ট মেথড' ?></h3>
-        <form method="post" action="payment-methods.php?action=save" class="space-y-4">
+        <form method="post" action="payment-methods.php?action=save" class="space-y-4" enctype="multipart/form-data">
             <?= csrf_field() ?>
             <?php if ($editRow): ?><input type="hidden" name="id" value="<?= $editRow['id'] ?>"><?php endif; ?>
 
@@ -179,6 +211,31 @@ require __DIR__ . '/includes/layout-top.php';
                 <label class="block text-sm font-semibold text-gray-700 mb-1">নির্দেশনা / নোট</label>
                 <input type="text" name="instruction" value="<?= e($editRow['instruction'] ?? '') ?>" placeholder="যেমন: Send Money করুন (Personal, Merchant না) / Screenshot পাঠান" class="w-full border rounded-xl px-4 py-2.5">
             </div>
+
+            <?php if ($hasQr): ?>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">QR ছবি (ঐচ্ছিক)</label>
+                <input type="hidden" name="qr_existing" value="<?= e($editRow['qr_image'] ?? '') ?>">
+                <?php if (!empty($editRow['qr_image'])): ?>
+                    <div class="mb-2 flex items-center gap-3 flex-wrap">
+                        <img src="<?= e(admin_image_src((string) $editRow['qr_image'])) ?>" alt="QR" style="width:110px;height:110px;object-fit:contain;border:1px solid #e5e7eb;border-radius:10px;background:#fff">
+                        <label class="text-sm text-red-600 font-semibold inline-flex items-center gap-1.5">
+                            <input type="checkbox" name="qr_clear" value="1"> QR সরিয়ে ফেলুন
+                        </label>
+                    </div>
+                <?php endif; ?>
+                <input type="file" name="qr_file" accept="image/*" class="w-full border rounded-xl px-4 py-2.5">
+                <p class="text-xs text-gray-400 mt-1">
+                    🔴 আমরা নিজে bKash/নগদের QR বানাতে পারি না — ওদের অ্যাপ শুধু নিজেদের ফরম্যাটের QR পড়ে।
+                    তাই <b>আপনার নিজের bKash/নগদ অ্যাপ থেকে QR ছবিটা নামিয়ে</b> এখানে দিন।
+                    না দিলেও সমস্যা নেই — তখন পেমেন্ট পাতায় শুধু নম্বর আর "কপি" বোতাম দেখাবে (বেশিরভাগ অভিভাবক ওটাই ব্যবহার করেন)।
+                </p>
+            </div>
+            <?php else: ?>
+            <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-3 text-sm">
+                ⚠️ QR ছবির ঘরটা চালু করতে <code>database/migrate-payment-qr.sql</code> একবার phpMyAdmin-এ চালাতে হবে।
+            </div>
+            <?php endif; ?>
 
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-2">কোথায় দেখাবে?</label>
