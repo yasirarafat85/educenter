@@ -188,6 +188,20 @@
     - **🔴 যাচাইয়ের নিয়ম: ছাপার CSS বদলালে সত্যিই PDF ছাপিয়ে দেখুন** — `chrome --headless --print-to-pdf=out.pdf --no-pdf-header-footer <url>` তারপর `pdftoppm -png` (poppler-utils, `apt-get` দিয়ে বসে)। স্ক্রিনে দেখে বোঝা যায় না; ৭৬৭px-এর ফাঁদটা ঠিক এভাবেই ধরা পড়েছে।
 - **⚠️ ক্লিন URL (.php লুকানো, ২০২৬-০৭-১৬ থেকে)**: রুট `.htaccess`-এ mod_rewrite দিয়ে পাবলিক পেজের `.php` লুকানো — `/worksheets` (worksheets.php), `/` (index.php), `/detail?type=..&id=..`। তিন নিয়ম: (A) দৃশ্যমান `/foo.php`→`/foo` 301 (GET only), (B) `/index.php`→`/`, (C) extensionless→আসল `.php` অভ্যন্তরীণ rewrite (QSA)। redirect `%1` THE_REQUEST থেকে (সাবডিরেক্টরি `/website` + লাইভ রুট দুটোতেই কাজ করে, হার্ডকোড RewriteBase নেই)। **admin/ ও ফাংশনাল endpoint** (`-submit.php`/`ajax-*.php`/`log-download.php`/`sitemap.php`) `.php`-strip রিডাইরেক্ট থেকে বাদ (admin-এ `.php` থাকে)। **নিয়ম**: নতুন পাবলিক নেভিগেশন/`<a>` লিংক সবসময় **extensionless + রিলেটিভ** (leading-slash ছাড়া, যেমন `href="courses"`, home=`href="./"`) দিন — `.php` বা absolute `/` না (সাবডিরেক্টরি ভাঙে)। ফর্মের `action="...-submit.php"` **অপরিবর্তিত `.php`-সহ** রাখুন (POST নিরাপত্তা, redirect শুধু GET-এ ফায়ার করে)। নতুন পাবলিক পেজ যোগ করলে `sitemap.php`-এও ক্লিন URL যোগ করুন। canonical/og:url `site-header.php`-এ REQUEST_URI থেকে হয় বলে ক্লিন URL-এ অটো ঠিক থাকে। **টেস্ট**: লোকাল Apache-এ curl দিয়ে HTTP status যাচাই (`/website/courses`→200, `/website/worksheets.php`→301)।
     - **🚫 ৪০৪ পেজ (`404.php`, ২০২৬-০৯-২৭)**: `.htaccess`-এর **শেষ** rewrite নিয়ম (D) — কিছুই না মিললে `404.php`। 🔴 **`ErrorDocument` ইচ্ছাকৃতভাবে ব্যবহার করা হয়নি** — Apache সেখানে ডকুমেন্ট-রুট থেকে absolute পাথ চায়, তাই লাইভে চললেও লোকাল সাবডিরেক্টরিতে (`/website/404.php`) ভাঙত; mod_rewrite-এর substitution `.htaccess`-এর ফোল্ডারের সাপেক্ষে হয় বলে দুই জায়গাতেই চলে। HTTP স্ট্যাটাস **404.php নিজেই** বসায় (`http_response_code(404)`) — নাহলে গুগল "soft 404" হিসেবে ইনডেক্স করত। অ্যাসেট-এক্সটেনশন ও `admin/` বাদ। **পেজে `$pageNoIndex = true;`** দিলে `site-header.php` canonical-এর বদলে `robots: noindex` পাঠায় (ErrorDocument-এ REQUEST_URI ঐ অস্তিত্বহীন ঠিকানাই থাকে, তাই canonical ভুল হতো)।
+    - **📄 হাতে আপলোড করা আলগা `.html` ফাইল — রুল (C3) (২০২৬-১০-০৬)**: ইউজার cPanel-এ মাঝেমধ্যে
+      আলগা html পাতা রাখেন (গেম/টুল/পরীক্ষামূলক — `road_racer_bangla.html` ইত্যাদি) আর `/road_racer_bangla`
+      ঠিকানায় খোলেন। 🔴 **ওটা আমাদের কোনো নিয়ম ছিল না** — Apache-এর **MultiViews** (mod_negotiation)
+      করত; রুল **(D)** যোগ করার পর extensionless সব অনুরোধ `404.php`-তে চলে যেত, MultiViews সুযোগই
+      পেত না (ইউজারের রিপোর্টে ধরা)। এখন রুল **(C3)** — রুল (C)-এর হুবহু যমজ, শুধু `.html`-এর জন্য,
+      **(C)-এর পরে ও (C2)/(D)-এর আগে**। 🔴 **MultiViews-এর উপর ভরসা করা হয়নি** (হোস্ট ঐ অপশন বন্ধ
+      রাখতে পারে — লাইভে বন্ধই আছে বলে মনে হয়)। ⚠️ ক্রমটা জরুরি: একই নামে `.php` ও `.html` দুটোই
+      থাকলে **`.php`-ই জেতে** (সাইটের আসল পাতা সবসময় আগে)।
+      🔴 **`.htaccess` বদলালে যাচাইয়ের একমাত্র সৎ উপায় আসল Apache** — `php -S` rewrite মানেই না।
+      কনটেইনারে `apt-get install -y apache2` (🔴 **`libapache2-mod-php` নয়**, ঐ প্যাকেজ এই প্রক্সিতে
+      ৪০৩ দেয়), ন্যূনতম `httpd.conf`-এ `mpm_event`/`authz_core`/`dir`/`mime`/`rewrite`/`negotiation`
+      লোড করুন (⚠️ `unixd` **built-in**, লোড করতে গেলে সিনট্যাক্স এরর), `AllowOverride All`, আর
+      `.php` ফাইলের বদলে **মার্কার-লেখা প্লেইন ফাইল** রাখুন — PHP না চললেও "কোন ফাইলটা পরিবেশিত
+      হলো" দেখেই রাউটিং যাচাই হয়ে যায়। **`Options ±MultiViews` দুই অবস্থাতেই চালান।**
     - **🔗 আইটেমের পড়ার-মতো URL (২০২৬-০৯-২৭)**: `course-12-নাম` · `worksheet-4-নাম` · `product-9-নাম` —
       হেল্পার **`item_url($item, $type, $hash = '')`** (`includes/functions.php`), `.htaccess`-এর নিয়ম **(C2)**
       (রুল C-র পরে, D-র আগে) `^(course|worksheet|product)-([0-9]+)(-[^/]*)?/?$` → `detail.php?type=$1&id=$2`।

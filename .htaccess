@@ -25,6 +25,22 @@
     RewriteCond %{REQUEST_FILENAME}.php -f
     RewriteRule ^(.+?)/?$ $1.php [L,QSA]
 
+    # (C3) extensionless URL → আসল .html ফাইল (থাকলে) — রুল (C)-এর হুবহু যমজ।
+    # 🔴 কেন দরকার (২০২৬-১০-০৬ এ ইউজারের ধরা): cPanel-এ হাতে আপলোড করা আলগা
+    #    `.html` ফাইল (গেম/টুল/পরীক্ষামূলক পাতা) `/road_racer_bangla` ঠিকানায় খুলত —
+    #    সেটা আমাদের কোনো নিয়ম নয়, Apache-এর **MultiViews** (mod_negotiation) করত।
+    #    রুল (D) যোগ করার পর extensionless যা-কিছু অবশিষ্ট থাকে সব `404.php`-তে
+    #    চলে যায়, তাই MultiViews আর সুযোগই পায় না — ফাইল ওখানেই আছে, তবু ৪০৪।
+    #    (আসল Apache-এ MultiViews বন্ধ রেখে হুবহু পুনরুৎপাদন করে যাচাই করা।)
+    # 🔴 নিয়মটা MultiViews-এর উপর ভরসা না করে **স্পষ্ট করে** লেখা — হোস্ট ঐ অপশন
+    #    বন্ধ/চালু যা-ই রাখুক, আচরণ এক থাকে।
+    # ⚠️ রুল (C)-এর **পরে** থাকতেই হবে: একই নামে `.php` ও `.html` দুটোই থাকলে
+    #    `.php`-ই জেতে (সাইটের আসল পাতা সবসময় আগে)।
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}.html -f
+    RewriteRule ^(.+?)/?$ $1.html [L,QSA]
+
     # (C2) পড়ার-মতো আইটেম URL → detail.php  (২০২৬-০৯-২৭)
     #      /course-12-হাতের-লেখা  ·  /worksheet-4-বাংলা-প্যাক  ·  /product-9-বই
     # 🔴 আইডিটাই আসল চাবি; নামের অংশটা ঐচ্ছিক ও উপেক্ষিত — তাই অ্যাডমিন নাম বদলালেও
