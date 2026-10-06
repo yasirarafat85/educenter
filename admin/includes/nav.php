@@ -103,6 +103,7 @@ function admin_nav_groups(): array
         $orders[] = ['key' => 'income-fix',       'href' => 'income-fix.php',       'file' => 'income-fix.php',       'icon' => 'scale',             'label' => 'আয় মেলানো'];
         $orders[] = ['key' => 'course-interests', 'href' => 'course-interests.php', 'file' => 'course-interests.php', 'icon' => 'heart-handshake',   'label' => 'আগ্রহ তালিকা'];
         $orders[] = ['key' => 'legacy-students',  'href' => 'legacy-students.php',  'file' => 'legacy-students.php',  'icon' => 'user-round-search', 'label' => 'পুরাতন শিক্ষার্থী'];
+        $orders[] = ['key' => 'payment-inbox',    'href' => 'payment-inbox.php',    'file' => 'payment-inbox.php',    'icon' => 'inbox',             'label' => 'পেমেন্ট ইনবক্স'];
     }
     if (admin_can('parcel')) {
         $orders[] = ['key' => 'course-parcel', 'href' => 'course-parcel.php', 'file' => 'course-parcel.php', 'icon' => 'package-check', 'label' => 'কোর্স পার্সেল'];
@@ -142,6 +143,7 @@ function admin_nav_groups(): array
     $settings = [];
     if (admin_can('settings')) {
         $settings[] = ['key' => 'settings', 'href' => 'settings.php', 'file' => 'settings.php', 'icon' => 'settings', 'label' => 'সাইট সেটিংস'];
+        $settings[] = ['key' => 'sms-patterns', 'href' => 'sms-patterns.php', 'file' => 'sms-patterns.php', 'icon' => 'message-square-code', 'label' => 'SMS ছাঁচ (প্যাটার্ন)'];
     }
     if (admin_can('payment')) {
         $settings[] = ['key' => 'payment-methods', 'href' => 'payment-methods.php', 'file' => 'payment-methods.php', 'icon' => 'wallet', 'label' => 'পেমেন্ট মেথড'];

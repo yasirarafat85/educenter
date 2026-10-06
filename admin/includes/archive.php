@@ -43,6 +43,13 @@ function archive_children_map(): array
             // 🔴 শর্তসাপেক্ষে: মাইগ্রেশনের আগে কলামটাই নেই, শর্ত ছাড়া দিলে আর্কাইভ (ও ডিলিট) ভাঙত।
             (function_exists('db_has_column') && db_has_column(null, 'expenses', 'registration_id'))
                 ? [['table' => 'expenses', 'fk' => 'registration_id']]
+                : [],
+            // 📨 অভিভাবকের পেমেন্ট-দাবি (FK CASCADE, তাই ডিলিটে এমনিতেই যায় — বান্ডলে রাখা হয়
+            // যাতে রিস্টোরে TrxID-র ইতিহাসও ফেরে, আর `UNIQUE(trxid_norm)` আবার দাবি করা আটকায়)।
+            // 🔴 শর্তসাপেক্ষে: migrate-payment-sms.sql চালানোর আগে টেবিলটাই নেই, শর্ত ছাড়া দিলে
+            //    আর্কাইভ **ও ডিলিট** ভাঙত (expenses-এর হুবহু একই কারণ)।
+            (function_exists('db_has_column') && db_has_column(null, 'payment_claims', 'registration_id'))
+                ? [['table' => 'payment_claims', 'fk' => 'registration_id']]
                 : []
         ),
     ];

@@ -886,4 +886,87 @@ ALTER TABLE expenses
     ADD COLUMN batch VARCHAR(100) NULL AFTER item_title,
     ADD KEY idx_expenses_item (item_type, item_id);
 
+-- ------------------------------------------------------------
+-- 📨 SMS-ভিত্তিক অটো পেমেন্ট যাচাই (২০২৬-১০-০৬)।
+-- বিস্তারিত ব্যাখ্যা database/migrate-payment-sms.sql ও PAYMENT-SMS-PLAN.md-এ।
+-- 🔴 এই তিনটা টেবিল থেকে কখনো `registration_payments`/`income`-এ লেখা হয় না —
+--    যাচাই হওয়া দাবি অপেক্ষা করে, অ্যাডমিন এক ট্যাপে খাতায় বসান।
+-- 🔴 বাংলা লেবেল (বিল্ট-ইন প্যাটার্নের নাম সহ) PHP-তে — psms_default_patterns()।
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `payment_sms_patterns` (
+    `id`                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `label`               VARCHAR(120)  NOT NULL DEFAULT '',
+    `provider`            VARCHAR(30)   NOT NULL DEFAULT '',
+    `template`            TEXT          NULL,
+    `pattern`             TEXT          NOT NULL,
+    `fields_json`         TEXT          NULL,
+    `sample_sms`          TEXT          NULL,
+    `is_customer_payment` TINYINT(1)    NOT NULL DEFAULT 1,
+    `is_active`           TINYINT(1)    NOT NULL DEFAULT 1,
+    `sort_order`          INT           NOT NULL DEFAULT 0,
+    `created_at`          TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`          TIMESTAMP     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_psp_active` (`is_active`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `payment_sms` (
+    `id`                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `pattern_id`          INT UNSIGNED  NULL,
+    `provider`            VARCHAR(30)   NOT NULL DEFAULT '',
+    `sender`              VARCHAR(60)   NOT NULL DEFAULT '',
+    `raw_text`            TEXT          NOT NULL,
+    `raw_hash`            CHAR(64)      NOT NULL,
+    `amount`              DECIMAL(10,2) NULL,
+    `sender_number`       VARCHAR(20)   NOT NULL DEFAULT '',
+    `trxid`               VARCHAR(40)   NOT NULL DEFAULT '',
+    `trxid_norm`          VARCHAR(40)   NOT NULL DEFAULT '',
+    `fee`                 DECIMAL(10,2) NULL,
+    `balance`             DECIMAL(12,2) NULL,
+    `ref_text`            VARCHAR(120)  NOT NULL DEFAULT '',
+    `sent_at`             DATETIME      NULL,
+    `is_customer_payment` TINYINT(1)    NOT NULL DEFAULT 1,
+    `parse_status`        VARCHAR(20)   NOT NULL DEFAULT 'unparsed',
+    `claim_id`            INT UNSIGNED  NULL,
+    `received_at`         TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY `uniq_psms_hash` (`raw_hash`),
+    INDEX `idx_psms_trx` (`trxid_norm`),
+    INDEX `idx_psms_recv` (`received_at`),
+    INDEX `idx_psms_open` (`claim_id`, `parse_status`),
+    CONSTRAINT `fk_psms_pattern` FOREIGN KEY (`pattern_id`)
+        REFERENCES `payment_sms_patterns` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `payment_claims` (
+    `id`               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `registration_id`  INT UNSIGNED  NULL,
+    `item_title`       VARCHAR(255)  NOT NULL DEFAULT '',
+    `batch`            VARCHAR(100)  NOT NULL DEFAULT '',
+    `channel`          VARCHAR(30)   NOT NULL DEFAULT '',
+    `phone`            VARCHAR(20)   NOT NULL DEFAULT '',
+    `amount`           DECIMAL(10,2) NOT NULL DEFAULT 0,
+    `trxid`            VARCHAR(40)   NOT NULL DEFAULT '',
+    `trxid_norm`       VARCHAR(40)   NOT NULL DEFAULT '',
+    `status`           VARCHAR(20)   NOT NULL DEFAULT 'new',
+    `matched_sms_id`   INT UNSIGNED  NULL,
+    `auto_confirmed`   TINYINT(1)    NOT NULL DEFAULT 0,
+    `posted_at`        DATETIME      NULL,
+    `posted_by`        INT UNSIGNED  NULL,
+    `admin_note`       VARCHAR(500)  NOT NULL DEFAULT '',
+    `client_ip`        VARCHAR(45)   NOT NULL DEFAULT '',
+    `created_at`       TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`       TIMESTAMP     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uniq_pclaim_trx` (`trxid_norm`),
+    INDEX `idx_pclaim_reg` (`registration_id`),
+    INDEX `idx_pclaim_status` (`status`, `created_at`),
+    CONSTRAINT `fk_pclaim_reg` FOREIGN KEY (`registration_id`)
+        REFERENCES `registrations` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 🔴 payment_sms.claim_id → payment_claims, ON DELETE SET NULL (দুই টেবিল
+--    পরস্পরকে দেখায় বলে এই লিংকটা সবার শেষে ALTER দিয়ে)। দাবি মুছে গেলে SMS-টা
+--    আবার "অদাবিকৃত টাকা"-য় ফিরে আসে — নাহলে অনাথ id নিয়ে চিরতরে লুকিয়ে যেত।
+ALTER TABLE `payment_sms`
+    ADD CONSTRAINT `fk_psms_claim` FOREIGN KEY (`claim_id`)
+        REFERENCES `payment_claims` (`id`) ON DELETE SET NULL;
+
 SET FOREIGN_KEY_CHECKS = 1;

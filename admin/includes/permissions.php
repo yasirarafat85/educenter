@@ -55,6 +55,12 @@ function admin_page_sections(): array
         // 💰 আয় মেলানো — অর্ডারের টাকার খাতা বসায় (registrations.php-এর "টাকা" ড্রয়ারের মতোই), তাই একই সেকশন
         'income-fix.php'            => ['orders'],
         'course-interests.php'      => ['orders'],
+        // 📥 পেমেন্ট ইনবক্স — ফোন থেকে আসা SMS ও অভিভাবকের দাবি (২০২৬-১০-০৬)
+        // 🔴 টাকার বইয়ে কিছু লেখে না, কিন্তু অর্ডারের টাকার সাথে জড়িত — তাই `orders`।
+        //    গোপন চাবি দেখানো/বদলানো আলাদাভাবে `admin_is_super()`-এ গার্ডেড (পাতার ভেতরে)।
+        'payment-inbox.php'         => ['orders'],
+        // 📨 SMS ছাঁচ — কনফিগারেশন, তাই `settings`
+        'sms-patterns.php'          => ['settings'],
         'legacy-students.php'       => ['orders'],
         'course-parcel.php'         => ['parcel'],
         // 👥 গ্রুপ মিলিয়ে দেখা — শুধু পড়ে দেখায় (কিছু সেভ করে না), কিন্তু গ্রুপের
