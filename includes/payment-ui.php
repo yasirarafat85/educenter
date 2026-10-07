@@ -19,6 +19,7 @@ function pay_result_box(?array $result, array $msgs, string $waUrl, int $claimId
     $skin = [
         'verified'  => ['#065f46', '#ecfdf5', '#a7f3d0'],
         'pending'   => ['#92400e', '#fffbeb', '#fde68a'],
+        'already'   => ['#065f46', '#ecfdf5', '#a7f3d0'],
         'duplicate' => ['#991b1b', '#fef2f2', '#fecaca'],
         'notfound'  => ['#991b1b', '#fef2f2', '#fecaca'],
         'invalid'   => ['#991b1b', '#fef2f2', '#fecaca'],
@@ -33,12 +34,17 @@ function pay_result_box(?array $result, array $msgs, string $waUrl, int $claimId
         // 🔴 মিলে গেলে পাতাটা **রিলোড করা হয় না** — ফলাফলটা সেশনে ছিল, রিলোডে
         //    হারিয়ে যেত আর অভিভাবক খালি পাতা দেখতেন; বদলে বাক্সটাই জায়গায় বদলায়।
         $h .= ' data-pay-watch="' . $claimId . '" data-pay-key="' . e(pclaim_token($claimId)) . '"'
-            . ' data-pay-ok="' . e((string) ($msgs['verified'] ?? '')) . '"';
+            . ' data-pay-ok="' . e((string) ($msgs['verified'] ?? '')) . '"'
+            // ⏱️ সময় শেষেও না মিললে এই লেখাটাই বসে (ইউজারের চাওয়া — অনির্দিষ্ট
+            //    "অপেক্ষা করুন" নয়, ৪৫ সেকেন্ডের মধ্যে স্পষ্ট উত্তর)
+            . ' data-pay-wait="' . e((string) ($msgs['timeout'] ?? '')) . '"';
     }
     $h .= '>';
     $h .= '<p class="pay-res-t">' . e($text) . '</p>';
 
-    if ($state !== 'verified') {
+    // 🔴 সফল অবস্থায় (যাচাই হয়েছে / আগেই হয়েছে) WhatsApp বোতাম বা বাড়তি
+    //    লেখা দেখানো হয় না — শুধু "মেলেনি" ধরনের অবস্থায়
+    if ($state !== 'verified' && $state !== 'already') {
         if (($msgs['extra'] ?? '') !== '') {
             $h .= '<p class="pay-res-x">' . e((string) $msgs['extra']) . '</p>';
         }
@@ -86,7 +92,8 @@ function pay_steps_html(array $methods, string $phone = '', float $due = 0.0, bo
         if (trim((string) ($m['instruction'] ?? '')) !== '') {
             $h .= '<p class="pay-ins">' . e((string) $m['instruction']) . '</p>';
         }
-        $h .= '<p class="pay-warn">⚠️ <b>Send Money</b> দিন — <b>Payment</b> নয়। রেফারেন্সে কিছু লিখতে হবে না।</p>';
+        $h .= '<p class="pay-warn">⚠️ <b>Send Money</b> দিন — <b>Payment</b> নয়। রেফারেন্সে কিছু লিখতে হবে না।<br>'
+            . '✅ <b>যেকোনো</b> বিকাশ/নগদ নম্বর থেকে পাঠাতে পারেন — বাবার, আত্মীয়ের বা দোকানের নম্বর হলেও চলবে।</p>';
         $h .= '</div>';
     }
 
@@ -171,24 +178,47 @@ function pay_scripts_html(): string
   if (box && window.fetch) {
     var id = box.getAttribute('data-pay-watch');
     var key = box.getAttribute('data-pay-key');
-    var left = 10;
-    var paint = function () {
+    // ⏱️ প্রথম দেখা ৪ সেকেন্ডে, তারপর প্রতি ৪ সেকেন্ডে — মোট ~৪৪ সেকেন্ড।
+    // 🔴 সময়টা ইচ্ছাকৃত: অভিভাবককে অনির্দিষ্টকাল "অপেক্ষা করুন" দেখানো হবে না,
+    //    ৪৫ সেকেন্ডের মধ্যেই স্পষ্ট উত্তর ও WhatsApp-এর পথ (ইউজারের চাওয়া)।
+    var left = 11;
+    var ok = function () {
       box.style.color = '#065f46'; box.style.background = '#ecfdf5'; box.style.borderColor = '#a7f3d0';
       var t = box.querySelector('.pay-res-t');
       if (t) { t.textContent = box.getAttribute('data-pay-ok') || 'পেমেন্ট যাচাই হয়েছে।'; }
-      box.querySelectorAll('.pay-res-x, .pay-wa').forEach(function (el) { el.remove(); });
+      box.querySelectorAll('.pay-res-x, .pay-wa, .pay-why').forEach(function (el) { el.remove(); });
+      box.removeAttribute('data-pay-watch');
+    };
+    // ⚠️ সময় শেষ — কী কী কারণে হতে পারে সেটা বলা হয়
+    // 🔴 কোন কারণটা আসল সেটা **কখনো** বলা হয় না: তাহলে "এই TrxID আমাদের
+    //    কাছে আছে কিনা" বাইরে থেকে জানা যেত (TrxID-অনুসন্ধানের দরজা)।
+    var stop = function () {
+      box.style.color = '#92400e'; box.style.background = '#fffbeb'; box.style.borderColor = '#fde68a';
+      var t = box.querySelector('.pay-res-t');
+      if (t) { t.textContent = box.getAttribute('data-pay-wait') || 'এখনো মেলানো যায়নি।'; }
+      if (!box.querySelector('.pay-why')) {
+        var ul = document.createElement('ul');
+        ul.className = 'pay-why';
+        ['TrxID-তে ইংরেজি I আর 1, অথবা O আর 0 গুলিয়ে যায়নি তো? আরেকবার মিলিয়ে দেখুন।',
+         'Send Money করেছেন তো? (Payment বা Cash Out হলে মেলে না)',
+         'বার্তাটা আমাদের কাছে আসতে কখনো কয়েক মিনিট দেরি হয় — তখন নিজে থেকেই মিলে যাবে।'
+        ].forEach(function (x) { var li = document.createElement('li'); li.textContent = x; ul.appendChild(li); });
+        var wa = box.querySelector('.pay-wa');
+        if (wa) { box.insertBefore(ul, wa); } else { box.appendChild(ul); }
+      }
+      box.removeAttribute('data-pay-watch');
     };
     var tick = function () {
-      if (left-- <= 0) { return; }
+      if (left-- <= 0) { stop(); return; }
       fetch('pay-status.php?c=' + encodeURIComponent(id) + '&k=' + encodeURIComponent(key), { cache: 'no-store' })
         .then(function (r) { return r.json(); })
         .then(function (j) {
-          if (j && j.ok && j.state === 'verified') { paint(); }
-          else { setTimeout(tick, 6000); }
+          if (j && j.ok && (j.state === 'verified' || j.state === 'posted')) { ok(); }
+          else { setTimeout(tick, 4000); }
         })
-        .catch(function () { setTimeout(tick, 10000); });
+        .catch(function () { setTimeout(tick, 4000); });
     };
-    setTimeout(tick, 5000);
+    setTimeout(tick, 4000);
   }
 })();
 </script>

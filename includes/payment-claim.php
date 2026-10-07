@@ -89,6 +89,10 @@ function pclaim_messages(): array
         'verified'  => get_setting('pay_msg_verified')  ?: '✅ পেমেন্ট যাচাই হয়েছে — ধন্যবাদ!',
         'pending'   => get_setting('pay_msg_pending')   ?: '⏳ আপনার তথ্য জমা হয়েছে। মিলিয়ে দেখা হচ্ছে — সাধারণত কয়েক মিনিট সময় লাগে।',
         'duplicate' => get_setting('pay_msg_duplicate') ?: '⚠️ এই TrxID আগে একবার ব্যবহার করা হয়েছে।',
+        // ✅ আগেই যাচাই হয়ে গেছে — একই TrxID আবার দিলে এটাই দেখানো হয়
+        'already'   => get_setting('pay_msg_already')   ?: '✅ এই পেমেন্টটি আগেই যাচাই হয়ে গেছে — নতুন করে কিছু করতে হবে না।',
+        // ⏱️ ৪৫ সেকেন্ড অপেক্ষার পরেও না মিললে
+        'timeout'   => get_setting('pay_msg_timeout')   ?: '⚠️ এখনো মেলানো যায়নি। আপনার তথ্য জমা আছে — আমরা নিজে দেখে যোগাযোগ করব।',
         'notfound'  => get_setting('pay_msg_notfound')  ?: 'এই নম্বরে কোনো রেজিস্ট্রেশন খুঁজে পাইনি। রেজিস্ট্রেশনের সময় যে নম্বরটি দিয়েছিলেন সেটিই দিন।',
         'extra'     => get_setting('pay_msg_extra')     ?: '',
     ];
@@ -181,31 +185,44 @@ function pclaim_due_hint(PDO $db, array $reg): float
  */
 function pclaim_evaluate(array $claim, array $sms): array
 {
-    $notes = [];
-
+    // 🔴🔴 এই তিনটা **আটকায়** — একটাও শিথিল করবেন না
+    $block = [];
+    // 🔑 ভুয়া SMS ঠেকানোর একমাত্র শক্ত গার্ড (অপারেটরের নিবন্ধিত নাম-মাস্ক)
     if (psms_sender_status((string) ($sms['sender'] ?? '')) !== 'trusted') {
-        $notes[] = 'প্রেরক বিশ্বস্ত নয়';
+        $block[] = 'প্রেরক বিশ্বস্ত নয়';
     }
+    // নিজের ক্যাশ-ইন / ব্যাংক থেকে Add Money — গ্রাহকের পেমেন্ট নয়
     if (empty($sms['is_customer_payment'])) {
-        $notes[] = 'এটা গ্রাহকের পেমেন্ট নয় (ক্যাশ-ইন)';
+        $block[] = 'এটা গ্রাহকের পেমেন্ট নয় (ক্যাশ-ইন)';
     }
+    // 🔑 এক টাকা দুইবার দাবি করা ঠেকায়
     if (!empty($sms['claim_id'])) {
-        $notes[] = 'এই SMS আগেই অন্য দাবিতে জোড়া লেগেছে';
+        $block[] = 'এই SMS আগেই অন্য দাবিতে জোড়া লেগেছে';
     }
 
+    /* ℹ️ নিচের দুটো **শুধু অ্যাডমিনকে জানানোর জন্য — কখনো আটকায় না**
+     * (২০২৬-১০-০৭, ইউজারের স্পষ্ট সিদ্ধান্ত: "যেকোনো বিকাশ থেকেই দিতে পারবে")।
+     * 🔴 কেন নিরাপদ: TrxID কেবল ঐ লেনদেনের SMS-এই থাকে, আর সেটা মিলছে
+     *    **আমাদের নিজের অ্যাকাউন্টে সত্যিই আসা** একটা বার্তার সাথে; উপরের
+     *    তিনটা গার্ড + `UNIQUE(trxid_norm)` মিলে একই টাকা দুইবার দাবি করা
+     *    আটকায়। বাস্তবে অভিভাবকেরা প্রায়ই বাবার/দোকানের bKash থেকে পাঠান,
+     *    আর অঙ্কের ঘরে ভুল লেখেন — ওগুলো আটকালে প্রায় প্রতিটা দাবি হাতে
+     *    অনুমোদন করতে হতো। টাকার আসল অঙ্ক সবসময় SMS-এর অঙ্কই, আর খাতায়
+     *    বসানো অ্যাডমিনের হাতেই (ধাপ ৩)।
+     */
+    $note = [];
     $said = (float) ($claim['amount'] ?? 0);
     $got  = (float) ($sms['amount'] ?? 0);
     if ($said > 0.009 && abs($said - $got) > 0.5) {
-        $notes[] = 'অঙ্ক মেলেনি (লেখা ' . number_format($said, 2) . ', SMS-এ ' . number_format($got, 2) . ')';
+        $note[] = 'অঙ্ক মেলেনি (লেখা ' . number_format($said, 2) . ', SMS-এ ' . number_format($got, 2) . ')';
     }
-
     $claimPhone = psms_phone_norm((string) ($claim['phone'] ?? ''));
     $smsPhone   = psms_phone_norm((string) ($sms['sender_number'] ?? ''));
     if ($claimPhone !== '' && $smsPhone !== '' && $claimPhone !== $smsPhone) {
-        $notes[] = 'টাকা এসেছে অন্য নম্বর থেকে';
+        $note[] = 'টাকা এসেছে অন্য নম্বর থেকে';
     }
 
-    return ['ok' => !$notes, 'note' => implode(' · ', $notes)];
+    return ['ok' => !$block, 'note' => implode(' · ', array_merge($block, $note))];
 }
 
 // TrxID ধরে SMS খোঁজা (হুবহু মিল — 🔴 O↔0 কখনো অনুমান করা হয় না)
@@ -352,10 +369,17 @@ function pclaim_submit(PDO $db, array $in): array
         $prev = null;
     }
     if ($prev) {
-        // একই ফোন থেকে একই TrxID = "কী হলো দেখতে এসেছেন", তাই অবস্থাটাই জানানো হয়
+        $done = in_array((string) $prev['status'], ['verified', 'posted'], true);
+        /* ✅ আগেই যাচাই হয়ে গেছে — ইউজারের স্পষ্ট চাওয়া (২০২৬-১০-০৭):
+         *    "একবার ভেরিফাই করা ট্রানজেকশন নাম্বার আবার দিলে দেখাবে আগে ভেরিফাই হয়েছে"।
+         * 🔴 এই বার্তায় টাকার অঙ্ক/কোর্সের নাম/তারিখ কিছুই যায় না — অন্য নম্বর
+         *    থেকে দিলেও একই লেখা, তাই TrxID-অনুসন্ধানে বাড়তি কিছু জানা যায় না। */
+        if ($done) {
+            return ['state' => 'already', 'message' => $msg['already'], 'claim_id' => 0];
+        }
+        // এখনো অপেক্ষমাণ — একই ফোন হলে অবস্থাটাই জানানো হয় (পোলিং আবার চালু হয়)
         if (bd_phone_canonical((string) $prev['phone']) === $phone) {
-            $state = ((string) $prev['status'] === 'verified' || (string) $prev['status'] === 'posted') ? 'verified' : 'pending';
-            return ['state' => $state, 'message' => $msg[$state], 'claim_id' => (int) $prev['id']];
+            return ['state' => 'pending', 'message' => $msg['pending'], 'claim_id' => (int) $prev['id']];
         }
         return $fail('duplicate', $msg['duplicate']);
     }

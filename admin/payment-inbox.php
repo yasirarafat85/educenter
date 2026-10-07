@@ -569,7 +569,8 @@ require_once __DIR__ . '/includes/layout-top.php';
                             <div class="text-xs text-green-700">অর্ডার অটো-কনফার্ম হয়েছে</div>
                         <?php endif; ?>
                         <?php if (trim((string) ($c['admin_note'] ?? '')) !== ''): ?>
-                            <div class="text-xs text-amber-800 mt-0.5">⚠️ <?= e((string) $c['admin_note']) ?></div>
+                            <?php /* যাচাই হয়ে গেলে নোটটা নিছক তথ্য, সতর্কতা নয় */ ?>
+                            <div class="text-xs text-amber-800 mt-0.5"><?= $c['status'] === 'new' ? '⚠️' : 'ℹ️' ?> <?= e((string) $c['admin_note']) ?></div>
                         <?php endif; ?>
                         <?php /* ⚠️ সময়টা ইচ্ছাকৃতভাবে এখানেই — আলাদা কলাম করলে ৭৬৮px-এ
                                  টেবিল ভিউপোর্ট ছাড়িয়ে যেত (মেপে দেখা) */ ?>

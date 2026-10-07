@@ -1006,6 +1006,9 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
 .pay-res{border:1px solid;border-radius:16px;padding:16px 18px;margin-bottom:18px}
 .pay-res-t{font-weight:800;font-size:15px;line-height:1.75;margin:0}
 .pay-res-x{font-size:13px;line-height:1.75;margin:8px 0 0;opacity:.9}
+/* ⏱️ "কেন মেলেনি" — সময় শেষে JS বসায় (includes/payment-ui.php) */
+.pay-why{font-size:13px;line-height:1.75;margin:10px 0 0;padding-left:20px;opacity:.95}
+.pay-why li{margin-top:4px}
 .pay-wa{display:inline-flex;align-items:center;gap:8px;margin-top:12px;padding:10px 16px;border-radius:12px;
   background:#128c7e;color:#fff;font-weight:700;font-size:14px;text-decoration:none;min-height:44px}
 .pay-wa:hover{background:#0f7a6d}
