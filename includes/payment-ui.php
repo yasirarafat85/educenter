@@ -93,7 +93,8 @@ function pay_steps_html(array $methods, string $phone = '', float $due = 0.0, bo
             $h .= '<p class="pay-ins">' . e((string) $m['instruction']) . '</p>';
         }
         $h .= '<p class="pay-warn">⚠️ <b>Send Money</b> দিন — <b>Payment</b> নয়। রেফারেন্সে কিছু লিখতে হবে না।<br>'
-            . '✅ <b>যেকোনো</b> বিকাশ/নগদ নম্বর থেকে পাঠাতে পারেন — বাবার, আত্মীয়ের বা দোকানের নম্বর হলেও চলবে।</p>';
+            . '✅ <b>যেকোনো</b> বিকাশ/নগদ নম্বর থেকে পাঠাতে পারেন — বাবার, আত্মীয়ের বা দোকানের নম্বর হলেও চলবে।<br>'
+            . '✅ <b>দোকান (এজেন্ট) থেকে</b> এই নম্বরে পাঠালেও চলবে — TrxID দিলেই হবে।</p>';
         $h .= '</div>';
     }
 
@@ -200,7 +201,7 @@ function pay_scripts_html(): string
         var ul = document.createElement('ul');
         ul.className = 'pay-why';
         ['TrxID-তে ইংরেজি I আর 1, অথবা O আর 0 গুলিয়ে যায়নি তো? আরেকবার মিলিয়ে দেখুন।',
-         'Send Money করেছেন তো? (Payment বা Cash Out হলে মেলে না)',
+         'এই নম্বরেই পাঠিয়েছেন তো? (Payment বা Cash Out হলে মেলে না)',
          'বার্তাটা আমাদের কাছে আসতে কখনো কয়েক মিনিট দেরি হয় — তখন নিজে থেকেই মিলে যাবে।'
         ].forEach(function (x) { var li = document.createElement('li'); li.textContent = x; ul.appendChild(li); });
         var wa = box.querySelector('.pay-wa');
