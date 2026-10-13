@@ -623,6 +623,46 @@ function pay_allocate_paid(array $rows, float $paid): array
     return $rows;
 }
 
+// 💰 নতুন একটা পেমেন্ট খাতায় বসানো — উপর থেকে নিচে **বাকি অংশে** যোগ করে।
+//
+// 🔑 `pay_allocate_paid()` থেকে আলাদা, আর এই পার্থক্যটা গুরুত্বপূর্ণ:
+//    • `pay_allocate_paid($rows, $total)` — "মোট এতটুকু জমা পড়েছে" ধরে **সব সারি নতুন করে**
+//      বসায়, অর্থাৎ আগের `amount_paid` মুছে যায়। নতুন খাতা বসানোয় (prefill) ঠিক আছে,
+//      কিন্তু চলতি খাতায় চালালে **অ্যাডমিনের হাতে বসানো কিস্তির জমা হারিয়ে যেত**
+//      (`income-fix.php`-এর ঘরেও একই সতর্কতা লেখা)।
+//    • এটা **যোগ করে** — প্রতিটা সারির ইতিমধ্যে জমা অক্ষত রেখে শুধু বাকিটুকু ভরে,
+//      তাই "অভিভাবক আরেকটা কিস্তি দিলেন" ঘটনাটা হুবহু এভাবেই বসে।
+//
+// 🔴 উদ্বৃত্ত (সব কিস্তি ভরে যাওয়ার পরেও টাকা বাকি) **শেষ সারিতে** বসে — `pay_allocate_paid()`-এর
+//    হুবহু একই নিয়ম, যাতে মোট জমা কখনো হারিয়ে না যায় (advance এভাবেই ধরা পড়ে)।
+// 🔴 ⊘ বাদ দেওয়া সারিতে টাকা বসে না (`pay_net()` ০ ফেরায়) — কিন্তু আগের জমা থাকলে সেটাও অক্ষত।
+// 🔴 বিশুদ্ধ ফাংশন — DB ছোঁয় না।
+function pay_apply_payment(array $rows, float $amount): array
+{
+    $left = round(max(0.0, $amount), 2);
+    if ($left <= 0 || !$rows) {
+        return $rows;
+    }
+    foreach ($rows as $i => $r) {
+        if ($left <= 0) {
+            break;
+        }
+        $already = max(0.0, (float) ($r['amount_paid'] ?? 0));
+        $room    = round(pay_net($r) - $already, 2);   // এই কিস্তিতে আর কত ধরে
+        if ($room <= 0) {
+            continue;
+        }
+        $take = min($left, $room);
+        $rows[$i]['amount_paid'] = round($already + $take, 2);
+        $left = round($left - $take, 2);
+    }
+    if ($left > 0) {
+        $last = array_key_last($rows);
+        $rows[$last]['amount_paid'] = round((float) ($rows[$last]['amount_paid'] ?? 0) + $left, 2);
+    }
+    return $rows;
+}
+
 // পুরনো (বা ভুলভাবে বসা) খাতা কোর্স-ব্যাচের **বর্তমান** সেটিংস দেখে নতুন করে সাজানো।
 // আগের সারিগুলো মুছে যায়, কিন্তু **মোট জমা ও টাকা জমার তারিখ থাকে** — শুধু কিস্তিতে ভাগ হয়ে বসে।
 function pay_rebuild_plan(PDO $db, array $reg): int
