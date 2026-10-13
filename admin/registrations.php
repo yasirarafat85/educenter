@@ -22,6 +22,10 @@ $statusLabels = [
 ];
 $typeLabels = ['course' => 'কোর্স', 'worksheet' => 'ওয়ার্কশিট', 'product' => 'প্রোডাক্ট'];
 
+// 💰 ড্রয়ারের "নতুন টাকা জমা নিন" ঘরের টাইপো-গার্ড (income-fix.php-এর IFX_MAX_AMOUNT-এর মতোই —
+// ফোন নম্বর বা তারিখ ভুলে বসিয়ে ফেলা আটকায়)
+const REG_PAY_MAX_ADD = 1000000;
+
 // ফর্ম থেকে পাঠানো return_url শুধুমাত্র চেনা অ্যাডমিন পেজের মধ্যেই থাকা নিশ্চিত করা (open-redirect ঠেকাতে)
 // course-data.php ও এখান থেকে (একই action=delete/update-details ব্যবহার করে) রিটার্ন করতে পারে
 function safe_return_url(?string $url, string $fallback): string
@@ -258,6 +262,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'pay-save') {
         // টেবিল/কলাম এখনো তৈরি হয়নি — সাদা পেজ না দেখিয়ে কী করতে হবে বলে দেওয়া হয়
         set_flash('error', 'টাকার খাতা সংরক্ষণ করা যায়নি — ডাটাবেসে "registration_payments" টেবিলটি এখনো তৈরি হয়নি। '
             . 'phpMyAdmin-এ database/migrate-payment-ledger.sql ফাইলের SQL একবার চালিয়ে নিন।');
+    }
+    redirect(reg_anchor_url($returnUrl, $id));
+}
+
+// ── 💰 "নতুন টাকা জমা নিন" — ড্রয়ারের উপরের এক-ঘরের ফর্ম (২০২৬-১০-১৩, ধাপ ৪)।
+//
+// সবচেয়ে সাধারণ কাজটা (অভিভাবক টাকা দিলেন, খাতায় বসাতে হবে) আগে ৬টা সারি মিলিয়ে
+// "সংরক্ষণ করুন" চাপা লাগত। এখন শুধু অঙ্কটা লিখলেই হয়।
+//
+// 🔴🔴 এটা `pay_apply_payment()` ব্যবহার করে, **কখনো `pay_allocate_paid()` নয়** —
+//    allocate "মোট জমা এতটুকু" ধরে প্রতিটা সারি নতুন করে বসায়, অর্থাৎ চলতি খাতায় চালালে
+//    অ্যাডমিনের হাতে বসানো কিস্তিগুলো মুছে যেত। apply শুধু **যোগ করে**: আগের জমা অক্ষত,
+//    বাকি অংশে উপর থেকে নিচে, উদ্বৃত্ত (advance) শেষ কিস্তিতে, ⊘ বাদ সারিতে কিছু বসে না।
+//    হুবহু একই পথ `admin/payment-inbox.php`-এর `claim-post`-এও (ধাপ ৩)।
+// 🔴 খাতা না থাকলে `pay_ensure_plan()` আগে কিস্তিগুলো বসায় (আগে-অনুমোদিত আয়ের prefill সহ),
+//    তারপর টাকা — আর আয় সিঙ্ক হয় **সবার শেষে** (আগে করলে এইমাত্র বসানো জমা বইয়ে যেত না)।
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'pay-collect') {
+    $returnUrl = safe_return_url($_POST['return_url'] ?? null, 'registrations.php');
+
+    if (!csrf_verify()) {
+        set_flash('error', 'ফর্ম টোকেন মিলছে না।');
+        redirect($returnUrl);
+    }
+
+    $id     = (int) ($_POST['id'] ?? 0);
+    $amount = round((float) str_replace(',', '', (string) ($_POST['amount'] ?? '')), 2);
+
+    $regStmt = $db->prepare('SELECT * FROM registrations WHERE id = :id');
+    $regStmt->execute(['id' => $id]);
+    $regRow = $regStmt->fetch();
+    if (!$regRow) {
+        set_flash('error', 'রেজিস্ট্রেশনটি পাওয়া যায়নি।');
+        redirect($returnUrl);
+    }
+
+    // 🔴 টাইপো-গার্ড: ০/ঋণাত্মক হলে কিছুই হয় না, অসম্ভব বড় অঙ্কও আটকায়
+    if ($amount <= 0 || $amount > REG_PAY_MAX_ADD) {
+        set_flash('error', 'জমার অঙ্কটা ঠিক নেই — ০-এর বেশি আর ৳'
+            . number_format(REG_PAY_MAX_ADD) . '-এর মধ্যে একটা সংখ্যা লিখুন।');
+        redirect(reg_anchor_url($returnUrl, $id));
+    }
+
+    try {
+        $incBefore = (float) ($db->query('SELECT COALESCE(SUM(amount), 0) AS s FROM income')->fetch()['s'] ?? 0);
+
+        $db->beginTransaction();
+        pay_ensure_plan($db, $regRow);   // খাতা না থাকলে কিস্তিগুলো বসে; থাকলে কখনো ছোঁয়া হয় না
+        $rows       = pay_fetch_many($db, [$id])[$id] ?? [];
+        $paidBefore = pay_paid_total($rows);
+        if (!$rows) {
+            $db->rollBack();
+            set_flash('error', 'এই অর্ডারে কিস্তির ছক বসানো যায়নি — নিচের খাতা থেকে একবার "সংরক্ষণ করুন" চাপুন।');
+            redirect(reg_anchor_url($returnUrl, $id));
+        }
+
+        pay_save_rows($db, $id, pay_apply_payment($rows, $amount));
+        $after     = pay_fetch_many($db, [$id])[$id] ?? [];
+        $paidAfter = pay_paid_total($after);
+
+        // 🔴 নিরাপত্তা-জাল (pay-rebuild/claim-post-এর মতোই): মোট জমা ঠিক এই অঙ্কটাই না বাড়লে পুরোটা বাতিল
+        if (abs($paidAfter - ($paidBefore + $amount)) > 0.05) {
+            $db->rollBack();
+            set_flash('error', 'টাকা বসানো বাতিল করা হলো — মোট জমা মিলছিল না (৳'
+                . number_format($paidBefore, 2) . ' → ৳' . number_format($paidAfter, 2) . ')।');
+            redirect(reg_anchor_url($returnUrl, $id));
+        }
+
+        $summary = pay_summary($after);
+        $db->prepare('UPDATE registrations SET due_amount = :due WHERE id = :id')
+            ->execute(['due' => $summary['balance'], 'id' => $id]);
+        sync_income_for_status($db, $regRow, (string) $regRow['status']);
+        $db->commit();
+
+        $incAfter = (float) ($db->query('SELECT COALESCE(SUM(amount), 0) AS s FROM income')->fetch()['s'] ?? 0);
+        $msg = '💰 ৳' . number_format($amount, 2) . ' জমা বসানো হলো — এই অর্ডারে মোট জমা ৳'
+            . number_format($paidAfter, 2) . '।'
+            . ($summary['balance'] > 0 ? ' বাকি ৳' . number_format($summary['balance'], 2) : ' ✅ পুরো পেইড।')
+            . ' বইয়ের মোট আয় ৳' . number_format($incBefore, 2) . ' → ৳' . number_format($incAfter, 2) . '।';
+        // স্ট্যাটাস আয়-যোগ্য না হলে টাকা খাতায় বসে কিন্তু আয়ে যায় না — সেটা এখানেই বলে দেওয়া
+        if (!in_array((string) $regRow['status'], INCOME_STATUSES, true)) {
+            $msg .= ' ⚠️ অর্ডারের স্ট্যাটাস "' . ($statusLabels[$regRow['status']][0] ?? $regRow['status'])
+                . '" — আয়ের বইয়ে যোগ হতে স্ট্যাটাস কনফার্ম করতে হবে।';
+        }
+        set_flash('success', $msg);
+    } catch (PDOException $ex) {
+        if ($db->inTransaction()) { $db->rollBack(); }
+        set_flash('error', 'টাকা বসানো যায়নি — ডাটাবেসে "registration_payments" টেবিলটি তৈরি আছে কিনা দেখুন '
+            . '(phpMyAdmin-এ database/migrate-payment-ledger.sql একবার চালিয়ে নিন)।');
     }
     redirect(reg_anchor_url($returnUrl, $id));
 }
@@ -972,17 +1064,76 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
         : "confirmSubmit(this, 'টাকার খাতার হিসাব বদলে সংরক্ষণ করতে চান?', 'পরিবর্তনের নিশ্চিতকরণ')";
     $isLegacy = pay_is_legacy_only($rows);
     $money   = fn($v) => number_format((float) $v, (fmod((float) $v, 1) == 0.0) ? 0 : 2);
+
+    // ── ধাপ ৪: সারিগুলো ডিফল্টে কমপ্যাক্ট (নাম · নিট · জমা) — প্রাপ্য/ছাড়/⊘ বাদ/✕ থাকে
+    // "⚙️ বিস্তারিত"-এর পিছনে। 🔴 তবে ঐ ঘরগুলোতে **আগে থেকে কিছু লেখা থাকলে কখনো লুকানো
+    // হয় না** (ছাড় দেওয়া আছে, বা কোনো মাস ⊘ বাদ) — নাহলে "নিট কেন কম দেখাচ্ছে" সেটা
+    // বোঝার উপায়ই থাকত না।
+    $hasExtras = false;
+    foreach ($rows as $r0) {
+        if (pay_is_skipped($r0) || (float) ($r0['discount_value'] ?? 0) > 0) {
+            $hasExtras = true;
+            break;
+        }
+    }
+    // "নতুন টাকা জমা নিন" ঘরের শর্টকাট-চিপ = প্রথম যে কিস্তিতে এখনো বাকি আছে তার বাকিটা
+    $nextDue = 0.0;
+    foreach ($rows as $r0) {
+        if (pay_is_skipped($r0)) { continue; }
+        $left = round(pay_net($r0) - (float) ($r0['amount_paid'] ?? 0), 2);
+        if ($left > 0.01) { $nextDue = $left; break; }
+    }
     ?>
     <tr class="reg-pay-row" id="pay-<?= $rid ?>" hidden>
         <td colspan="<?= $colspan ?>" style="text-align:left;padding:0">
-            <form method="post" action="registrations.php?action=pay-save" class="pay-form p-4" data-rid="<?= $rid ?>"
-                  style="background:#EEF2FF;border-top:2px solid #C7D2FE" onsubmit="return <?= $warn ?>;">
+            <?php // 💰 ধাপ ৪ — সবচেয়ে সাধারণ কাজটা (টাকা জমা নেওয়া) সবার উপরে, একটাই ঘর।
+                  // 🔴 এটা নিচের খাতা-ফর্মের **ভেতরে নয়, আলাদা `<form>`** — HTML-এ নেস্টেড ফর্ম
+                  //    চলেই না, আর নিচের ফর্ম সেভ করলে সব সারি নতুন করে লেখে (জমা-হীন সারি
+                  //    মুছেও ফেলে), তাই দুটো আলাদা রাখাই নিরাপদ। ?>
+            <form method="post" action="registrations.php?action=pay-collect" class="pay-quick-form"
+                  style="background:#EEF2FF;border-top:2px solid #C7D2FE;padding:1rem 1rem 0"
+                  onsubmit="return payQuickConfirm(this);">
+                <?= csrf_field() ?>
+                <input type="hidden" name="id" value="<?= $rid ?>">
+                <input type="hidden" name="return_url" value="<?= e($returnUrl) ?>">
+                <div class="bg-white rounded-xl p-3" style="max-width:760px">
+                    <div class="flex flex-wrap items-end" style="column-gap:.75rem;row-gap:.5rem">
+                        <label class="text-xs text-gray-500 font-semibold" style="min-width:0">💰 নতুন টাকা জমা নিন (৳)
+                            <input type="number" step="any" min="0" name="amount" value="" placeholder="যেমন 500"
+                                   class="pay-quick-amt block w-full border-2 border-indigo-200 rounded-lg px-3 py-2 text-base font-bold text-gray-800" style="max-width:9rem">
+                        </label>
+                        <button type="submit" class="bg-green-600 text-white font-bold px-4 py-2 rounded-xl text-sm whitespace-nowrap">✅ জমা বসান</button>
+                        <?php if ($nextDue > 0.01): ?>
+                            <?php // শর্টকাট — অঙ্কটা **অনুমান নয়**, খাতার পরের বাকি কিস্তির নিজের বাকিটাই ?>
+                            <button type="button" class="pay-quick-chip text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-lg px-2 py-1.5 whitespace-nowrap"
+                                    data-amt="<?= e((string) $nextDue) ?>" title="পরের বাকি কিস্তির অঙ্কটা বসিয়ে দিন">৳<?= $money($nextDue) ?> বসান</button>
+                        <?php endif; ?>
+                        <span class="text-xs font-bold ml-auto <?= $summary['balance'] > 0 ? 'text-red-600' : 'text-green-700' ?>">
+                            <?= $summary['balance'] > 0 ? 'এখন বাকি ৳' . $money($summary['balance']) : '✅ পুরো পেইড' ?>
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-gray-500 mt-2">
+                        যা লিখবেন সেটা <strong>আগের জমার সাথে যোগ</strong> হবে — উপরের কিস্তি থেকে নিচে বসবে, বাড়তি থাকলে শেষ কিস্তিতে (advance)।
+                        <?php if ($isNew): ?> <strong>খাতা এখনো সেভ হয়নি — টাকা বসালে কিস্তিগুলোও একসাথে তৈরি হয়ে যাবে।</strong><?php endif; ?>
+                    </p>
+                </div>
+            </form>
+
+            <form method="post" action="registrations.php?action=pay-save" class="pay-form<?= $hasExtras ? '' : ' pay-lean' ?> p-4" data-rid="<?= $rid ?>"
+                  style="background:#EEF2FF" onsubmit="return <?= $warn ?>;">
                 <?= csrf_field() ?>
                 <input type="hidden" name="id" value="<?= $rid ?>">
                 <input type="hidden" name="return_url" value="<?= e($returnUrl) ?>">
 
                 <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-                    <h4 class="font-bold text-gray-800 text-sm">💰 টাকার খাতা — <?= e($row['customer_name']) ?></h4>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h4 class="font-bold text-gray-800 text-sm">🧾 কিস্তির খাতা — <?= e($row['customer_name']) ?></h4>
+                        <?php // ⚙️ প্রাপ্য/ছাড়/⊘ বাদ/✕ দেখানো-লুকানো। ইচ্ছাকৃতভাবে **মনে রাখা হয় না**
+                              // (localStorage নয়) — প্রতিটা ড্রয়ার আলাদা করে খোলা হয়, আর ছাড়/বাদ
+                              // থাকা খাতা সার্ভারেই খোলা অবস্থায় আসে। ?>
+                        <button type="button" class="pay-detail-toggle text-xs font-semibold px-3 py-1 rounded-lg bg-white border border-gray-200 text-gray-600"
+                                title="প্রাপ্য, ছাড়, ⊘ বাদ ও ✕ মুছুন — দেখানো/লুকানো">⚙️ বিস্তারিত</button>
+                    </div>
                     <?php if ($isNew): ?>
                         <span class="text-xs text-indigo-700 font-semibold">কোর্সের সেটিংস দেখে কিস্তিগুলো বসানো হয়েছে — মিলিয়ে নিয়ে সেভ করুন<?php if ($prefill > 0): ?> (আগে অনুমোদিত আয় ৳<?= $money($prefill) ?> জমা হিসেবে বসানো)<?php endif; ?></span>
                     <?php else: ?>
@@ -1027,17 +1178,17 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                         <input type="hidden" name="p[<?= $idx ?>][month_from]" value="<?= $mFrom ?>">
                         <input type="hidden" name="p[<?= $idx ?>][month_to]" value="<?= $mTo ?>">
                         <div class="flex flex-wrap items-center" style="column-gap:.75rem;row-gap:.5rem">
-                            <label class="text-xs text-gray-500">কিস্তির নাম
+                            <label class="text-xs text-gray-500 pay-name">কিস্তির নাম
                                 <input type="text" name="p[<?= $idx ?>][label]" value="<?= e($r['label']) ?>" maxlength="100"
                                        class="pay-label block border rounded-lg px-2 py-1 text-sm font-bold text-gray-800" style="width:9.5rem">
                             </label>
 
-                            <label class="text-xs text-gray-500">প্রাপ্য
+                            <label class="text-xs text-gray-500 pay-x">প্রাপ্য
                                 <input type="number" step="any" min="0" name="p[<?= $idx ?>][amount_due]" value="<?= e((string) round((float) $r['amount_due'], 2)) ?>"
                                        class="pay-due block border rounded-lg px-2 py-1 text-sm text-gray-800" style="width:6rem">
                             </label>
 
-                            <label class="text-xs text-gray-500">ছাড়
+                            <label class="text-xs text-gray-500 pay-x">ছাড়
                                 <span class="flex gap-1">
                                     <input type="number" step="any" min="0" name="p[<?= $idx ?>][discount_value]" value="<?= e((string) round((float) $r['discount_value'], 2)) ?>"
                                            class="pay-disc border rounded-lg px-2 py-1 text-sm" style="width:4.5rem">
@@ -1061,9 +1212,9 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
 
                             <button type="button" class="pay-fill text-xs font-semibold text-indigo-600" title="নিট পরিমাণটা জমায় বসিয়ে দিন">পুরোটা জমা</button>
                             <?php // মাঝপথে কোর্স ছেড়ে দিলে বাকি মাসগুলো "বাদ" — তখন ঐ কিস্তি প্রাপ্য/বাকিতে গোনা হয় না ?>
-                            <button type="button" class="pay-skip-btn text-xs font-semibold text-gray-500" title="এই মাসটা আর প্রযোজ্য নয় (কোর্স ছেড়ে দিয়েছে)"><?= $st === 'skipped' ? '↩ ফেরাও' : '⊘ বাদ' ?></button>
+                            <button type="button" class="pay-skip-btn pay-x text-xs font-semibold text-gray-500" title="এই মাসটা আর প্রযোজ্য নয় (কোর্স ছেড়ে দিয়েছে)"><?= $st === 'skipped' ? '↩ ফেরাও' : '⊘ বাদ' ?></button>
                             <?php // 🔴 "বাদ" থেকে আলাদা: বাদ = সারিটা থাকে কিন্তু হিসাবে ধরা হয় না; মুছুন = সারিটাই আর থাকবে না ?>
-                            <button type="button" class="pay-del text-xs font-semibold text-red-600 ml-auto" title="এই কিস্তির সারিটাই মুছে ফেলুন (সংরক্ষণ করলে কার্যকর হবে)">✕</button>
+                            <button type="button" class="pay-del pay-x text-xs font-semibold text-red-600 ml-auto" title="এই কিস্তির সারিটাই মুছে ফেলুন (সংরক্ষণ করলে কার্যকর হবে)">✕</button>
                         </div>
                     </div>
                 <?php endforeach; ?>
@@ -1077,15 +1228,15 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                         <input type="hidden" name="p[__IDX__][month_from]" value="0">
                         <input type="hidden" name="p[__IDX__][month_to]" value="0">
                         <div class="flex flex-wrap items-center" style="column-gap:.75rem;row-gap:.5rem">
-                            <label class="text-xs text-gray-500">কিস্তির নাম
+                            <label class="text-xs text-gray-500 pay-name">কিস্তির নাম
                                 <input type="text" name="p[__IDX__][label]" value="" maxlength="100" placeholder="যেমন: বাড়তি কিস্তি"
                                        class="pay-label block border rounded-lg px-2 py-1 text-sm font-bold text-gray-800" style="width:9.5rem">
                             </label>
-                            <label class="text-xs text-gray-500">প্রাপ্য
+                            <label class="text-xs text-gray-500 pay-x">প্রাপ্য
                                 <input type="number" step="any" min="0" name="p[__IDX__][amount_due]" value="0"
                                        class="pay-due block border rounded-lg px-2 py-1 text-sm text-gray-800" style="width:6rem">
                             </label>
-                            <label class="text-xs text-gray-500">ছাড়
+                            <label class="text-xs text-gray-500 pay-x">ছাড়
                                 <span class="flex gap-1">
                                     <input type="number" step="any" min="0" name="p[__IDX__][discount_value]" value="0"
                                            class="pay-disc border rounded-lg px-2 py-1 text-sm" style="width:4.5rem">
@@ -1102,11 +1253,11 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                             </label>
                             <span class="pay-badge inline-block px-2 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500">○ বাকি</span>
                             <button type="button" class="pay-fill text-xs font-semibold text-indigo-600" title="নিট পরিমাণটা জমায় বসিয়ে দিন">পুরোটা জমা</button>
-                            <button type="button" class="pay-skip-btn text-xs font-semibold text-gray-500" title="এই মাসটা আর প্রযোজ্য নয়">⊘ বাদ</button>
-                            <button type="button" class="pay-del text-xs font-semibold text-red-600 ml-auto" title="এই কিস্তির সারিটাই মুছে ফেলুন">✕</button>
+                            <button type="button" class="pay-skip-btn pay-x text-xs font-semibold text-gray-500" title="এই মাসটা আর প্রযোজ্য নয়">⊘ বাদ</button>
+                            <button type="button" class="pay-del pay-x text-xs font-semibold text-red-600 ml-auto" title="এই কিস্তির সারিটাই মুছে ফেলুন">✕</button>
                         </div>
                     </div></template>
-                <div class="pay-rows-end mb-2">
+                <div class="pay-rows-end pay-x mb-2">
                     <button type="button" class="pay-add text-xs font-bold text-indigo-600">+ কিস্তি যোগ করুন</button>
                     <span class="text-xs text-gray-400">— শুধু এই একজনের খাতায় (অন্য কারো বদলাবে না)</span>
                 </div>
@@ -1119,7 +1270,7 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                     <span class="pay-t-bal font-bold <?= $summary['balance'] > 0 ? 'text-red-600' : 'text-green-700' ?>">
                         <?= $summary['balance'] > 0 ? 'বাকি ৳' . $money($summary['balance']) : '✅ পুরো পেইড' ?>
                     </span>
-                    <button type="button" class="pay-same-disc text-xs font-semibold text-indigo-600 ml-auto" title="প্রথম মাসের ছাড়টা বাকি সব মাসে বসিয়ে দিন">সব মাসে একই ছাড়</button>
+                    <button type="button" class="pay-same-disc pay-x text-xs font-semibold text-indigo-600 ml-auto" title="প্রথম মাসের ছাড়টা বাকি সব মাসে বসিয়ে দিন">সব মাসে একই ছাড়</button>
                 </div>
 
                 <div class="flex flex-wrap items-end gap-2">
@@ -1137,6 +1288,16 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
 
 require __DIR__ . '/includes/layout-top.php';
 ?>
+<style>
+    /* 💰 খাতার প্যানেল কমপ্যাক্ট অবস্থায় (ধাপ ৪) — প্রাপ্য/ছাড়/⊘ বাদ/✕ লুকানো থাকে।
+       🔴 `display:none` ইচ্ছাকৃত, `disabled` নয় — ইনপুটগুলো তবু সাবমিট হয়; নাহলে সেভ করলে
+       pay_save_rows() ঐ সারিগুলোর প্রাপ্য/ছাড় হারিয়ে ফেলত। */
+    form.pay-form.pay-lean .pay-x { display: none !important; }
+    /* কমপ্যাক্ট অবস্থায় জায়গা খালি থাকে, তাই কিস্তির নামের ঘরটা বাকিটুকু নিয়ে নেয় —
+       নাহলে "বেতন (কিস্তি 1/2 — 1.5 মাস)" জাতীয় নাম কেটে যেত (স্ক্রিনশটে ধরা)। */
+    form.pay-form.pay-lean .pay-name { flex: 1 1 11rem; min-width: 0; max-width: 24rem; }
+    form.pay-form.pay-lean .pay-label { width: 100% !important; }
+</style>
 
 <?php if ($action === 'list'): ?>
     <div class="flex flex-wrap gap-2 mb-3">
@@ -1860,8 +2021,45 @@ require __DIR__ . '/includes/layout-top.php';
             }
         }
 
+        // 💰 "নতুন টাকা জমা নিন" — অঙ্ক যাচাই + একবার নিশ্চিতকরণ (টাকা ও আয় দুটোই বাড়ে)
+        window.payQuickConfirm = function (form) {
+            var el = form.querySelector('.pay-quick-amt');
+            var v = parseFloat(el && el.value);
+            if (isNaN(v) || v <= 0) {
+                if (el) { el.focus(); }
+                return false;   // খালি/০ হলে কিছুই পাঠানো হয় না
+            }
+            return confirmSubmit(form,
+                'এই অর্ডারের খাতায় ' + money(v) + ' জমা হিসেবে যোগ হবে (আগের জমা অক্ষত থাকবে) — উপরের কিস্তি থেকে নিচে বসবে, '
+                + 'আর বইয়ের আয়ও ঐ পরিমাণ বাড়বে।', 'টাকা জমা নেবেন?');
+        };
+
+        // শর্টকাট চিপ — পরের বাকি কিস্তির অঙ্কটা ঘরে বসায় (সেভ হয় না, শুধু বসে)
+        document.querySelectorAll('form.pay-quick-form').forEach(function (form) {
+            form.addEventListener('click', function (ev) {
+                var chip = ev.target.closest('.pay-quick-chip');
+                if (!chip) { return; }
+                var el = form.querySelector('.pay-quick-amt');
+                if (el) { el.value = chip.dataset.amt || ''; el.focus(); }
+            });
+        });
+
         document.querySelectorAll('form.pay-form').forEach(function (form) {
             refresh(form);
+
+            // ⚙️ "বিস্তারিত" — প্রাপ্য/ছাড়/⊘ বাদ/✕ দেখানো-লুকানো (শুধু এই প্যানেলে)
+            var tog = form.querySelector('.pay-detail-toggle');
+            if (tog) {
+                var paint = function () {
+                    var lean = form.classList.contains('pay-lean');
+                    tog.textContent = lean ? '⚙️ বিস্তারিত' : '⚙️ কমপ্যাক্ট';
+                };
+                paint();
+                tog.addEventListener('click', function () {
+                    form.classList.toggle('pay-lean');
+                    paint();
+                });
+            }
             form.addEventListener('input', function () { refresh(form); });
             form.addEventListener('change', function () { refresh(form); });
 
