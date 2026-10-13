@@ -770,13 +770,16 @@ function cpPermZone(sel) {
                     $ledgerNote = trim((string) ($r['admin_note'] ?? ''));
                     $formNote   = trim((string) ($r['notes'] ?? ''));
                     ?>
+                    <?php // 🔴 অ্যাম্বার বাক্স, ধূসর নয় (২০২৬-১০-১৩, ইউজারের চাওয়া) — আগে ধূসরে
+                          //    কার্ডের বাকি লেখার সাথে মিশে যেত, নোট আছে কিনা চোখেই পড়ত না। ?>
                     <?php if ($ledgerNote !== '' || $formNote !== ''): ?>
-                        <div class="text-sm bg-gray-50 text-gray-700 rounded-lg px-2.5 py-2 mb-2 break-words">
+                        <div class="text-sm bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-2.5 py-2 mb-2 break-words"
+                             style="box-shadow:inset 3px 0 0 #F59E0B">
                             <?php if ($ledgerNote !== ''): ?>
-                                <div>📝 <b>খাতার নোট:</b> <?= e($ledgerNote) ?></div>
+                                <div>📝 <b>নোট:</b> <?= e($ledgerNote) ?></div>
                             <?php endif; ?>
                             <?php if ($formNote !== ''): ?>
-                                <div class="<?= $ledgerNote !== '' ? 'mt-0.5' : '' ?>">🗒️ <b>রেজিস্ট্রেশনের মন্তব্য:</b> <?= e($formNote) ?></div>
+                                <div class="<?= $ledgerNote !== '' ? 'mt-0.5' : '' ?>">🗒️ <b>অভিভাবকের মন্তব্য:</b> <?= e($formNote) ?></div>
                             <?php endif; ?>
                         </div>
                     <?php endif; ?>

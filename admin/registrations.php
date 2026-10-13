@@ -923,11 +923,30 @@ function reg_date_cell(array $row): void
 
 // ── ℹ️ "তথ্য" বোতাম — বাকি (কম দরকারি) ফিল্ডগুলো সারির নিচে ড্রয়ারে খোলে।
 // খাতার প্যানেলের মতোই কলাম না বাড়িয়ে নিচে খোলার নীতি (১৬ কলামে টেবিল কেটে যাচ্ছিল)।
+// 📝 অর্ডারে নোট লেখা আছে কিনা — খাতার নোট (অ্যাডমিনের) ও অভিভাবকের মন্তব্য দুটোই।
+// একটাই জায়গায় রাখা হয়েছে যাতে তালিকা · তথ্য-ড্রয়ার · বিস্তারিত পাতা তিন জায়গায় একই
+// হিসাব হয় (একটা বদলে অন্যটা রেখে দিলে কোথাও চিহ্ন দেখাত কোথাও না)।
+function reg_notes_of(array $row): array
+{
+    $out = [];
+    $a = trim((string) ($row['admin_note'] ?? ''));
+    $b = trim((string) ($row['notes'] ?? ''));
+    if ($a !== '') { $out['📝 নোট'] = $a; }
+    if ($b !== '') { $out['🗒️ অভিভাবকের মন্তব্য'] = $b; }
+    return $out;
+}
+
 function reg_more_cell(array $row): void
 {
+    // 🔴 নোট থাকলে বোতামটাই অ্যাম্বার হয়ে "📝 নোট" লেখা দেখায় — তালিকায় **নতুন কলাম
+    //    বাড়ানো নিষেধ**, তাই "এখানে কিছু লেখা আছে" বোঝানোর জায়গা এটাই। পুরো লেখাটা
+    //    `title`-এ (ডেস্কটপে হোভারে), আর ট্যাপ করলে ড্রয়ারে হাইলাইট করা অবস্থায় আছেই।
+    $notes = reg_notes_of($row);
+    $tip   = $notes ? implode("\n", array_map(fn($k, $v) => $k . ': ' . $v, array_keys($notes), $notes))
+                    : 'বাকি তথ্য দেখুন/লুকান';
     ?>
-    <button type="button" onclick="toggleInfoPanel(<?= (int) $row['id'] ?>)" title="বাকি তথ্য দেখুন/লুকান"
-            class="px-2 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">ℹ️ তথ্য</button>
+    <button type="button" onclick="toggleInfoPanel(<?= (int) $row['id'] ?>)" title="<?= e($tip) ?>"
+            class="px-2 py-1 rounded-lg text-xs font-semibold border whitespace-nowrap <?= $notes ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-gray-100 text-gray-600 border-gray-200' ?>"><?= $notes ? '📝 নোট' : 'ℹ️ তথ্য' ?></button>
     <?php
 }
 
@@ -953,13 +972,20 @@ function reg_more_panel(array $row, int $colspan, string $returnUrl = ''): void
             'থানা'   => (string) ($row['thana'] ?? ''),
         ];
     }
-    $fields['ঠিকানা']            = (string) ($row['address'] ?? '');
-    $fields['অভিভাবকের মন্তব্য'] = (string) ($row['notes'] ?? '');
-    $fields['খাতার নোট']         = (string) ($row['admin_note'] ?? '');
+    $fields['ঠিকানা'] = (string) ($row['address'] ?? '');
+    // 🔴 নোট দুটো এই গ্রিডে **নেই** — নিচে আলাদা অ্যাম্বার বাক্সে, নাহলে ৯টা সাধারণ ঘরের
+    //    মাঝে মিশে গিয়ে চোখেই পড়ত না (ইউজারের চাওয়া)।
+    $noteList = reg_notes_of($row);
     ?>
     <tr class="reg-info-row" id="info-<?= $rid ?>" hidden>
         <td colspan="<?= $colspan ?>" style="text-align:left;padding:0">
             <div class="p-4" style="background:#F9FAFB;border-top:2px solid #E5E7EB">
+                <?php foreach ($noteList as $nLabel => $nText): ?>
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-2 text-sm text-amber-800 break-words"
+                         style="box-shadow:inset 3px 0 0 #F59E0B">
+                        <b><?= e($nLabel) ?>:</b> <?= e($nText) ?>
+                    </div>
+                <?php endforeach; ?>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     <?php foreach ($fields as $label => $val): $val = trim((string) $val); ?>
                         <div>
@@ -1274,8 +1300,13 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                 </div>
 
                 <div class="flex flex-wrap items-end gap-2">
-                    <label class="text-xs text-gray-500 flex-1" style="min-width:12rem">নোট (কুরিয়ার নোট থেকে আলাদা)
-                        <input type="text" name="admin_note" value="<?= e($note) ?>" maxlength="500" class="block w-full border rounded-lg px-3 py-2 text-sm">
+                    <?php // 📝 নোট লেখা থাকলে ঘরটা নিজেই অ্যাম্বার হয়ে যায় (CSS, টাইপ করার সাথে সাথেই) —
+                          // 🔴 `placeholder=" "` ইচ্ছাকৃত: `:placeholder-shown` দিয়েই "ঘরটা খালি কিনা" বোঝা হয়,
+                          //    তাই কোনো JS লাগে না। প্লেসহোল্ডারটা একটা স্পেস, তাই চোখে পড়ে না। ?>
+                    <label class="text-xs text-gray-500 flex-1" style="min-width:12rem">📝 নোট (কুরিয়ার নোট থেকে আলাদা)
+                        <input type="text" name="admin_note" value="<?= e($note) ?>" placeholder=" " maxlength="500"
+                               class="pay-note block w-full border rounded-lg px-3 py-2 text-sm">
+                        <span class="pay-note-flag">✓ নোট লেখা আছে — তালিকায় এই অর্ডারে <b>📝 নোট</b> চিহ্ন দেখাবে</span>
                     </label>
                     <button type="submit" class="bg-indigo-600 text-white font-bold px-5 py-2 rounded-xl text-sm">সংরক্ষণ করুন</button>
                 </div>
@@ -1297,6 +1328,21 @@ require __DIR__ . '/includes/layout-top.php';
        নাহলে "বেতন (কিস্তি 1/2 — 1.5 মাস)" জাতীয় নাম কেটে যেত (স্ক্রিনশটে ধরা)। */
     form.pay-form.pay-lean .pay-name { flex: 1 1 11rem; min-width: 0; max-width: 24rem; }
     form.pay-form.pay-lean .pay-label { width: 100% !important; }
+
+    /* 📝 নোটের ঘর — কিছু লেখা থাকলেই অ্যাম্বার (ইউজারের চাওয়া: "এখানে কিছু লিখলে যাতে
+       হাইলাইট থাকে")। 🔴 `:placeholder-shown` দিয়ে খালি-কিনা দেখা হয়, তাই ইনপুটে
+       `placeholder=" "` থাকা **বাধ্যতামূলক** — সরালে হাইলাইট নীরবে কাজ করা বন্ধ করবে।
+       🔴 `:has()` ব্যবহার করা হয়নি (এই কোডবেসে ওটার উপর ভরসা করা হয় না) — ইঙ্গিতের
+       লেখাটা ইনপুটের **পরে** রাখা হয়েছে যাতে সাধারণ `~` সিলেক্টরেই চলে। */
+    .pay-note:not(:placeholder-shown) {
+        background: #FFFBEB;
+        border-color: #F59E0B;
+        box-shadow: inset 3px 0 0 #F59E0B;
+        color: #78350F;
+        font-weight: 600;
+    }
+    .pay-note-flag { display: none; margin-top: .25rem; font-size: 11px; font-weight: 700; color: #B45309; }
+    .pay-note:not(:placeholder-shown) ~ .pay-note-flag { display: block; }
 </style>
 
 <?php if ($action === 'list'): ?>
@@ -1562,9 +1608,13 @@ require __DIR__ . '/includes/layout-top.php';
                 <div><span class="text-gray-500">পরিমাণ:</span> <span class="font-semibold"><?= (int) $viewRow['quantity'] ?></span></div>
                 <div class="sm:col-span-2"><span class="text-gray-500">ঠিকানা:</span> <span class="font-semibold"><?= e(implode(', ', array_filter([$viewRow['address'], $viewRow['thana'], $viewRow['district']]))) ?></span></div>
             <?php endif; ?>
-            <?php if ($viewRow['notes']): ?>
-            <div class="sm:col-span-2"><span class="text-gray-500">মন্তব্য:</span> <span class="font-semibold"><?= e($viewRow['notes']) ?></span></div>
-            <?php endif; ?>
+            <?php // 📝 নোট দুটো অ্যাম্বার বাক্সে — সাধারণ ঘরের মতো দেখালে চোখে পড়ত না ?>
+            <?php foreach (reg_notes_of($viewRow) as $vnLabel => $vnText): ?>
+                <div class="sm:col-span-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-amber-800 break-words"
+                     style="box-shadow:inset 3px 0 0 #F59E0B">
+                    <b><?= e($vnLabel) ?>:</b> <?= e($vnText) ?>
+                </div>
+            <?php endforeach; ?>
             <div><span class="text-gray-500">তারিখ:</span> <span class="font-semibold"><?= e($viewRow['created_at']) ?></span></div>
         </div>
 
