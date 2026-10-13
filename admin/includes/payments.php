@@ -29,10 +29,20 @@ function pay_guess_fee_mode(array $batch): string
     if (isset(pay_fee_modes()[$mode])) {
         return $mode;
     }
-    $hasRegFee = parse_price_to_number($batch['secondary_fee'] ?? '') > 0;
-    $months    = (int) ($batch['total_parcels'] ?? 0);
-    if ($hasRegFee && $months >= 1) { return 'reg_monthly'; }
-    if ($months >= 2)               { return 'monthly'; }
+    // 🔴 রেজি ফি আছে কিনা — **দুটো ঘরই** দেখা হয় (২০২৬-১০-১৩ ফিক্স)। আগে শুধু `secondary_fee`
+    //    (শুধু দেখানোর লেখা) দেখা হতো, তাই অ্যাডমিন খাতার নিজের ঘর "রেজিস্ট্রেশন ফি — টাকার
+    //    অঙ্কে" ভরলেও লেখার ঘরটা খালি থাকলে গঠন 'monthly' ধরা হতো — রেজি ফি-র কিস্তিটাই খাতায়
+    //    বসত না, আর কেন বসছে না সেটা বোঝারও উপায় ছিল না। `pay_batch_reg_fee()` নিজেও
+    //    `registration_fee`-কেই আগে রাখে, তাই এখানেও সেটাই ডাকা হয়।
+    // 🔴 মাসের সংখ্যাও এখন `pay_batch_months()` দিয়েই (২০২৬-১০-১৩ ফিক্স) — আগে শুধু
+    //    `total_parcels` দেখা হতো, অথচ খাতা নিজে `course_months` → `total_parcels` →
+    //    "মেয়াদ" ক্রমে পড়ে। ফলে "কোর্স কয় মাসের = 3" ভরা থাকলেও পার্সেল-সংখ্যা ০ হলে
+    //    গঠন 'onetime' ধরা হতো আর ৩ মাসের কোর্সে **একটাই** কিস্তি (এক মাসের বেতন) বসত।
+    //    দুই জায়গায় দুই নিয়ম থাকার কোনো কারণ ছিল না।
+    $hasRegFee = pay_batch_reg_fee($batch) > 0;
+    $months    = pay_batch_months($batch);   // কিছু না পেলে ১
+    if ($hasRegFee)     { return 'reg_monthly'; }
+    if ($months >= 2)   { return 'monthly'; }
     return 'onetime';
 }
 
@@ -334,12 +344,26 @@ function pay_build_plan(PDO $db, array $reg): array
         return [pay_blank_row(1, 'onetime', 'পুরো মূল্য', (float) ($reg['income_amount'] ?? 0), 1, 1)];
     }
 
+    return pay_plan_from_batch($batch);
+}
+
+// ব্যাচের কনফিগ (একটা অ্যারে) থেকেই কিস্তির তালিকা — DB ছোঁয় না, তাই **বিশুদ্ধ**।
+//
+// 🔑 `pay_build_plan()` থেকে আলাদা করা হয়েছে (২০২৬-১০-১৩) যাতে `admin/course-batches.php`-এর
+//    "💰 টাকার ছক" প্রিভিউ **হুবহু এই কোডেই** ছক দেখাতে পারে — অ্যাডমিন যা টাইপ করেছেন সেই
+//    মানগুলো একটা অ্যারেতে ভরে দিলেই হয়, সেভ করার দরকার নেই।
+// 🔴 প্রিভিউর জন্য JS-এ হিসাব আবার লেখা হয়নি — ইচ্ছাকৃত। টাকার ভাগ-বাটোয়ারার নিয়ম দুই
+//    জায়গায় থাকলে সময়ের সাথে নীরবে আলাদা হয়ে যেত; তাই প্রিভিউ সার্ভার-রেন্ডারড
+//    (এই কোডবেসে কোথাও AJAX নেই, ফুল রিলোডই কনভেনশন)।
+function pay_plan_from_batch(array $batch): array
+{
+    $rows = [];
+    $seq  = 1;
+
     $mode   = pay_guess_fee_mode($batch);
     $fee    = parse_price_to_number($batch['price'] ?? '');
     $regFee = pay_batch_reg_fee($batch);
     $months = pay_batch_months($batch);
-    $rows   = [];
-    $seq    = 1;
 
     if ($mode === 'onetime') {
         return [pay_blank_row(1, 'onetime', 'পুরো কোর্স ফি', $fee, 1, 1)];
@@ -396,6 +420,176 @@ function pay_build_plan(PDO $db, array $reg): array
         $rows[] = pay_blank_row($seq++, 'monthly', $label, (float) ($amounts[$i] ?? 0), $slot[0], $slot[1]);
     }
     return $rows;
+}
+
+// টাকার অঙ্ক দেখানোর একটাই রূপ (৳১,২৩৪ / পয়সা থাকলে ৳১,২৩৪.৫০) — সংখ্যা English
+// (প্রজেক্ট কনভেনশন: বাংলা ১/৮/৯ পড়তে ভুল হয়)
+function pay_money(float $v): string
+{
+    return '৳' . number_format($v, (fmod($v, 1) == 0.0) ? 0 : 2);
+}
+
+// 💰 "টাকার ছক" প্রিভিউর উপরের অংশ — খাতা আসলে **কোন ঘর থেকে কোন মানটা পড়ছে** সেটা
+// খুলে বলা। ইউজারের আসল অভিযোগ ছিল "সব করা আছে কিন্তু বেশি কমপ্লেক্স" — একই তথ্য
+// তিন-চারটা ঘরে থাকায় কোনটা হিসাবে যাচ্ছে বোঝা যেত না (যেমন "মেয়াদ" লেখা vs
+// "কোর্স কয় মাসের" সংখ্যা)। তাই প্রতিটা মানের পাশে উৎসটাও লেখা হয়।
+//
+// ফেরে: ['mode'=>..., 'facts'=>[['label','value','src'],...], 'warnings'=>[...]]
+// 🔴 বিশুদ্ধ ফাংশন — DB/আউটপুট ছোঁয় না।
+function pay_plan_explain(array $batch): array
+{
+    $mode       = pay_guess_fee_mode($batch);
+    $modeGiven  = isset(pay_fee_modes()[trim((string) ($batch['fee_mode'] ?? ''))]);
+    $fee        = parse_price_to_number($batch['price'] ?? '');
+    $regFeeNum  = (float) ($batch['registration_fee'] ?? 0);
+    $regFeeText = parse_price_to_number($batch['secondary_fee'] ?? '');
+    $regFee     = pay_batch_reg_fee($batch);
+    $months     = pay_batch_months($batch);
+    $slots      = pay_collect_slots($batch, $months);
+    $regParts   = pay_batch_reg_installments($batch);
+    $tuiParts   = pay_batch_tuition_installments($batch, $months);
+    $splitMode  = pay_batch_tuition_split_mode($batch);
+
+    // মাসের সংখ্যা কোন ঘর থেকে এলো — pay_batch_months()-এর ফলব্যাক ক্রমের হুবহু প্রতিধ্বনি
+    if ((int) ($batch['course_months'] ?? 0) > 0) {
+        $monthSrc = 'এই ঘর থেকে';
+    } elseif ((int) ($batch['total_parcels'] ?? 0) > 0) {
+        $monthSrc = '"মোট কয়বার পার্সেল যাবে" থেকে (ঘরটা খালি)';
+    } elseif ((int) parse_price_to_number($batch['duration'] ?? '') > 0) {
+        $monthSrc = '"মেয়াদ" লেখা থেকে বোঝা হয়েছে (ঘরটা খালি)';
+    } else {
+        $monthSrc = 'কোথাও পাওয়া যায়নি — তাই ১ ধরা হয়েছে';
+    }
+
+    $facts = [
+        ['label' => 'ফি-র গঠন', 'value' => pay_fee_modes()[$mode] ?? $mode,
+         'src' => $modeGiven ? 'আপনি নিজে বেছেছেন' : 'নিজে থেকে বোঝা হয়েছে (ঘরটা খালি)'],
+        ['label' => 'মাসিক বেতন', 'value' => pay_money($fee), 'src' => '"মূল/মাসিক ফি" ঘর থেকে'],
+    ];
+    if ($mode === 'reg_monthly') {
+        $facts[] = ['label' => 'রেজিস্ট্রেশন ফি', 'value' => pay_money($regFee),
+            'src' => $regFeeNum > 0
+                ? 'টাকার অঙ্কের ঘর থেকে'
+                : ($regFeeText > 0 ? '"দ্বিতীয় ফি\'র পরিমাণ" লেখা থেকে বোঝা হয়েছে' : 'কোথাও পাওয়া যায়নি')];
+    }
+    if ($mode !== 'onetime') {
+        $facts[] = ['label' => 'কোর্স কয় মাসের', 'value' => $months . ' মাস', 'src' => $monthSrc];
+        $facts[] = ['label' => 'টাকা কয়বার তোলা হবে', 'value' => $slots . ' বার (পার্সেল)',
+            'src' => (int) ($batch['total_parcels'] ?? 0) > 0 ? '"মোট কয়বার পার্সেল যাবে" থেকে' : 'মাসের সংখ্যাই ধরা হয়েছে'];
+    }
+    if ($mode === 'reg_monthly') {
+        $facts[] = ['label' => 'রেজি ফি কয় কিস্তিতে', 'value' => $regParts . ' কিস্তি',
+            'src' => (int) ($batch['reg_installments'] ?? 0) > 0 ? 'এই ঘর থেকে' : 'ঘরটা খালি — একবারেই ধরা হয়েছে'];
+    }
+    if ($mode !== 'onetime') {
+        $facts[] = ['label' => 'বেতন কয় কিস্তিতে', 'value' => $tuiParts . ' কিস্তি',
+            'src' => (int) ($batch['tuition_installments'] ?? 0) > 0 ? 'এই ঘর থেকে' : 'ঘরটা খালি — প্রতি মাসে একবার'];
+        // ⚠️ `pay_tuition_split_modes()`-এর লেখায় নিজেই "(ডিফল্ট)" আছে — পাশে উৎসেও "ডিফল্ট"
+        //    লিখলে দুইবার দেখাত (স্ক্রিনশটে ধরা), তাই এখানে ছোট নামটাই
+        $facts[] = ['label' => 'বেতনের টাকা যেভাবে ভাগ হবে',
+            'value' => $splitMode === 'months' ? 'মাস ধরে ভাগ' : 'টাকা সমান ভাগ',
+            'src' => $splitMode === 'months' ? 'আপনি নিজে বেছেছেন' : 'ডিফল্ট'];
+    }
+
+    // ⚠️ যেগুলো ভুলে যাওয়া সহজ, আর ভুলে গেলে খাতার অঙ্ক নীরবে ভুল হয়
+    $warnings = [];
+    if ($mode !== 'onetime' && $fee <= 0) {
+        $warnings[] = '"মূল/মাসিক ফি" ঘরে টাকার অঙ্ক পাওয়া যাচ্ছে না — বেতনের কিস্তিগুলো ৳0 হয়ে বসবে।';
+    }
+    if ($regFeeNum <= 0 && $regFeeText > 0) {
+        $warnings[] = 'রেজিস্ট্রেশন ফি এখন "দ্বিতীয় ফি"-র লেখা থেকে বোঝা হচ্ছে (' . pay_money($regFeeText)
+            . ')। নিশ্চিত থাকতে "রেজিস্ট্রেশন ফি — টাকার অঙ্কে" ঘরে সংখ্যাটা লিখে দিন।';
+    }
+    if ($mode !== 'reg_monthly' && $regFee > 0) {
+        $warnings[] = 'রেজিস্ট্রেশন ফি ' . pay_money($regFee) . ' লেখা আছে, কিন্তু গঠন "'
+            . (pay_fee_modes()[$mode] ?? $mode) . '" — তাই খাতায় রেজিস্ট্রেশন ফি-র কিস্তি বসবে না।';
+    }
+    if ((int) ($batch['tuition_installments'] ?? 0) > $months) {
+        $warnings[] = 'বেতনের কিস্তি ' . (int) $batch['tuition_installments'] . ' চাওয়া হয়েছে, কিন্তু কোর্স '
+            . $months . ' মাসের — তাই ' . $tuiParts . ' কিস্তিতেই বসবে।';
+    }
+    if ($mode === 'reg_monthly' && $regParts > $slots) {
+        $warnings[] = 'রেজি ফি ' . $regParts . ' কিস্তিতে, কিন্তু পার্সেল যাবে ' . $slots
+            . ' বার — শেষ কিস্তিগুলো একই (শেষ) পার্সেলেই তোলা হবে।';
+    }
+
+    return ['mode' => $mode, 'facts' => $facts, 'warnings' => $warnings];
+}
+
+// তালিকায় দেখানোর এক-লাইনের সারকথা — "📒 রেজি ফি ৩ কিস্তি · বেতন ২ কিস্তি · মোট প্রাপ্য ৳2,570"
+// 🔴 বিশুদ্ধ ফাংশন, HTML নয় (escape করার দায় কলারের)।
+function pay_plan_summary_text(array $rows): string
+{
+    if (!$rows) {
+        return '';
+    }
+    $kinds = ['registration' => 'রেজি ফি', 'monthly' => 'বেতন', 'onetime' => 'এক-কালীন'];
+    $count = [];
+    $total = 0.0;
+    foreach ($rows as $r) {
+        $k = (string) ($r['kind'] ?? '');
+        $count[$k] = ($count[$k] ?? 0) + 1;
+        $total += (float) ($r['amount_due'] ?? 0);
+    }
+    $parts = [];
+    foreach ($kinds as $k => $label) {
+        if (!empty($count[$k])) {
+            $parts[] = $count[$k] > 1 ? $label . ' ' . $count[$k] . ' কিস্তি' : $label;
+        }
+    }
+    $parts[] = 'মোট ' . pay_money($total);   // তালিকার সরু ঘরে বসে বলে সংক্ষিপ্ত
+    return implode(' · ', $parts);
+}
+
+// 💰 প্রিভিউ — ব্যাচের সেটিংস থেকে যে কিস্তিগুলো তৈরি হবে, হুবহু `pay_plan_from_batch()` দিয়েই।
+// 🔴 বিশুদ্ধ ফাংশন (DB/সেশন ছোঁয় না), স্টাইল inline — অ্যাডমিনের কম্পাইলড Tailwind-এ
+//    সব রঙ/ক্লাস নেই বলে রিবিল্ড এড়াতে (CLAUDE.md-র নিয়ম)।
+function pay_plan_preview_html(array $batch): string
+{
+    $rows = pay_plan_from_batch($batch);
+    $ex   = pay_plan_explain($batch);
+
+    $h = '<div class="bg-white rounded-xl border p-4">';
+    $h .= '<div class="font-bold text-gray-800 mb-1">📒 এই সেটিংসে খাতায় যে কিস্তিগুলো বসবে</div>';
+    $h .= '<div class="text-xs text-gray-500 mb-3">অর্ডার কনফার্ম করলে ঠিক এই ছকটাই বসে (জমা ০ থেকে শুরু) — '
+        . 'প্রতিটা অর্ডারে পরে হাতে বদলানো যায়, এখানকার পরিবর্তনে পুরনো খাতা বদলায় না।</div>';
+
+    // উপরের অংশ — কোন ঘর থেকে কোন মান
+    $h .= '<div style="display:grid;grid-template-columns:1fr;gap:.35rem;margin-bottom:.9rem">';
+    foreach ($ex['facts'] as $f) {
+        $h .= '<div class="text-sm" style="display:flex;flex-wrap:wrap;gap:.35rem;align-items:baseline">'
+            . '<span class="text-gray-500">' . e($f['label']) . ':</span>'
+            . '<b class="text-gray-800">' . e($f['value']) . '</b>'
+            . '<span class="text-xs text-gray-400">(' . e($f['src']) . ')</span>'
+            . '</div>';
+    }
+    $h .= '</div>';
+
+    // কিস্তির তালিকা
+    $total = 0.0;
+    $h .= '<div style="display:grid;grid-template-columns:1fr;gap:.3rem">';
+    foreach ($rows as $r) {
+        $total += (float) $r['amount_due'];
+        $from = $r['month_from'] ?? null;
+        $to   = $r['month_to'] ?? null;
+        // "পার্সেল 2" / "পার্সেল 1–2" — সংখ্যা English, cp_month_display()-এর ঢঙে
+        $slot = $from === null ? '' : ('পার্সেল ' . $from . ($from === $to ? '' : '–' . $to));
+        $h .= '<div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:baseline;border-bottom:1px solid #f3f4f6;padding:.3rem 0">'
+            . '<span class="text-sm text-gray-700" style="flex:1 1 auto;min-width:0">' . e($r['label']) . '</span>'
+            . '<b class="text-sm text-gray-900">' . e(pay_money((float) $r['amount_due'])) . '</b>'
+            . ($slot !== '' ? '<span class="text-xs text-gray-400">' . e($slot) . '</span>' : '')
+            . '</div>';
+    }
+    $h .= '</div>';
+    $h .= '<div class="mt-2 text-sm font-bold text-gray-800">মোট প্রাপ্য: ' . e(pay_money($total))
+        . ' <span class="text-xs font-normal text-gray-500">(' . count($rows) . ' কিস্তি)</span></div>';
+
+    foreach ($ex['warnings'] as $w) {
+        $h .= '<div class="mt-2 text-xs" style="background:#fef3c7;color:#92400e;border-radius:.5rem;padding:.5rem .65rem">⚠️ '
+            . e($w) . '</div>';
+    }
+    $h .= '</div>';
+    return $h;
 }
 
 // এই খাতাটা কি নিছক "পুরনো হিসাব"-এর এক সারি? (মাইগ্রেশনে বসানো — কিস্তিতে ভাগ করা নেই)
@@ -593,7 +787,7 @@ function pay_summary(array $rows): array
 // তালিকার চিপ — এক নজরে টাকার অবস্থা
 function pay_status_chip(array $summary): string
 {
-    $money = fn(float $v) => '৳' . number_format($v, (fmod($v, 1) == 0.0) ? 0 : 2);
+    $money = fn(float $v) => pay_money($v);
     // $style — কম্পাইলড Tailwind-এ নেই এমন রঙের জন্য (যেমন text-purple-700); রিবিল্ড-নির্ভরতা এড়াতে
     $chip = function (string $cls, string $text, string $style = '') {
         return '<span class="inline-block px-2 py-1 rounded-lg text-xs font-semibold ' . $cls . '"'

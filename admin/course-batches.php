@@ -8,6 +8,7 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/form-helpers.php';
 require_once __DIR__ . '/includes/archive.php';
+require_once __DIR__ . '/includes/payments.php';   // 💰 টাকার ছকের প্রিভিউ (pay_plan_preview_html)
 require_once __DIR__ . '/../includes/upload.php';
 admin_require_login();
 
@@ -25,35 +26,57 @@ if (!$course) {
 
 $pageTitle = 'ব্যাচ পরিচালনা — ' . $course['title'];
 
+// ফিল্ডগুলো দেখানোর গ্রুপ — 🔑 ২০২৬-১০-১৩ (ইউজার: "সব করা আছে কিন্তু বেশি কমপ্লেক্স")।
+// আগে ২৫টা ঘর একটাই লম্বা তালিকায় ছিল, টাকার ঘরগুলো মাঝে ছড়ানো — কোন ঘরটা খাতার হিসাবে
+// যায় আর কোনটা শুধু সাইটে দেখানোর লেখা, সেটা বোঝার উপায়ই ছিল না।
+// 🔴 গ্রুপিং নিছক **দেখানোর** ব্যবস্থা — সেভ হ্যান্ডলার আগের মতোই $batchFields-এর উপর লুপ
+//    করে, তাই ক্রম বদলালে বা নতুন গ্রুপ যোগ করলে সেভে কিছু বদলায় না।
+$batchGroups = [
+    'main'   => ['title' => '📋 মূল তথ্য', 'hint' => ''],
+    'money'  => ['title' => '💰 টাকার ছক', 'hint' => '🔑 অর্ডারের টাকার খাতা (কিস্তিগুলো) এই ঘরগুলো দেখেই তৈরি হয় — আর কুরিয়ারের মাসিক কালেকশনের অঙ্কও এখান থেকেই আসে। নিচে সাথে সাথেই দেখে নিতে পারবেন কোন ঘর থেকে কোন মানটা যাচ্ছে।'],
+    'show'   => ['title' => '👁️ শুধু দেখানোর জন্য', 'hint' => 'এই লেখাগুলো সাইটে দেখায় — খাতার হিসাবে যোগ হয় না।'],
+    'group'  => ['title' => '🔗 প্রাইভেট গ্রুপের লিংক', 'hint' => 'কোর্স কেনা অভিভাবক নিজের অ্যাকাউন্টে এই লিংকগুলো দেখবেন (ঐচ্ছিক)।'],
+    'switch' => ['title' => '⚙️ সুইচ, সময় ও ক্রম', 'hint' => ''],
+];
+
 // ব্যাচের ফর্ম ফিল্ড কনফিগ — admin/includes/entities.php এর মতোই গঠন, render_field() (form-helpers.php)
 // দিয়ে রেন্ডার হয়, শুধু course-batches.php নিজেই save/load হ্যান্ডেল করে (জেনেরিক manage.php ইঞ্জিন ছাড়া)
 $batchFields = [
-    'batch_name' => ['label' => 'ব্যাচের নাম (যেমন: ৫ম ব্যাচ, July_26 — আগে ব্যবহৃত নাম থেকে বেছে নিতে পারবেন বা নতুন লিখতে পারবেন)', 'type' => 'text', 'required' => true],
-    'image' => ['label' => 'ছবি', 'type' => 'image'],
-    'price' => ['label' => 'মূল/মাসিক ফি (যেমন ৳২৯০ মাসিক)', 'type' => 'text'],
-    'old_price'   => ['label' => 'আগের দাম (ঐচ্ছিক — ডিসকাউন্ট দেখাতে)', 'type' => 'text', 'help' => 'ডিসকাউন্ট দেখাতে চাইলে এখানে আগের (বেশি) দাম দিন — সাইটে এটা কাটা দাগ দিয়ে দেখাবে ও কত% ছাড় হিসাব করে দেখাবে। খালি রাখলে ডিসকাউন্ট দেখাবে না।'],
-    'secondary_fee_label' => ['label' => 'দ্বিতীয় ফি\'র নাম', 'type' => 'text', 'suggest' => true, 'help' => 'যেমন: উপকরণ ফি / রেজিস্ট্রেশন ফি। খালি রাখলে দ্বিতীয় ফি দেখাবে না।'],
-    'secondary_fee' => ['label' => 'দ্বিতীয় ফি\'র পরিমাণ', 'type' => 'text', 'help' => 'যেমন: ৳৩৫০। উপরের নামসহ কার্ড ও রেজিস্ট্রেশন পেজে আলাদা লাইনে দেখাবে (আয়ে যোগ হয় না)।'],
-    'registration_fee' => ['label' => 'রেজিস্ট্রেশন ফি — টাকার অঙ্কে (খাতার জন্য)', 'type' => 'number', 'default' => 0, 'help' => '🔑 অর্ডারের টাকার খাতায় "রেজিস্ট্রেশন ফি" কিস্তির প্রাপ্য এখান থেকেই বসবে। শুধু সংখ্যা লিখুন (যেমন 500)। ০ রাখলে উপরের দ্বিতীয় ফি-র পরিমাণ থেকে বুঝে নেওয়ার চেষ্টা করবে।'],
-    'course_months' => ['label' => 'কোর্স কয় মাসের (খাতার জন্য)', 'type' => 'number', 'default' => 0, 'help' => '🔑 খাতায় এতগুলো মাসের কিস্তি অটো তৈরি হবে (যেমন 3 দিলে ১ম/২য়/৩য় মাস)। ০ রাখলে "মোট কয়বার পার্সেল যাবে" বা "মেয়াদ" থেকে বুঝে নেবে।'],
-    'reg_installments' => ['label' => 'রেজিস্ট্রেশন ফি কয় কিস্তিতে নেওয়া হয়', 'type' => 'number', 'default' => 0, 'help' => 'যেমন 3 দিলে খাতায় রেজিস্ট্রেশন ফি তিন ভাগে বসবে (কিস্তি 1/3, 2/3, 3/3) — টাকা সমান ভাগ হবে, দরকারে প্রতিটার প্রাপ্য হাতে বদলানো যাবে। খালি/০ = একবারেই নেওয়া হয়।'],
-    'tuition_installments' => ['label' => 'বেতন কয় কিস্তিতে নেওয়া হয়', 'type' => 'number', 'default' => 0, 'help' => 'খালি/০ = প্রতি মাসে একবার। 2 দিলে মোট বেতন দুই কিস্তিতে বসবে (৩ মাস × ৬৯০ = ২০৭০ → ১০৩৫ + ১০৩৫)।'],
-    'tuition_split_mode' => ['label' => 'বেতনের কিস্তি কীভাবে ভাগ হবে', 'type' => 'select', 'options' => ['' => 'টাকা সমান ভাগ (ডিফল্ট)', 'months' => 'মাস ধরে ভাগ (আগের কিস্তিতে বেশি মাস)'], 'help' => '🔑 ডিফল্ট "টাকা সমান ভাগ" = মোট বেতন ÷ কিস্তি-সংখ্যা, প্রতিবার একই টাকা (৩ মাসের কোর্স ২ কিস্তিতে → ১০৩৫ + ১০৩৫, অর্থাৎ দেড় মাস করে)। "মাস ধরে ভাগ" নিলে পূর্ণ মাস ধরে বসে (১৩৮০ + ৬৯০)। মাস যখন কিস্তি দিয়ে সমানভাবে ভাগ যায় (৪ মাস ২ কিস্তিতে) তখন দুটোর ফল একই।'],
-    'fee_mode' => ['label' => 'ফি\'র গঠন (পেমেন্ট খাতার জন্য)', 'type' => 'select', 'options' => ['' => '— নিজে থেকে বুঝে নিক —', 'reg_monthly' => 'রেজিস্ট্রেশন ফি + মাসিক বেতন', 'monthly' => 'শুধু মাসিক বেতন', 'onetime' => 'এক-কালীন (পুরো ফি একবারে)'], 'help' => 'অর্ডার তালিকার টাকার খাতায় কিস্তিগুলো এখান থেকে অটো তৈরি হয়। খালি রাখলে উপরের দাম/ফি/পার্সেল-সংখ্যা দেখে সিস্টেম নিজেই বুঝে নেবে।'],
-    'payment_schedule' => ['label' => 'পেমেন্ট সময়সূচি (কখন কত টাকা)', 'type' => 'textarea', 'help' => 'প্রতি লাইনে একটা করে লিখুন — যেমন: "রেজিস্ট্রেশনের সময়: ৳৩৫০ (উপকরণ)" / "১ম মাস: ৳২৯০" / "২য় মাস: ৳২৯০"। রেজিস্ট্রেশন সফল কার্ডে (ডাউনলোডযোগ্য) দেখাবে। খালি রাখলে দেখাবে না। (শুধু দেখানোর জন্য — আয়ে যোগ হয় না।)'],
-    'duration' => ['label' => 'মেয়াদ (যেমন ৩ মাস)', 'type' => 'text'],
-    'instructor' => ['label' => 'প্রশিক্ষক', 'type' => 'text'],
-    'description' => ['label' => 'বিবরণ', 'type' => 'textarea'],
-    'card_excerpt' => ['label' => 'কার্ডে যা দেখাবে (ঐচ্ছিক)', 'type' => 'textarea', 'help' => 'কোর্স/ওয়ার্কশিট তালিকার কার্ডে নামের নিচে এই লেখাটাই দেখাবে — এক-দুই লাইনে সারকথা লিখুন। খালি রাখলে আগের মতোই "বিবরণ"-এর শুরুর অংশ নিজে থেকে দেখাবে (পূর্ণ বাক্য/শব্দ পর্যন্ত)। বিবরণ যদি সালাম বা ভূমিকা দিয়ে শুরু হয়, তাহলে এই ঘরটা ভরে দিলে কার্ডে সুন্দর দেখাবে।'],
-    'fb_group_url' => ['label' => 'প্রাইভেট Facebook গ্রুপ লিংক', 'type' => 'text', 'help' => 'এই কোর্স কেনা অভিভাবক তাঁর অ্যাকাউন্টে এই গ্রুপ লিংক দেখবেন (ঐচ্ছিক)।'],
-    'messenger_group_url' => ['label' => 'প্রাইভেট Messenger গ্রুপ লিংক', 'type' => 'text', 'help' => 'এই কোর্স কেনা অভিভাবক তাঁর অ্যাকাউন্টে এই গ্রুপ লিংক দেখবেন (ঐচ্ছিক)।'],
-    'total_parcels' => ['label' => 'মোট কয়বার পার্সেল যাবে', 'type' => 'number', 'default' => 0, 'help' => 'কোর্স ট্র্যাকিং পেজে প্রতি শিক্ষার্থীর এই কয়টা পার্সেল-স্লট দেখাবে (যেমন ৬)। ০ দিলে ট্র্যাকিং পেজ থেকেও সেট করা যায়।'],
-    'features' => ['label' => 'বৈশিষ্ট্য (প্রতি লাইনে একটি)', 'type' => 'lines'],
-    'hide_parcel' => ['label' => 'পার্সেল হাইড (Yes হলে রেজিস্ট্রেশন ফর্মে রিসিভার নাম/নম্বর/ঠিকানা হাইড থাকবে — ফুল অনলাইন ব্যাচের জন্য)', 'type' => 'checkbox', 'default' => 0, 'warn_off' => true, 'toggle_label' => 'পার্সেল হাইড'],
-    'registration_open' => ['label' => 'রেজিস্ট্রেশন খোলা (Running)? — বন্ধ (No) করলে ব্যাচ সাইটে দেখাবে কিন্তু নতুন রেজিস্ট্রেশন নেওয়া যাবে না', 'type' => 'checkbox', 'default' => 1, 'warn_off' => true, 'toggle_label' => 'রেজিস্ট্রেশন খোলা রাখা'],
-    'registration_deadline' => ['label' => 'ভর্তির শেষ সময় (ঐচ্ছিক — কাউন্টডাউন ঘড়ি)', 'type' => 'datetime', 'help' => 'এখানে তারিখ ও সময় দিলে সাইটে "⏳ ভর্তির সময় বাকি — 3 দিন 14 ঘণ্টা" ঘড়ি দেখাবে (কার্ড, বিস্তারিত পাতা ও ভর্তি ফর্ম — তিন জায়গাতেই), আর শেষ ২৪ ঘণ্টায় লাল হয়ে যাবে। সময় শেষ হলে এই ব্যাচের রেজিস্ট্রেশন নিজে থেকেই বন্ধ হয়ে যাবে — কোর্সটা "আসছে শীঘ্রই" তালিকায় চলে যাবে আর বোতাম হয়ে যাবে "জানিয়ে রাখুন"। খালি রাখলে কোনো ঘড়ি দেখাবে না। সময় বাংলাদেশ সময় ধরে হিসাব হয়। উপরের সুইচ দিয়ে হাতে বন্ধ করলে সেটাই চূড়ান্ত।'],
-    'is_active' => ['label' => 'সাইটে দেখাবে?', 'type' => 'checkbox', 'default' => 1, 'warn_off' => true, 'toggle_label' => 'ব্যাচটি সাইটে দেখানো'],
-    'sort_order' => ['label' => 'ক্রম নম্বর (এই কোর্সের ব্যাচগুলোর মধ্যে, ছোট সংখ্যা আগে দেখাবে, অটো বসে)', 'type' => 'number', 'default' => 0],
+    // ── 📋 মূল তথ্য ──────────────────────────────────────────────
+    'batch_name' => ['group' => 'main', 'label' => 'ব্যাচের নাম (যেমন: ৫ম ব্যাচ, July_26 — আগে ব্যবহৃত নাম থেকে বেছে নিতে পারবেন বা নতুন লিখতে পারবেন)', 'type' => 'text', 'required' => true],
+    'image' => ['group' => 'main', 'label' => 'ছবি', 'type' => 'image'],
+    'instructor' => ['group' => 'main', 'label' => 'প্রশিক্ষক', 'type' => 'text'],
+    'description' => ['group' => 'main', 'label' => 'বিবরণ', 'type' => 'textarea'],
+    'card_excerpt' => ['group' => 'main', 'label' => 'কার্ডে যা দেখাবে (ঐচ্ছিক)', 'type' => 'textarea', 'help' => 'কোর্স/ওয়ার্কশিট তালিকার কার্ডে নামের নিচে এই লেখাটাই দেখাবে — এক-দুই লাইনে সারকথা লিখুন। খালি রাখলে আগের মতোই "বিবরণ"-এর শুরুর অংশ নিজে থেকে দেখাবে (পূর্ণ বাক্য/শব্দ পর্যন্ত)। বিবরণ যদি সালাম বা ভূমিকা দিয়ে শুরু হয়, তাহলে এই ঘরটা ভরে দিলে কার্ডে সুন্দর দেখাবে।'],
+    'features' => ['group' => 'main', 'label' => 'বৈশিষ্ট্য (প্রতি লাইনে একটি)', 'type' => 'lines'],
+
+    // ── 💰 টাকার ছক (খাতা এখান থেকেই কিস্তি বানায়) ───────────────
+    'price' => ['group' => 'money', 'label' => 'মাসিক বেতন / মূল ফি', 'type' => 'text', 'help' => '🔑 খাতায় প্রতি মাসের বেতনের প্রাপ্য এখান থেকেই বসে। "৳২৯০ মাসিক" জাতীয় লেখা চলবে — সংখ্যাটা নিজে থেকে বের করে নেওয়া হয়। এক-কালীন কোর্সে এখানেই পুরো ফি দিন।'],
+    'registration_fee' => ['group' => 'money', 'label' => 'রেজিস্ট্রেশন ফি — টাকার অঙ্কে (খাতার জন্য)', 'type' => 'number', 'default' => 0, 'help' => '🔑 খাতায় "রেজিস্ট্রেশন ফি" কিস্তির প্রাপ্য এখান থেকেই বসবে। শুধু সংখ্যা লিখুন (যেমন 500)। ০ রাখলে নিচের "দ্বিতীয় ফি\'র পরিমাণ" লেখা থেকে বুঝে নেওয়ার চেষ্টা করবে — তাই নিশ্চিত থাকতে এখানেই সংখ্যাটা লিখুন।'],
+    'secondary_fee_label' => ['group' => 'money', 'label' => 'রেজিস্ট্রেশন ফি-র নাম', 'type' => 'text', 'suggest' => true, 'help' => 'যেমন: উপকরণ ফি / রেজিস্ট্রেশন ফি। 🔑 খাতায় ঐ কিস্তির নামও এখান থেকেই বসে (খালি রাখলে "রেজিস্ট্রেশন ফি")। সাইটের কার্ডে দ্বিতীয় ফি-র লাইনের নামও এটাই।'],
+    'course_months' => ['group' => 'money', 'label' => 'কোর্স কয় মাসের (খাতার জন্য)', 'type' => 'number', 'default' => 0, 'help' => '🔑 খাতায় এতগুলো মাসের বেতন ধরা হবে (যেমন 3 দিলে ৩ মাসের)। ০ রাখলে নিচের "মোট কয়বার পার্সেল যাবে" বা "মেয়াদ" লেখা থেকে বুঝে নেবে।'],
+    'total_parcels' => ['group' => 'money', 'label' => 'মোট কয়বার পার্সেল যাবে', 'type' => 'number', 'default' => 0, 'help' => '🔑 দুটো কাজ করে: কোর্স পার্সেল পেজে প্রতি শিক্ষার্থীর এই কয়টা মাস-স্লট দেখাবে (যেমন ৬), আর খাতার কিস্তিগুলো কোন পার্সেলে তোলা হবে সেটাও এটা দিয়েই ঠিক হয়। ০ দিলে পার্সেল পেজ থেকেও সেট করা যায়।'],
+    'reg_installments' => ['group' => 'money', 'label' => 'রেজিস্ট্রেশন ফি কয় কিস্তিতে নেওয়া হয়', 'type' => 'number', 'default' => 0, 'help' => 'যেমন 3 দিলে খাতায় রেজিস্ট্রেশন ফি তিন ভাগে বসবে (কিস্তি 1/3, 2/3, 3/3) — টাকা সমান ভাগ হবে আর ১ম/২য়/৩য় পার্সেলে তোলা হবে; দরকারে প্রতিটার প্রাপ্য হাতে বদলানো যাবে। খালি/০ = একবারেই নেওয়া হয়।'],
+    'tuition_installments' => ['group' => 'money', 'label' => 'বেতন কয় কিস্তিতে নেওয়া হয়', 'type' => 'number', 'default' => 0, 'help' => 'খালি/০ = প্রতি মাসে একবার। 2 দিলে মোট বেতন দুই কিস্তিতে বসবে (৩ মাস × ৬৯০ = ২০৭০ → ১০৩৫ + ১০৩৫)।'],
+    'tuition_split_mode' => ['group' => 'money', 'label' => 'বেতনের কিস্তি কীভাবে ভাগ হবে', 'type' => 'select', 'options' => ['' => 'টাকা সমান ভাগ (ডিফল্ট)', 'months' => 'মাস ধরে ভাগ (আগের কিস্তিতে বেশি মাস)'], 'help' => '🔑 ডিফল্ট "টাকা সমান ভাগ" = মোট বেতন ÷ কিস্তি-সংখ্যা, প্রতিবার একই টাকা (৩ মাসের কোর্স ২ কিস্তিতে → ১০৩৫ + ১০৩৫, অর্থাৎ দেড় মাস করে)। "মাস ধরে ভাগ" নিলে পূর্ণ মাস ধরে বসে (১৩৮০ + ৬৯০)। মাস যখন কিস্তি দিয়ে সমানভাবে ভাগ যায় (৪ মাস ২ কিস্তিতে) তখন দুটোর ফল একই।'],
+    'fee_mode' => ['group' => 'money', 'label' => 'ফি\'র গঠন', 'type' => 'select', 'options' => ['' => '— নিজে থেকে বুঝে নিক —', 'reg_monthly' => 'রেজিস্ট্রেশন ফি + মাসিক বেতন', 'monthly' => 'শুধু মাসিক বেতন', 'onetime' => 'এক-কালীন (পুরো ফি একবারে)'], 'help' => 'খাতার কিস্তিগুলো এই গঠন অনুযায়ী তৈরি হয়। খালি রাখলে উপরের ফি/রেজিস্ট্রেশন ফি/পার্সেল-সংখ্যা দেখে সিস্টেম নিজেই বুঝে নেবে — নিচের ছকে কী বোঝা হয়েছে দেখতে পাবেন। অনুমানটা ভুল হলে এখানে নিজে বেছে দিন।'],
+
+    // ── 👁️ শুধু দেখানোর জন্য ─────────────────────────────────────
+    'old_price'   => ['group' => 'show', 'label' => 'আগের দাম (ঐচ্ছিক — ডিসকাউন্ট দেখাতে)', 'type' => 'text', 'help' => 'ডিসকাউন্ট দেখাতে চাইলে এখানে আগের (বেশি) দাম দিন — সাইটে এটা কাটা দাগ দিয়ে দেখাবে ও কত% ছাড় হিসাব করে দেখাবে। খালি রাখলে ডিসকাউন্ট দেখাবে না। (খাতার হিসাবে যায় না।)'],
+    'secondary_fee' => ['group' => 'show', 'label' => 'দ্বিতীয় ফি\'র পরিমাণ (সাইটে যা লেখা থাকবে)', 'type' => 'text', 'help' => 'যেমন: ৳৩৫০। উপরের নামসহ কার্ড ও রেজিস্ট্রেশন পেজে আলাদা লাইনে দেখাবে। ⚠️ এটা নিছক **লেখা** — খাতা উপরের "রেজিস্ট্রেশন ফি — টাকার অঙ্কে" ঘরটা পড়ে; সেটা ০ হলে শেষ উপায় হিসেবে এই লেখা থেকে সংখ্যা বের করার চেষ্টা করে।'],
+    'duration' => ['group' => 'show', 'label' => 'মেয়াদ (যেমন ৩ মাস)', 'type' => 'text', 'help' => 'সাইটে দেখানোর লেখা। ⚠️ খাতা উপরের "কোর্স কয় মাসের" সংখ্যাটা পড়ে — সেটা ০ হলে শেষ উপায় হিসেবে এই লেখা থেকে মাসের সংখ্যা বের করার চেষ্টা করে।'],
+    'payment_schedule' => ['group' => 'show', 'label' => 'পেমেন্ট সময়সূচি (কখন কত টাকা)', 'type' => 'textarea', 'help' => 'প্রতি লাইনে একটা করে লিখুন — যেমন: "রেজিস্ট্রেশনের সময়: ৳৩৫০ (উপকরণ)" / "১ম মাস: ৳২৯০" / "২য় মাস: ৳২৯০"। রেজিস্ট্রেশন সফল কার্ডে (ডাউনলোডযোগ্য) দেখাবে। খালি রাখলে দেখাবে না। (শুধু দেখানোর জন্য — খাতার হিসাবে যায় না।)'],
+
+    // ── 🔗 গ্রুপের লিংক ──────────────────────────────────────────
+    'fb_group_url' => ['group' => 'group', 'label' => 'প্রাইভেট Facebook গ্রুপ লিংক', 'type' => 'text'],
+    'messenger_group_url' => ['group' => 'group', 'label' => 'প্রাইভেট Messenger গ্রুপ লিংক', 'type' => 'text'],
+
+    // ── ⚙️ সুইচ, সময় ও ক্রম ─────────────────────────────────────
+    'hide_parcel' => ['group' => 'switch', 'label' => 'পার্সেল হাইড (Yes হলে রেজিস্ট্রেশন ফর্মে রিসিভার নাম/নম্বর/ঠিকানা হাইড থাকবে — ফুল অনলাইন ব্যাচের জন্য)', 'type' => 'checkbox', 'default' => 0, 'warn_off' => true, 'toggle_label' => 'পার্সেল হাইড'],
+    'registration_open' => ['group' => 'switch', 'label' => 'রেজিস্ট্রেশন খোলা (Running)? — বন্ধ (No) করলে ব্যাচ সাইটে দেখাবে কিন্তু নতুন রেজিস্ট্রেশন নেওয়া যাবে না', 'type' => 'checkbox', 'default' => 1, 'warn_off' => true, 'toggle_label' => 'রেজিস্ট্রেশন খোলা রাখা'],
+    'registration_deadline' => ['group' => 'switch', 'label' => 'ভর্তির শেষ সময় (ঐচ্ছিক — কাউন্টডাউন ঘড়ি)', 'type' => 'datetime', 'help' => 'এখানে তারিখ ও সময় দিলে সাইটে "⏳ ভর্তির সময় বাকি — 3 দিন 14 ঘণ্টা" ঘড়ি দেখাবে (কার্ড, বিস্তারিত পাতা ও ভর্তি ফর্ম — তিন জায়গাতেই), আর শেষ ২৪ ঘণ্টায় লাল হয়ে যাবে। সময় শেষ হলে এই ব্যাচের রেজিস্ট্রেশন নিজে থেকেই বন্ধ হয়ে যাবে — কোর্সটা "আসছে শীঘ্রই" তালিকায় চলে যাবে আর বোতাম হয়ে যাবে "জানিয়ে রাখুন"। খালি রাখলে কোনো ঘড়ি দেখাবে না। সময় বাংলাদেশ সময় ধরে হিসাব হয়। উপরের সুইচ দিয়ে হাতে বন্ধ করলে সেটাই চূড়ান্ত।'],
+    'is_active' => ['group' => 'switch', 'label' => 'সাইটে দেখাবে?', 'type' => 'checkbox', 'default' => 1, 'warn_off' => true, 'toggle_label' => 'ব্যাচটি সাইটে দেখানো'],
+    'sort_order' => ['group' => 'switch', 'label' => 'ক্রম নম্বর (এই কোর্সের ব্যাচগুলোর মধ্যে, ছোট সংখ্যা আগে দেখাবে, অটো বসে)', 'type' => 'number', 'default' => 0],
 ];
 
 // মাইগ্রেশন (migrate-payment-split.sql) এখনো চালানো না থাকলে নতুন ঘরটা ফর্ম থেকেই বাদ যায় —
@@ -65,6 +88,16 @@ foreach (['tuition_split_mode' => 'migrate-payment-split.sql',
     if (!db_has_column($db, 'course_batches', $bfCol)) {
         unset($batchFields[$bfCol]);
     }
+}
+
+// গ্রুপ অনুযায়ী ফিল্ড সাজানো (উপরের unset-গুলোর **পরে**, নাহলে না-থাকা কলামও গ্রুপে ঢুকত)
+$groupedFields = array_fill_keys(array_keys($batchGroups), []);
+foreach ($batchFields as $bfKey => $bfConf) {
+    $bfGroup = $bfConf['group'] ?? 'main';
+    if (!isset($groupedFields[$bfGroup])) {
+        $bfGroup = 'main';   // অচেনা গ্রুপ = মূল তথ্যে (ফিল্ড কখনো হারাবে না)
+    }
+    $groupedFields[$bfGroup][$bfKey] = $bfConf;
 }
 
 // ------------------------------------------------------------
@@ -224,6 +257,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'reg-key') {
 // ------------------------------------------------------------
 $editBatch = null;
 $formDefaults = [];
+$previewBatch = null;   // 💰 টাকার ছকের প্রিভিউ কোন মানগুলো দিয়ে আঁকা হবে
+$previewTyped = false;  // অ্যাডমিনের এইমাত্র টাইপ করা (এখনো সেভ না করা) মান দিয়ে?
 if ($action === 'form') {
     $editId = !empty($_GET['id']) ? (int) $_GET['id'] : null;
     if ($editId) {
@@ -236,6 +271,34 @@ if ($action === 'form') {
         $featStmt = $db->prepare('SELECT feature_text FROM course_features WHERE batch_id = :id ORDER BY sort_order ASC');
         $featStmt->execute(['id' => $editId]);
         $editBatch['features'] = implode("\n", array_column($featStmt->fetchAll(), 'feature_text'));
+    }
+
+    // 🔄 "ছক দেখে নিন" — ফর্মটা নিজের কাছেই POST হয় (`preview` নামের বোতাম চাপলে, তাই
+    //    সাধারণ সেভে এই শাখা চলে না)। **কিছুই সেভ হয় না** — শুধু টাইপ করা মানগুলো ফর্মে
+    //    ফিরিয়ে দিয়ে নিচের ছকটা ঐ মান দিয়ে আঁকা হয়।
+    // 🔴 AJAX/JS-এ হিসাব করা হয়নি ইচ্ছাকৃতভাবে — টাকার ভাগ-বাটোয়ারার নিয়ম দুই জায়গায়
+    //    থাকলে সময়ের সাথে নীরবে আলাদা হয়ে যেত; এখানে আসল ইঞ্জিনই (pay_plan_from_batch)
+    //    চলে, আর ফুল রিলোডই এই কোডবেসের কনভেনশন।
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['preview'])) {
+        if (!csrf_verify()) {
+            set_flash('error', 'ফর্ম টোকেন মিলছে না, আবার চেষ্টা করুন।');
+            redirect('course-batches.php?course_id=' . $courseId);
+        }
+        $typed = $editBatch ?? [];
+        foreach ($batchFields as $bfKey => $bfConf) {
+            if (($bfConf['type'] ?? '') === 'checkbox') {
+                $typed[$bfKey] = isset($_POST[$bfKey]) ? 1 : 0;
+            } elseif (isset($_POST[$bfKey])) {
+                $typed[$bfKey] = is_string($_POST[$bfKey]) ? trim($_POST[$bfKey]) : $_POST[$bfKey];
+            }
+        }
+        $editBatch    = $typed;   // ফর্মে যা লেখা ছিল তাই থাকবে (ছবির ফাইল-চয়েস ছাড়া)
+        $previewTyped = true;
+    }
+
+    // প্রিভিউ শুধু কোর্সের জন্য অর্থপূর্ণ, আর নতুন (খালি) ফর্মে দেখানোর কিছু নেই
+    if ($editBatch) {
+        $previewBatch = $editBatch;
     }
 }
 
@@ -316,12 +379,18 @@ require __DIR__ . '/includes/layout-top.php';
                         <?php endif; ?>
                     </td>
                     <td class="py-2.5 px-4 font-semibold"><?= e($b['batch_name']) ?></td>
-                    <td class="py-2.5 px-4">
+                    <td class="py-2.5 px-4" style="min-width:170px;max-width:220px;white-space:normal;vertical-align:top">
                         <?= e($b['price'] ?: '-') ?>
                         <?php // 💸 আগের দাম থাকলে পাশে কাটা দাগে — তালিকা থেকেই বোঝা যায় কোন ব্যাচে ছাড় চলছে।
                               //    ⚠️ inline style (Tailwind-এর line-through ক্লাস অ্যাডমিন CSS-এ নেই, রিবিল্ড এড়াতে) ?>
                         <?php if (trim((string) ($b['old_price'] ?? '')) !== ''): ?>
                             <span class="text-xs" style="color:#9ca3af;text-decoration:line-through"><?= e($b['old_price']) ?></span>
+                        <?php endif; ?>
+                        <?php // 📒 এই ব্যাচের সেটিংসে খাতায় কী বসবে — এক লাইনে (এডিটে না ঢুকেই বোঝা যায়)।
+                              //    🔴 নতুন কলাম নয়, এই ঘরেই দ্বিতীয় লাইন — ১১ কলামের টেবিল আর বাড়ানো যায় না।
+                              $bPlan = pay_plan_summary_text(pay_plan_from_batch($b)); ?>
+                        <?php if ($bPlan !== ''): ?>
+                            <div class="text-xs text-gray-500 mt-0.5" style="white-space:normal">📒 <?= e($bPlan) ?></div>
                         <?php endif; ?>
                     </td>
                     <td class="py-2.5 px-4"><?= e($b['instructor'] ?: '-') ?></td>
@@ -440,16 +509,46 @@ require __DIR__ . '/includes/layout-top.php';
 
 <?php elseif ($action === 'form'): ?>
     <div class="bg-white rounded-2xl shadow p-6 max-w-2xl">
-        <h3 class="text-lg font-bold text-gray-800 mb-4"><?= $editBatch ? 'ব্যাচ সম্পাদনা — ' . e($course['title']) : 'নতুন ব্যাচ — ' . e($course['title']) ?></h3>
+        <h3 class="text-lg font-bold text-gray-800 mb-4"><?= !empty($editBatch['id']) ? 'ব্যাচ সম্পাদনা — ' . e($course['title']) : 'নতুন ব্যাচ — ' . e($course['title']) ?></h3>
         <form method="post" action="course-batches.php?action=save" enctype="multipart/form-data" class="space-y-4">
             <?= csrf_field() ?>
             <input type="hidden" name="course_id" value="<?= $courseId ?>">
-            <?php if ($editBatch): ?><input type="hidden" name="id" value="<?= $editBatch['id'] ?>"><?php endif; ?>
-            <?php foreach ($batchFields as $key => $f):
-                $value = $editBatch[$key] ?? ($formDefaults[$key] ?? ($f['default'] ?? ''));
-                $suggestions = $key === 'batch_name' ? $batchNameSuggestions : [];
-            ?>
-                <div><?= render_field($key, $f, $value, $suggestions) ?></div>
+            <?php // 🔴 `$editBatch` প্রিভিউ-POST-এ নতুন ব্যাচেও ভরে যায় (টাইপ করা মান), তাই id আছে কিনা দেখা হয় ?>
+            <?php if (!empty($editBatch['id'])): ?><input type="hidden" name="id" value="<?= (int) $editBatch['id'] ?>"><?php endif; ?>
+            <?php // ঘরগুলো গ্রুপ ধরে — আর 💰 টাকার ছকের ঠিক নিচে প্রিভিউ (গ্রুপ লুপের ভেতরেই,
+                  // তাই নতুন গ্রুপ যোগ করলে/ক্রম বদলালে প্রিভিউ আপনাআপনি ঠিক জায়গায় থাকে) ?>
+            <?php foreach ($batchGroups as $gKey => $g): if (!$groupedFields[$gKey]) { continue; } ?>
+                <div class="pt-3 border-t">
+                    <h4 class="font-bold text-gray-800"><?= e($g['title']) ?></h4>
+                    <?php if ($g['hint'] !== ''): ?>
+                        <p class="text-xs text-gray-500 mt-1 leading-relaxed"><?= e($g['hint']) ?></p>
+                    <?php endif; ?>
+                </div>
+                <?php foreach ($groupedFields[$gKey] as $key => $f):
+                    $value = $editBatch[$key] ?? ($formDefaults[$key] ?? ($f['default'] ?? ''));
+                    $suggestions = $key === 'batch_name' ? $batchNameSuggestions : [];
+                ?>
+                    <div><?= render_field($key, $f, $value, $suggestions) ?></div>
+                <?php endforeach; ?>
+
+                <?php if ($gKey === 'money'): ?>
+                    <?php if ($previewBatch !== null): ?>
+                        <?php if ($previewTyped): ?>
+                            <div class="text-xs font-semibold" style="color:#92400e">🔄 নিচের ছকটা <u>এইমাত্র টাইপ করা</u> মান দিয়ে — এখনো সেভ হয়নি।</div>
+                        <?php endif; ?>
+                        <?= pay_plan_preview_html($previewBatch) ?>
+                    <?php else: ?>
+                        <div class="bg-white rounded-xl border p-4 text-sm text-gray-500">
+                            📒 উপরের ঘরগুলো ভরে <b>"🔄 ছক দেখে নিন"</b> চাপলে এখানেই দেখাবে — খাতায় কোন কিস্তি কত টাকার হবে আর কোন পার্সেলে তোলা হবে।
+                        </div>
+                    <?php endif; ?>
+                    <div>
+                        <button type="submit" name="preview" value="1"
+                                formaction="course-batches.php?action=form&amp;course_id=<?= $courseId ?><?= $editBatch && !empty($editBatch['id']) ? '&amp;id=' . (int) $editBatch['id'] : '' ?>"
+                                class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2 rounded-xl text-sm">🔄 ছক দেখে নিন (সেভ হবে না)</button>
+                        <p class="text-xs text-gray-500 mt-1">টাকার ঘরগুলো বদলে এটা চাপলে নিচের ছক সাথে সাথে নতুন করে আঁকা হবে — সেভ করার আগেই মিলিয়ে নিতে পারবেন। (⚠️ ছবির ফাইল বেছে রাখলে সেটা আবার বেছে নিতে হবে।)</p>
+                    </div>
+                <?php endif; ?>
             <?php endforeach; ?>
             <div class="flex gap-3 pt-2">
                 <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2.5 rounded-xl">সেভ করুন</button>
