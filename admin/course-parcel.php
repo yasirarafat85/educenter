@@ -340,7 +340,10 @@ if (!$itemId) {
 }
 
 // ---------------- নির্দিষ্ট কোর্স-ব্যাচ ----------------
-$cStmt = $db->prepare('SELECT cb.total_parcels, cb.batch_name, cb.price, c.title
+// `cb.*` ইচ্ছাকৃত — খাতার ছক (`pay_plan_from_batch()`) বানাতে ব্যাচের সব ঘরই লাগে, আর
+// নতুন কলাম মাইগ্রেশনের আগে না থাকলেও কোয়েরি ভাঙে না। ⚠️ `course_batches`-এ `title` নেই
+// (ওটা `courses`-এ), তাই `c.title` ঢাকা পড়ে না।
+$cStmt = $db->prepare('SELECT cb.*, c.title
                        FROM course_batches cb JOIN courses c ON c.id = cb.course_id WHERE cb.id = :id');
 $cStmt->execute(['id' => $itemId]);
 $course = $cStmt->fetch();
@@ -383,6 +386,35 @@ foreach ($regs as $r) {
         $noLedgerCount++;
     }
 }
+// 🧩 কাদের খাতা **পুরনো ছকে** বসে আছে — সেভ করা খাতা নিজে থেকে কখনো বদলায় না, তাই
+//    ব্যাচের সেটিংস (বা কোডের অনুমানের নিয়ম) পরে বদলালে পুরনো খাতায় বেতনের মাসিক
+//    কিস্তিগুলোই থাকে না — একটাই সারি ("পুরো কোর্স ফি" / পুরনো legacy হিসাব) পড়ে থাকে,
+//    আর তখন কালেকশনে মাস অনুযায়ী ভাগ দেখা যায় না (২০২৬-১০-১৩ ইউজারের রিপোর্ট)।
+// 🔴 এটা নিছক **ইঙ্গিত, কিছু বদলায় না** — অ্যাডমিন অর্ডারে গিয়ে "🧩 কিস্তির ছকে সাজান"
+//    চাপেন (বাল্কে করা হয় না: ওখানে হাতে লেখা কিস্তি/নাম/ছাড় হারানোর ঝুঁকি আছে)।
+// 🔴 শর্তটা ইচ্ছাকৃতভাবে সংকীর্ণ — ব্যাচের ছকে বেতনের কিস্তি আছে অথচ খাতায় একটাও নেই।
+//    কিস্তি-সংখ্যা কম থাকা (tuition_installments) অ্যাডমিনের নিজের সিদ্ধান্ত, তাই ধরা হয় না।
+$offPlanRegs = [];
+try {
+    $planMonthly = 0;
+    foreach (pay_plan_from_batch($course ?: []) as $pr) {
+        if (($pr['kind'] ?? '') === 'monthly') { $planMonthly++; }
+    }
+    if ($planMonthly > 0) {
+        foreach ($regs as $r) {
+            $lr = $ledgerByReg[(int) $r['id']] ?? [];
+            if (!$lr) { continue; }
+            $has = false;
+            foreach ($lr as $lrow) {
+                if (($lrow['kind'] ?? '') === 'monthly') { $has = true; break; }
+            }
+            if (!$has) { $offPlanRegs[] = $r; }
+        }
+    }
+} catch (Throwable $e) {
+    $offPlanRegs = [];
+}
+
 $inactiveRegs = array_values(array_filter($regs, fn($r) => (int) ($r['courier_active'] ?? 1) !== 1));
 $pendingGroupRemoval = array_values(array_filter($inactiveRegs, fn($r) => !empty($r['fb_group_added']) || !empty($r['messenger_group_added'])));
 
@@ -625,6 +657,27 @@ function cpPermZone(sel) {
             </span>
             <button class="bg-amber-600 text-white px-4 py-2 rounded-xl text-sm font-bold">📒 সবার খাতা বসান</button>
         </form>
+    <?php endif; ?>
+
+    <?php if ($offPlanRegs): ?>
+        <?php // 🧩 খাতা আছে কিন্তু বেতনের মাসিক কিস্তি নেই — তাই মাস অনুযায়ী ভাগ দেখা যায় না।
+              // 🔴 এখান থেকে কিছুই বদলানো হয় না (বাল্ক রিবিল্ড নেই — হাতে লেখা কিস্তি হারাতে পারে),
+              //    শুধু কোন অর্ডারগুলোতে যেতে হবে সেটা দেখানো হয়। ?>
+        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-3 mb-3">
+            <p class="text-sm text-amber-800">
+                🧩 <b><?= count($offPlanRegs) ?> জনের খাতায় বেতনের মাসিক কিস্তি নেই</b> — পুরনো ছকে (এক সারিতে) বসে আছে,
+                তাই তাদের কালেকশনে <b>মাস অনুযায়ী ভাগ</b> দেখা যাবে না। নিচের নামে ক্লিক করে অর্ডারের
+                <b>“টাকা”</b> ড্রয়ার খুলে <b>“🧩 কিস্তির ছকে সাজান”</b> চাপুন — <b>মোট জমা ও আয় বদলাবে না</b>।
+            </p>
+            <?php // ⚠️ `text-amber-900`/`mr-1` কম্পাইলড অ্যাডমিন CSS-এ নেই — তাই amber-800 + flex gap
+                  //    (Tailwind রিবিল্ড এড়াতে) ?>
+            <div class="flex flex-wrap gap-1 mt-2">
+                <?php foreach ($offPlanRegs as $opr): ?>
+                    <a href="registrations.php?action=view&amp;id=<?= (int) $opr['id'] ?>" target="_blank" rel="noopener"
+                       class="text-xs font-semibold text-amber-800 bg-white border border-amber-200 rounded-lg px-2 py-1"><?= e((string) $opr['customer_name']) ?></a>
+                <?php endforeach; ?>
+            </div>
+        </div>
     <?php endif; ?>
 
     <div class="flex gap-1 overflow-x-auto pb-0 mb-0 border-b border-gray-200">
