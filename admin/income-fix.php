@@ -59,7 +59,72 @@ function ifx_safe_return(): string
     return ($r !== '' && strpos($r, 'income-fix.php') === 0) ? $r : 'income-fix.php';
 }
 
+// তালিকা ও "সবার খাতা বসান" — দুটোই এই একই শর্ত ব্যবহার করে (দুই জায়গায় দুই রকম
+// ছাঁকনি হলে বোতাম যাদের ছুঁত আর তালিকা যাদের দেখাত তারা আলাদা হয়ে যেত)
+function ifx_base_where(array $f, array &$params): string
+{
+    $where = ["r.status IN ('confirmed', 'shipped', 'delivered')"];
+    if (!empty($f['q'])) {
+        // 🔴 LIKE-এর % ও _ escape (search.php-এর মতোই, escape-অক্ষর `!`)
+        $params['q'] = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_substr($f['q'], 0, 100)) . '%';
+        $where[] = "(r.customer_name LIKE :q ESCAPE '!' OR r.phone LIKE :q ESCAPE '!')";
+    }
+    if (!empty($f['item'])) {
+        $params['item'] = $f['item'];
+        $where[] = 'r.item_title = :item';
+    }
+    return 'WHERE ' . implode(' AND ', $where);
+}
+
 $money = fn($v) => '৳' . number_format((float) $v, (fmod((float) $v, 1) == 0.0) ? 0 : 2);
+
+// ---------------- POST: সবার খাতা বসানো (📒 noledger দল) ----------------
+// 🔴 action=ensure-ledger delete-অ্যাকশন নয় → `orders`-এ **edit** cap-ই যথেষ্ট।
+// 🔴 ছোঁয়া হয় **শুধু** সেই অর্ডারগুলো যেগুলোর খাতাও নেই, বইয়ে আয়ও নেই, আর
+//    income_approved-ও নয় — অর্থাৎ ঠিক `noledger` দলটা। "⚠️ খাতা নেই অথচ আয় বসানো"
+//    (orphan) ইচ্ছাকৃতভাবে বাদ: ওগুলোর অঙ্ক পুরনো ভুল নিয়মে বসে থাকতে পারে, তাই
+//    অ্যাডমিন নিজে দেখে টাকা লিখবেন। 🔴 আয় এক পয়সাও নড়ে না (জমা ০)।
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['action'] ?? '') === 'ensure-ledger') {
+    $back = ifx_safe_return();
+    if (!csrf_verify()) {
+        set_flash('error', 'ফর্ম টোকেন মিলছে না।');
+        redirect($back);
+    }
+
+    $before = (float) $db->query('SELECT COALESCE(SUM(amount), 0) FROM income')->fetchColumn();
+    $made = 0;
+    try {
+        $db->beginTransaction();
+        $params = [];
+        $where  = ifx_base_where($activeFilters, $params);
+        $stmt   = $db->prepare(
+            "SELECT r.* FROM registrations r
+             $where
+               AND r.income_approved = 0
+               AND NOT EXISTS (SELECT 1 FROM registration_payments rp WHERE rp.registration_id = r.id)
+               AND NOT EXISTS (SELECT 1 FROM income i WHERE i.registration_id = r.id)
+             ORDER BY r.id
+             LIMIT 2000"
+        );
+        $stmt->execute($params);
+        foreach ($stmt->fetchAll() as $reg) {
+            if (pay_ensure_plan($db, $reg) > 0) {
+                $made++;
+                sync_income_for_status($db, $reg, (string) $reg['status']);
+            }
+        }
+        $db->commit();
+        $after = (float) $db->query('SELECT COALESCE(SUM(amount), 0) FROM income')->fetchColumn();
+        set_flash($made > 0 ? 'success' : 'error', $made > 0
+            ? '📒 ' . $made . ' টি অর্ডারের খাতা বসানো হয়েছে (জমা ০) — এখন প্রতিটায় শুধু "আসলে কত টাকা এসেছে" লিখলেই হবে। '
+                . 'বইয়ের মোট আয়: ' . $money($before) . ' → ' . $money($after) . ' (বদলায়নি)।'
+            : 'খাতা বসানোর মতো কিছু পাওয়া যায়নি — এই ফিল্টারে সবারই খাতা আছে।');
+    } catch (PDOException $ex) {
+        if ($db->inTransaction()) { $db->rollBack(); }
+        set_flash('error', 'খাতা বসানো যায়নি — database/migrate-payment-ledger.sql চালানো হয়েছে কিনা দেখুন।');
+    }
+    redirect($back);
+}
 
 // ---------------- POST: মেলানো ----------------
 // action=fix → delete-অ্যাকশন নয়, তাই মডারেটরের `orders` সেকশনে **edit** cap-ই যথেষ্ট
@@ -187,19 +252,8 @@ $byGroup  = ['orphan' => [], 'nopaid' => [], 'noledger' => [], 'mismatch' => []]
 $itemOpts = [];
 
 try {
-    $where  = ["r.status IN ('confirmed', 'shipped', 'delivered')"];
-    $params = [];
-    if (!empty($activeFilters['q'])) {
-        // 🔴 LIKE-এর % ও _ escape (search.php-এর মতোই, escape-অক্ষর `!`)
-        $needle = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_substr($activeFilters['q'], 0, 100)) . '%';
-        $where[] = "(r.customer_name LIKE :q ESCAPE '!' OR r.phone LIKE :q ESCAPE '!')";
-        $params['q'] = $needle;
-    }
-    if (!empty($activeFilters['item'])) {
-        $where[] = 'r.item_title = :item';
-        $params['item'] = $activeFilters['item'];
-    }
-    $whereSql = 'WHERE ' . implode(' AND ', $where);
+    $params   = [];
+    $whereSql = ifx_base_where($activeFilters, $params);
 
     $stmt = $db->prepare(
         "SELECT r.*,
@@ -352,6 +406,23 @@ require __DIR__ . '/includes/layout-top.php';
         <a href="<?= e(ifx_url(['q' => null, 'item' => null, 'page' => null])) ?>" class="text-sm font-semibold text-gray-500 py-2">✕ ফিল্টার মুছুন</a>
     <?php endif; ?>
 </form>
+
+<?php if ($group === 'noledger' && $counts['noledger'] > 0): ?>
+    <?php /* 📒 এক ট্যাপে এই দলের সবার খাতা বসানো — জমা ০, আয় অপরিবর্তিত।
+             🔴 ফর্মটা নিচের বড় ফর্মের **বাইরে** (HTML-এ নেস্টেড ফর্ম চলে না)। */ ?>
+    <form method="post" action="income-fix.php?action=ensure-ledger"
+          class="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 mb-4 flex flex-wrap items-center gap-3"
+          onsubmit="return confirmSubmit(this, 'এই তালিকার সবার টাকার খাতা কোর্সের সেটিংস (রেজি ফি, মাস, কিস্তি) অনুযায়ী বসানো হবে — জমা ০। বইয়ের আয় বদলাবে না, শুধু কিস্তির ছকটা তৈরি হবে। চালিয়ে যাবেন?', 'সবার খাতা বসানো')">
+        <?= csrf_field() ?>
+        <input type="hidden" name="return" value="<?= e($curReturn) ?>">
+        <span class="text-sm text-indigo-900 min-w-0" style="flex:1 1 18rem">
+            📒 এদের কিস্তির ছকটাই এখনো বসেনি। <b>এক ট্যাপে সবার খাতা বসিয়ে নিন</b> — তারপর শুধু
+            “আসলে কত টাকা এসেছে” লিখলেই হবে। <b>আয় বদলাবে না</b> (জমা ০ দিয়ে শুরু), আর কোর্স
+            পার্সেলের কালেকশনও তখন আসল বাকি ধরে হিসাব করবে।
+        </span>
+        <button class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold">📒 সবার খাতা বসান</button>
+    </form>
+<?php endif; ?>
 
 <?php if (!$rows): ?>
     <div class="empty-state">

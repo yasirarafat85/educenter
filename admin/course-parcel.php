@@ -11,6 +11,7 @@ require_once __DIR__ . '/../includes/courier/CourierManager.php';
 require_once __DIR__ . '/includes/courier-notes.php';
 require_once __DIR__ . '/includes/payments.php'; // 🔑 টাকার খাতা — কালেকশনের পরিমাণ এখান থেকেই আসে
 require_once __DIR__ . '/includes/expense-sync.php'; // 💸 ছাড়/মাফ → খরচের বই
+require_once __DIR__ . '/includes/income-sync.php';  // 📒 খাতা বসানোর পর আয় মেলানো (ensure-ledger)
 admin_require_login();
 
 $db = get_db();
@@ -81,6 +82,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $val = (int) ($_POST['value'] ?? 0) ? 1 : 0;
         $db->prepare('UPDATE registrations SET courier_active = :v WHERE id = :id')->execute(['v' => $val, 'id' => $regId]);
         set_flash('success', $val ? 'সক্রিয় করা হলো।' : 'নিষ্ক্রিয় করা হলো — এই শিক্ষার্থী আর মাসের তালিকায় আসবে না।');
+        redirect(cp_url($itemId, $month));
+
+    } elseif ($action === 'ensure-ledger') {
+        /* 📒 এই ব্যাচের যাদের খাতা নেই তাদের খাতা একসাথে বসানো — জমা ০।
+         * 🔴 কেন দরকার: খাতা না থাকলে নিচের কালেকশন ফ্ল্যাট মাসিক ফি ধরে নেয় (রেজি ফি-র
+         *    কিস্তি, ছাড়, advance কিছুই ধরে না)। খাতা বসলেই আসল বাকিটা বসে।
+         * 🔴 আয় নড়ে না — `pay_ensure_plan()`-এর ঘরে বিস্তারিত; আর **আগে আয় অনুমোদিত
+         *    অথচ খাতা নেই** এমন অর্ডার ইচ্ছাকৃতভাবে বাদ (ওগুলোর অঙ্ক পুরনো ভুল নিয়মে
+         *    বসে থাকতে পারে — "আয় মেলানো" পাতায় অ্যাডমিন নিজে দেখে ঠিক করবেন)।
+         * 🔴 খাতা আগে থেকে থাকলে কখনো ছোঁয়া হয় না (`pay_ensure_plan()` নিজেই গার্ড)। */
+        $made = $skipped = 0;
+        try {
+            $db->beginTransaction();
+            $rowsStmt = $db->prepare(
+                "SELECT * FROM registrations
+                 WHERE type = 'course' AND item_id = :id AND status = 'confirmed'
+                 ORDER BY id"
+            );
+            $rowsStmt->execute(['id' => $itemId]);
+            foreach ($rowsStmt->fetchAll() as $r) {
+                if (!empty($r['income_approved'])) {
+                    $skipped++;   // পুরনো নিয়মে বসানো আয় — হাতে দেখা দরকার
+                    continue;
+                }
+                if (pay_ensure_plan($db, $r) > 0) {
+                    $made++;
+                    sync_income_for_status($db, $r, (string) $r['status']);
+                }
+            }
+            $db->commit();
+            set_flash('success', $made > 0
+                ? '📒 ' . $made . ' জনের খাতা বসানো হয়েছে (জমা ০) — এখন কালেকশনে আসল বাকিটা বসবে।'
+                    . ($skipped > 0 ? ' ' . $skipped . ' জন বাদ (আগে থেকে আয় বসানো — "আয় মেলানো" পাতায় দেখুন)।' : '')
+                : 'সবার খাতা আগে থেকেই আছে — কিছু বদলানো হয়নি।'
+                    . ($skipped > 0 ? ' ' . $skipped . ' জন বাদ (আগে থেকে আয় বসানো)।' : ''));
+        } catch (PDOException $ex) {
+            if ($db->inTransaction()) { $db->rollBack(); }
+            set_flash('error', 'খাতা বসানো যায়নি — database/migrate-payment-ledger.sql চালানো হয়নি।');
+        }
         redirect(cp_url($itemId, $month));
 
     } elseif ($action === 'parcels') {
@@ -328,6 +368,16 @@ if ($regs) {
 $notesByReg = fetch_registration_notes($db, array_map(fn($r) => (int) $r['id'], $regs));
 $ledgerByReg = pay_fetch_many($db, array_map(fn($r) => (int) $r['id'], $regs)); // 🔑 খাতা (কালেকশনের ভিত্তি)
 $activeRegs   = array_values(array_filter($regs, fn($r) => (int) ($r['courier_active'] ?? 1) === 1));
+
+// 📒 কাদের খাতা এখনো বসানো হয়নি — খাতা না থাকলে নিচের কালেকশন ফ্ল্যাট মাসিক ফি ধরে নেয়,
+//    তাই উপরে একটা বাল্ক বোতাম দেখানো হয়। 🔴 আগে আয় অনুমোদিত অথচ খাতা নেই — এমনগুলো
+//    গোনা হয় না (ওগুলোর অঙ্ক পুরনো ভুল নিয়মে বসে থাকতে পারে, "আয় মেলানো"-তেই দেখতে হবে)।
+$noLedgerCount = 0;
+foreach ($regs as $r) {
+    if (empty($ledgerByReg[(int) $r['id']] ?? []) && empty($r['income_approved'])) {
+        $noLedgerCount++;
+    }
+}
 $inactiveRegs = array_values(array_filter($regs, fn($r) => (int) ($r['courier_active'] ?? 1) !== 1));
 $pendingGroupRemoval = array_values(array_filter($inactiveRegs, fn($r) => !empty($r['fb_group_added']) || !empty($r['messenger_group_added'])));
 
@@ -555,6 +605,22 @@ function cpPermZone(sel) {
 <?php // ══════════ Section 2 — মাস ট্যাব + এই মাসের পার্সেল ══════════ ?>
 <?php if ($months): ?>
     <div class="cp-hd"><span class="bar"></span><span class="text-sm font-bold text-gray-700">এই মাসের পার্সেল</span><span class="text-xs text-gray-400">মাস বেছে প্রস্তুত করুন / পাঠান</span></div>
+
+    <?php if ($noLedgerCount > 0): ?>
+        <?php // খাতা না বসা থাকলে কালেকশন ফ্ল্যাট মাসিক ফি ধরে — এক ট্যাপে সবার খাতা বসিয়ে নেওয়া যায় ?>
+        <form method="post" action="course-parcel.php" class="bg-amber-50 border border-amber-200 rounded-2xl p-3 mb-3 flex flex-wrap items-center gap-2"
+              onsubmit="return confirmSubmit(this, 'এই ব্যাচের <?= (int) $noLedgerCount ?> জনের টাকার খাতা কোর্সের সেটিংস (রেজি ফি, মাস, কিস্তি) অনুযায়ী বসানো হবে — জমা ০। আয় বদলাবে না। চালিয়ে যাবেন?', 'খাতা বসানো')">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="ensure-ledger">
+            <input type="hidden" name="item_id" value="<?= $itemId ?>">
+            <input type="hidden" name="month" value="<?= $selMonth ?>">
+            <span class="text-sm text-amber-900 min-w-0" style="flex:1 1 16rem">
+                📒 <b><?= (int) $noLedgerCount ?> জনের টাকার খাতা এখনো বসানো হয়নি</b> — তাই তাদের কালেকশনে
+                আসল বাকির বদলে <b>ফ্ল্যাট মাসিক ফি</b> ধরা হচ্ছে (রেজি ফি-র কিস্তি, ছাড়, advance ধরা হচ্ছে না)।
+            </span>
+            <button class="bg-amber-600 text-white px-4 py-2 rounded-xl text-sm font-bold">📒 সবার খাতা বসান</button>
+        </form>
+    <?php endif; ?>
 
     <div class="flex gap-1 overflow-x-auto pb-0 mb-0 border-b border-gray-200">
         <?php for ($i = 1; $i <= $months; $i++): ?>

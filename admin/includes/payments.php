@@ -458,6 +458,61 @@ function pay_rebuild_plan(PDO $db, array $reg): int
     return pay_save_rows($db, $regId, $rows);
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * 📒 খাতা না থাকলে নিজে থেকে বসিয়ে দেওয়া  (২০২৬-১০-১৩)
+ *
+ * 🔴🔴 আগে খাতা বসত **শুধু হাতে** — অর্ডার তালিকার "টাকা" ড্রয়ার, নয়তো আয় মেলানো
+ *      পাতা; দুটোই একজন করে। তাই বেশির ভাগ রেজিস্ট্রেশনে খাতাই থাকত না, আর তাতে
+ *      তিনটা জিনিস একসাথে ভুল দেখাত:
+ *        • আয় ০ (২০২৬-০৯-২৯ থেকে আয়ের একমাত্র উৎস খাতার জমা)
+ *        • কোর্স পার্সেলের কালেকশন = ফ্ল্যাট মাসিক ফি (রেজি ফি/ছাড়/advance ধরত না)
+ *        • "আয় মেলানো"-র `📒 খাতা এখনো বসানো হয়নি` দল ভরে থাকত
+ *
+ * এই ফাংশন খাতা **না থাকলে** ব্যাচের সেটিংস দেখে কিস্তিগুলো বসায় — **জমা ০**।
+ *
+ * 🔴 আয় এক পয়সাও নড়ে না:
+ *    • আগে আয় অনুমোদিত না থাকলে (স্বাভাবিক) জমা ০ → আয়ও ০, অর্থাৎ আগের মতোই।
+ *    • আগে অনুমোদিত থাকলে (পুরনো নিয়মে কনফার্ম করা) ঐ অঙ্কটা `pay_allocate_paid()`
+ *      দিয়ে জমায় বসে — হুবহু যা `reg_pay_panel()`-এর `$prefill` আজ দেখায়। তাই
+ *      বইয়ের মোট আয় আগে-পরে এক। **এই prefill সরাবেন না** (সরালে ঐ আয়গুলো ০ হয়ে যাবে)।
+ *
+ * 🔴 আয় এখানে সিঙ্ক করা হয় **না** — `sync_income_for_status()` আছে
+ *    `admin/includes/income-sync.php`-এ, আর এই ফাইলটা `account.php` (পাবলিক) থেকেও
+ *    require হয়। তাই **কলার (অ্যাডমিন পেজ) নিজে সিঙ্ক করবে**, ঠিক `pay-save`
+ *    হ্যান্ডলারের মতো। `due_amount` ডিনরমালাইজেশন এখানেই হয়ে যায়।
+ *
+ * ফেরে কয়টা কিস্তি বসল (০ = খাতা আগে থেকেই ছিল, কিছু ছোঁয়া হয়নি)।
+ * ──────────────────────────────────────────────────────────────────────────── */
+function pay_ensure_plan(PDO $db, array $reg): int
+{
+    $regId = (int) ($reg['id'] ?? 0);
+    if ($regId <= 0) {
+        return 0;
+    }
+    if (pay_fetch_many($db, [$regId])[$regId] ?? []) {
+        return 0;   // 🔴 খাতা আছে — কখনো ছোঁয়া হয় না
+    }
+
+    $rows = pay_build_plan($db, $reg);
+    if (!$rows) {
+        return 0;
+    }
+    // পুরনো নিয়মে অনুমোদিত আয় থাকলে সেটাই জমা হিসেবে (নাহলে সেভে আয় নীরবে ০ হতো)
+    $prefill = !empty($reg['income_approved']) ? (float) ($reg['income_amount'] ?? 0) : 0.0;
+    if ($prefill > 0) {
+        $rows = pay_allocate_paid($rows, $prefill);
+    }
+
+    $saved = pay_save_rows($db, $regId, $rows);
+
+    // বাকি টাকা registrations.due_amount-এ (খাতাই আসল উৎস, এটা দ্রুত রেফারেন্স)
+    $summary = pay_summary(pay_fetch_many($db, [$regId])[$regId] ?? []);
+    $db->prepare('UPDATE registrations SET due_amount = :due WHERE id = :id')
+        ->execute(['due' => $summary['balance'], 'id' => $regId]);
+
+    return $saved;
+}
+
 // খালি (এখনো সেভ না হওয়া) কিস্তির সারি
 function pay_blank_row(int $seq, string $kind, string $label, float $due, ?int $monthFrom = null, ?int $monthTo = null): array
 {

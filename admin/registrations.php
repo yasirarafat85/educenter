@@ -74,17 +74,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'update-status') {
 
         if ($reg) {
             $db->prepare('UPDATE registrations SET status = :s WHERE id = :id')->execute(['s' => $status, 'id' => $id]);
+
+            /* 📒 কনফার্ম (বা shipped/delivered) করলে খাতা **নিজে থেকেই** বসে যায় — জমা ০।
+             * আগে খাতা বসত শুধু ড্রয়ার খুলে হাতে, তাই বেশির ভাগ অর্ডারে খাতাই থাকত না আর
+             * পার্সেলের কালেকশন ফ্ল্যাট মাসিক ফি ধরে নিত। 🔴 আয় নড়ে না — বিস্তারিত
+             * `pay_ensure_plan()`-এর ঘরে। ব্যর্থ হলে (মাইগ্রেশন চলেনি) চুপচাপ বাদ,
+             * স্ট্যাটাস বদলানোটা কখনো আটকায় না। */
+            $madeLedger = 0;
+            if (in_array($status, INCOME_STATUSES, true)) {
+                try {
+                    $madeLedger = pay_ensure_plan($db, $reg);
+                } catch (PDOException $ex) {
+                    $madeLedger = 0;
+                }
+            }
+
+            // 🔴 খাতা বসানোর **পরে** সিঙ্ক — নাহলে এইমাত্র বসানো জমা (prefill) বইয়ে যেত না
             sync_income_for_status($db, $reg, $status);
 
-            // 🔔 কনফার্ম করলে আয় আর নিজে থেকে বসে না (উপরে `sync_income_for_status()` দেখুন) —
-            //    তাই খাতাও নেই, আয়ও অনুমোদিত নয় এমন হলে অ্যাডমিনকে মনে করিয়ে দেওয়া হয়,
-            //    নাহলে "কনফার্ম করলাম, আয়ে কিছু এল না কেন" বলে মনে হতো।
-            $needsLedger = in_array($status, INCOME_STATUSES, true)
-                && empty($reg['income_approved'])
-                && !(pay_fetch_many($db, [$id])[$id] ?? []);
-            set_flash('success', $needsLedger
-                ? 'স্ট্যাটাস আপডেট হয়েছে। 💰 কত টাকা হাতে এসেছে সেটা "টাকা" চিপে ক্লিক করে খাতায় বসিয়ে সেভ করুন — আয় ওখান থেকেই বইয়ে যাবে।'
-                : 'স্ট্যাটাস আপডেট হয়েছে।');
+            // 🔔 খাতা আছে কিন্তু জমা এখনো ০ — অ্যাডমিনকে মনে করিয়ে দেওয়া হয়, নাহলে
+            //    "কনফার্ম করলাম, আয়ে কিছু এল না কেন" বলে মনে হতো।
+            $needsMoney = in_array($status, INCOME_STATUSES, true)
+                && pay_paid_total(pay_fetch_many($db, [$id])[$id] ?? []) < 0.01;
+            set_flash('success', 'স্ট্যাটাস আপডেট হয়েছে।'
+                . ($madeLedger > 0 ? ' 📒 কোর্সের সেটিংস দেখে ' . $madeLedger . ' টি কিস্তির খাতা বসানো হয়েছে।' : '')
+                . ($needsMoney ? ' 💰 কত টাকা হাতে এসেছে সেটা "টাকা" চিপে ক্লিক করে বসিয়ে সেভ করুন — আয় ওখান থেকেই বইয়ে যাবে।' : ''));
         }
     }
     redirect(reg_anchor_url($returnUrl, $id));
