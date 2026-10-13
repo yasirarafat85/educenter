@@ -139,9 +139,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect(cp_url($itemId, $month));
         }
 
-        $feeStmt = $db->prepare('SELECT price FROM course_batches WHERE id = :id');
+        // 🔴 `total_parcels`-ও লাগে — খাতার কোনো কিস্তির স্লট পার্সেল-সংখ্যার বাইরে পড়লে
+        //    `pay_month_outstanding()` সেটাকে শেষ পার্সেলে ক্ল্যাম্প করে (নাহলে ঐ টাকাটা
+        //    কোনো পার্সেলেই উঠত না)। নিচের ভিউ-শাখাতেও হুবহু একই সংখ্যা পাঠানো হয়।
+        $feeStmt = $db->prepare('SELECT price, total_parcels FROM course_batches WHERE id = :id');
         $feeStmt->execute(['id' => $itemId]);
-        $courseFee = parse_price_to_number($feeStmt->fetchColumn() ?: '0');
+        $feeRow    = $feeStmt->fetch() ?: [];
+        $courseFee = parse_price_to_number((string) ($feeRow['price'] ?? '0'));
+        $slotMax   = max(0, (int) ($feeRow['total_parcels'] ?? 0));
 
         $rm = $db->prepare("SELECT * FROM registrations WHERE type='course' AND item_id = :id AND status='confirmed' AND courier_active = 1");
         $rm->execute(['id' => $itemId]);
@@ -213,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ledgerRows = $ledgerMap[$rid] ?? [];
             // 🔴 এই মাসে খাতার **সব** কিস্তির বাকি মিলিয়ে (রেজি ফি + বেতন একসাথে পড়তে পারে;
             //    এক-কালীন/পুরনো সারি প্রথম পার্সেলে) — নিচের কার্ডের `data-due`-তেও হুবহু এই সংখ্যা
-            $basis = $ledgerRows ? pay_month_outstanding($ledgerRows, $month) : $courseFee;
+            $basis = $ledgerRows ? pay_month_outstanding($ledgerRows, $month, $slotMax) : $courseFee;
             $amt  = courier_compute_collection($basis, 1, $zone, $wx, $adj); // মাল্টিপ্লায়ার সবসময় ১
             $amt  = max(0, $amt - $waive);                                     // 💸 ছাড় বাদ (০-এর নিচে নামে না)
             if (is_numeric($row['amt'] ?? null)) { $amt = max(0, round((float) $row['amt'])); } // সরাসরি লেখা পরিমাণই চূড়ান্ত
@@ -676,8 +681,8 @@ function cpPermZone(sel) {
                 // 🔑 খাতা → এই মাসের কালেকশনের ভিত্তি
                 $lRows  = $ledgerByReg[$rid] ?? [];
                 // 🔴 এই মাসে একাধিক কিস্তি পড়তে পারে — সবগুলোর বাকি যোগ হয় (উপরের round-save-এ একই হিসাব)
-                $lMonth = $lRows ? pay_rows_for_month($lRows, $selMonth) : [];
-                $lDue   = $lRows ? pay_month_outstanding($lRows, $selMonth) : (float) $courseFee;   // খাতা না থাকলে পুরনো নিয়ম
+                $lMonth = $lRows ? pay_rows_for_month($lRows, $selMonth, $totalParcels) : [];
+                $lDue   = $lRows ? pay_month_outstanding($lRows, $selMonth, $totalParcels) : (float) $courseFee;   // খাতা না থাকলে পুরনো নিয়ম
                 $lSum   = $lRows ? pay_summary($lRows) : null;
                 // সব কিস্তিই ⊘ বাদ দেওয়া থাকলেই "বাদ" বার্তা
                 $lSkip  = $lMonth && count(array_filter($lMonth, 'pay_is_skipped')) === count($lMonth);

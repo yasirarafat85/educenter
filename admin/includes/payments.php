@@ -83,6 +83,19 @@ function pay_ordinal_to_number(string $ord): int
     return $map[trim($ord)] ?? 0;
 }
 
+// লেবেলের শেষের "(কিস্তি 2/3)" থেকে নম্বরটা — `pay_part_label()`-এর উল্টো কাজ।
+// 🔑 রেজিস্ট্রেশন ফি-র কিস্তি k ঠিক **k-তম পার্সেলে** তোলার কথা, কিন্তু
+// `month_from`/`month_to` ঘর দুটো যোগ হওয়ার (migrate-payment-split.sql) আগে সেভ হওয়া
+// খাতায় ঘরদুটো খালি — তখন এটাই একমাত্র সূত্র।
+// 🔴 অঙ্ক ইংরেজিতেই (`pay_part_label()` PHP int বসায়), আর নামের অংশটা অ্যাডমিন বদলাতে
+//    পারেন বলে শুধু **শেষের** বন্ধনীটা দেখা হয়; না মিললে ০ (তখন পুরনো আচরণ)।
+function pay_label_part_number(string $label): int
+{
+    return preg_match('~\(কিস্তি\s*(\d+)\s*/\s*\d+\s*\)\s*$~u', trim($label), $m)
+        ? (int) $m[1]
+        : 0;
+}
+
 // একটা কিস্তির লেবেল কোন কোন মাস ঢাকে — "২য় মাস" → [2], "১ম–২য় মাস" → [1, 2]
 // (মাসিক কিস্তি না হলে খালি অ্যারে)
 function pay_label_months(string $label): array
@@ -114,7 +127,24 @@ function pay_row_months(array $row): array
         $b = ($to !== null && $to !== '' && (int) $to >= $a) ? (int) $to : $a;
         return range($a, $b);
     }
-    return pay_label_months((string) ($row['label'] ?? ''));
+
+    $label = (string) ($row['label'] ?? '');
+
+    // 🔴🔴 রেজিস্ট্রেশন ফি-র কিস্তি k → k-তম পার্সেল (২০২৬-১০-১৩ ফিক্স, ইউজারের স্ক্রিনশটে ধরা)।
+    // ঘর দুটো খালি থাকলে নিচের `pay_label_months()` খালি ফেরায় (লেবেলে "মাস" নেই), আর তখন
+    // `pay_rows_for_month()` সেটাকে "প্রথম পার্সেল" ধরে — ফলে ৩ কিস্তির **তিনটাই** ১ম মাসের
+    // কালেকশনে বসে যাচ্ছিল, অথচ ২য় কিস্তি ২য় পার্সেলে আর ৩য় কিস্তি ৩য় পার্সেলে তোলার কথা।
+    // (নতুন খাতায় `pay_plan_from_batch()` ঘরদুটো ভরেই দেয় — এটা শুধু পুরনো সারির জন্য।)
+    // ⚠️ শুধু `registration`-এ — বেতনের কিস্তি সত্যিই কয়েক মাসের পরিসর, লেবেল থেকে সেটা
+    //    আন্দাজ করা যায় না (আর "১ম–২য় মাস" ধরনের লেবেল নিচের ফাংশনই ঠিকমতো পড়ে)।
+    if ((string) ($row['kind'] ?? '') === 'registration') {
+        $part = pay_label_part_number($label);
+        if ($part > 0) {
+            return [$part];
+        }
+    }
+
+    return pay_label_months($label);
 }
 
 // 🔑 কুরিয়ারের N-তম পার্সেলে খাতার কোন কোন কিস্তির টাকা তোলার কথা।
@@ -127,11 +157,18 @@ function pay_row_months(array $row): array
 //    কালেকশনে শুধু ডেলিভারি চার্জটাই বসত (ইউজারের স্ক্রিনশটে ধরা: বাকি ৳৫০০ থাকা সত্ত্বেও
 //    কালেকশন ৳১৩০ দেখাচ্ছিল)। এখন সেগুলো **প্রথম পার্সেলের** সাথে ধরা হয় — একবারই
 //    নেওয়ার টাকা, প্রথমবারেই ওঠে।
-function pay_rows_for_month(array $rows, int $month): array
+// 🔴 `$maxSlot` = ঐ ব্যাচে মোট কয়বার পার্সেল যাবে (`course_batches.total_parcels`)। দিলে
+//    সীমার বাইরের স্লট **শেষ পার্সেলে** ক্ল্যাম্প হয় — নাহলে ঐ কিস্তির টাকা কোনো পার্সেলেই
+//    উঠত না (যেমন রেজি ফি ৩ কিস্তিতে কিন্তু পার্সেল ২ বার, বা অ্যাডমিন পরে পার্সেল-সংখ্যা
+//    কমিয়ে দিলে)। ০ দিলে ক্ল্যাম্প হয় না (আগের আচরণ)।
+function pay_rows_for_month(array $rows, int $month, int $maxSlot = 0): array
 {
     $out = [];
     foreach ($rows as $r) {
         $months = pay_row_months($r);
+        if ($months && $maxSlot > 0) {
+            $months = array_values(array_unique(array_map(fn($m) => min((int) $m, $maxSlot), $months)));
+        }
         // মাস-পরিসর জানা থাকলে সেটাই মানি; না জানলে প্রথম পার্সেল
         if ($months ? in_array($month, $months, true) : $month === 1) {
             $out[] = $r;
@@ -143,10 +180,10 @@ function pay_rows_for_month(array $rows, int $month): array
 // ঐ পার্সেলে খাতা অনুযায়ী মোট কত টাকা তোলার কথা (প্রতিটা কিস্তির নিট − জমা-র যোগফল)।
 // 🔴 কুরিয়ারের কালেকশনের **ভিত্তি এটাই** — course-parcel.php-এর সার্ভার ও ব্রাউজার
 //    দুই জায়গাতেই এই একই সংখ্যা বসে।
-function pay_month_outstanding(array $rows, int $month): float
+function pay_month_outstanding(array $rows, int $month, int $maxSlot = 0): float
 {
     $sum = 0.0;
-    foreach (pay_rows_for_month($rows, $month) as $r) {
+    foreach (pay_rows_for_month($rows, $month, $maxSlot) as $r) {
         $sum += pay_row_outstanding($r);
     }
     return round($sum, 2);
