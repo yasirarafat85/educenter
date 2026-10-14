@@ -10,6 +10,7 @@
 - পাবলিক সাইটে কী কী উন্নতি বাকি (অডিট + ৫ ধাপের চেকলিস্ট, ২০২৬-০৯-২৬) → [PUBLIC-SITE-IMPROVEMENT-PLAN.md](PUBLIC-SITE-IMPROVEMENT-PLAN.md)
 - পুরো সাইটের নিরাপত্তা/DB/ফ্রন্ট-এন্ড অডিট (২০২৬-১০-০১) → [AUDIT-2026-10-01.md](AUDIT-2026-10-01.md)
 - 📨 SMS দিয়ে অটো পেমেন্ট যাচাই — পরিকল্পনা, আসল SMS নমুনা, টেবিল-ছক (২০২৬-১০-০৬) → [PAYMENT-SMS-PLAN.md](PAYMENT-SMS-PLAN.md)
+- 🧹 কোর্স · কুরিয়ার · আয় · খাতা — কেন জটিল হলো আর ৪ ধাপে কী করা হবে (২০২৬-১০-১৪) → [COURSE-MONEY-CLEANUP-PLAN.md](COURSE-MONEY-CLEANUP-PLAN.md)
 
 ---
 
