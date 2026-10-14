@@ -201,17 +201,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $incBefore = (float) ($db->query('SELECT COALESCE(SUM(amount), 0) AS s FROM income')->fetch()['s'] ?? 0);
             $db->beginTransaction();
 
-            // ── ১) পাঠানো ধরে নেওয়া (শুধু আগে থেকে তৈরি থাকা পার্সেলে) ──
+            // ── ১) পাঠানো ধরে নেওয়া ──
+            // 🔴 এখানে পার্সেলটা আগে তৈরি **না থাকলেও** চলে — ইউজার অনেক সময় পার্সেলটা
+            //    কুরিয়ারের নিজের সাইটে এন্ট্রি দিয়ে আসেন, তখন আমাদের এখানে কোনো সারিই
+            //    থাকে না। সারি না থাকলে একটা নতুন সারি বসে (`manual`), থাকলে শুধু
+            //    অবস্থাটা বদলায় — কোনো অবস্থাতেই আসল কুরিয়ারে কিছু যায় না।
             if ($markSent) {
                 $cb = $db->prepare('SELECT * FROM courier_batches WHERE registration_id = :r AND period_label = :p ORDER BY id DESC LIMIT 1');
                 $cb->execute(['r' => $regId, 'p' => $period]);
                 $cb = $cb->fetch();
                 if (!$cb) {
-                    $db->rollBack();
-                    set_flash('error', 'এই মাসের পার্সেলটা এখনো তৈরি হয়নি — আগে একবার "সেভ" চাপুন, তারপর "কুরিয়ার ডান" করা যাবে।');
-                    redirect(cp_url($itemId, $month));
-                }
-                if ((string) $cb['send_status'] === 'sent') {
+                    // কালেকশনের অঙ্কটা কার্ডের "কালেকশন (টাকা)" ঘর থেকেই আসে (JS কপি করে দেয়)।
+                    // 🔴 অনুমান করা হয় না — খালি থাকলে ০ বসে, অ্যাডমিন পরে সেভ করে ঠিক করতে পারেন।
+                    $pdColl = round((float) str_replace(',', '', (string) ($pdIn['coll'] ?? '')), 2);
+                    if ($pdColl < 0 || $pdColl > CP_MAX_COLLECT) { $pdColl = 0.0; }
+                    $pdZone = (string) ($pdReg['delivery_zone'] ?? '');
+                    if (!in_array($pdZone, ['dhaka', 'near', 'outside'], true)) { $pdZone = 'dhaka'; }
+                    $db->prepare(
+                        "INSERT INTO courier_batches
+                            (registration_id, period_label, item_quantity, amount_to_collect,
+                             monthly_multiplier, delivery_zone, send_status, courier_provider, sent_at)
+                         VALUES (:r, :p, 1, :amt, 1, :z, 'sent', 'manual', NOW())"
+                    )->execute(['r' => $regId, 'p' => $period, 'amt' => $pdColl, 'z' => $pdZone]);
+                    $msgs[] = '✅ ' . cp_month_display($month) . '-এর পার্সেল এখানে তৈরি ছিল না, তাই নতুন করে বসিয়ে '
+                        . '"পাঠানো হয়েছে" ধরা হলো (কালেকশন ৳' . number_format($pdColl) . ' — হাতে পাঠানো, কোনো চালান তৈরি হয়নি)।';
+                } elseif ((string) $cb['send_status'] === 'sent') {
                     $msgs[] = 'এই মাসের পার্সেল আগে থেকেই "পাঠানো" ছিল।';
                 } else {
                     $db->prepare("UPDATE courier_batches
@@ -1070,10 +1084,12 @@ function cpPermZone(sel) {
                     <?php // ══════ ✅ কুরিয়ার ডান + 💰 টাকা মিলিয়ে নেওয়া ══════
                           // 🔴 `.builder`-এর **বাইরে** — পাঠানো কার্ডে builder লক থাকে, অথচ
                           //    আগে পাঠানো পার্সেলের টাকাটা তখনই মেলাতে হয়।
-                          // 🔴 "পাঠানো ধরে নিন" শুধু আগে তৈরি করা (সেভ করা) পার্সেলে — ইউজারের
-                          //    কথাই: "কারোর পার্সেল আগে এন্ট্রি দেয়া থাকলে"। ?>
+                          // 🔴 "পাঠানো ধরে নিন"-এর জন্য এখানে পার্সেল আগে তৈরি থাকা **লাগে না**
+                          //    (২০২৬-১০-১৪): ইউজার অনেক সময় কুরিয়ারের নিজের সাইটে এন্ট্রি দিয়ে
+                          //    আসেন, তখন আমাদের এখানে সারিই থাকে না — শর্ত রাখায় বাক্সটাই খুঁজে
+                          //    পাওয়া যাচ্ছিল না। সারি না থাকলে হ্যান্ডলার নতুন সারি বসায়। ?>
                     <?php
-                    $pdCanSend = $ex && !$isSent && !$isNo;          // তৈরি আছে, এখনো পাঠানো হয়নি
+                    $pdCanSend = !$isSent && !$isNo;                 // এখনো পাঠানো হয়নি, "না" বলাও হয়নি
                     $pdMoney   = $lRows && $lDue > 0.009;            // খাতা আছে ও এই পার্সেলে বাকি আছে
                     ?>
                     <?php if ($pdCanSend || $pdMoney): ?>
@@ -1089,8 +1105,13 @@ function cpPermZone(sel) {
                                                    class="doneSent w-4 h-4 accent-indigo-600" style="margin-top:3px">
                                             <span>এই পার্সেলটা <b>পাঠানো হয়েছে</b> ধরে নিন
                                                 <span class="block text-xs text-gray-500">কুরিয়ারের API ডাকা হবে না, নতুন চালানও তৈরি হবে না — শুধু এখানে "✓ পাঠানো" দেখাবে।</span>
+                                                <?php if (!$ex): ?>
+                                                    <span class="block text-xs text-amber-700">এই মাসের পার্সেল এখানে এখনো তৈরি নেই। কুরিয়ারের সাইটে নিজে এন্ট্রি দিয়ে থাকলে এটাই টিক দিন — নতুন করে বসিয়ে "পাঠানো" ধরা হবে, আর উপরের <b>কালেকশন (টাকা)</b> ঘরে যা লেখা আছে সেটাই রেকর্ডে যাবে।</span>
+                                                <?php endif; ?>
                                             </span>
                                         </label>
+                                        <?php // কালেকশনের ঘরটা `roundForm`-এ, তাই এই ফর্মে যায় না — JS কপি করে দেয় ?>
+                                        <input type="hidden" form="cpDoneForm" name="done[<?= $rid ?>][coll]" class="doneColl" value="">
                                     <?php elseif ($isSent): ?>
                                         <div class="text-sm text-green-800">✓ এই মাসের পার্সেল পাঠানো হয়ে গেছে — নিচে শুধু টাকাটা মিলিয়ে নিন।</div>
                                     <?php endif; ?>
@@ -1256,13 +1277,19 @@ function cpPermZone(sel) {
     if(!btn||!doneForm||!doneId){ return; }
     btn.addEventListener('click',function(){
       var sentEl=el.querySelector('.doneSent'), sent=!!(sentEl&&sentEl.checked),
-          money=Math.max(0,+(amt?amt.value:0)||0), nm=btn.getAttribute('data-name')||'';
+          money=Math.max(0,+(amt?amt.value:0)||0), nm=btn.getAttribute('data-name')||'',
+          collEl=el.querySelector('.doneColl'), bAmt=el.querySelector('.amt'),
+          coll=Math.max(0,+(bAmt?bAmt.value:0)||0);
+      // এখানে পার্সেল তৈরি না থাকলে হ্যান্ডলার নতুন সারি বসায় — কালেকশনের অঙ্কটা
+      // কার্ডের নিজের ঘর থেকেই নেওয়া হয় (আলাদা করে আর কিছু লিখতে হয় না)।
+      if(collEl){ collEl.value=coll>0?String(coll):''; }
       if(!sent&&money<=0){
         showConfirmModal('কিছুই বাছাই করা হয়নি — "পাঠানো হয়েছে ধরে নিন" টিক দিন অথবা হাতে পাওয়া টাকার অঙ্কটা লিখুন।',function(){},'কিছু বাছাই করুন');
         return;
       }
       var msg=nm+' — ';
-      if(sent){ msg+='মাস '+selMonth+'-এর পার্সেল "পাঠানো হয়েছে" ধরে নেওয়া হবে (কুরিয়ারে আসলে কিছু যাবে না, নতুন চালানও হবে না)। '; }
+      if(sent){ msg+='মাস '+selMonth+'-এর পার্সেল "পাঠানো হয়েছে" ধরে নেওয়া হবে (কুরিয়ারে আসলে কিছু যাবে না, নতুন চালানও হবে না)। ';
+                if(coll>0){ msg+='কালেকশন ৳'+coll+' রেকর্ডে থাকবে। '; } }
       if(money>0){ msg+='আর ৳'+money+' টাকার খাতায় জমা বসবে — এতে আয়ের বইয়ের অঙ্কও বদলাবে। '; }
       msg+='চালিয়ে যাবেন?';
       showConfirmModal(msg,function(){ doneId.value=btn.getAttribute('data-rid')||''; doneForm.submit(); },'করে ফেলবেন?');
