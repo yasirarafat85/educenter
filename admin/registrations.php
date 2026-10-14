@@ -691,6 +691,30 @@ $courierConfigured = get_setting('courier_active_provider') !== '';
  *    এখানেও যোগ করুন** (তালিকায় কলাম বাড়ানো নিষেধ, কিন্তু CSV-তে জায়গা আছে)।
  * ════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * 🔴🔴 ভাঙা বাইট ছেঁকে ফেলা — এটাই Excel-এ কলাম এলোমেলো হওয়া ঠেকায় (২০২৬-১০-১৪)
+ *
+ * ডেটায় কোথাও একটা বাংলা অক্ষর **আধখানা** থেকে গেলে (যেমন ৩ বাইটের অক্ষরের শুধু
+ * প্রথম বাইট `E0`) Excel-এর UTF-8 পাঠক ঢিলেঢালা — সে পরের দুই বাইট **গিলে ফেলে**,
+ * অর্থাৎ ঘর-আলাদা-করা কমা আর তার পরের ঘরের প্রথম অক্ষরটাও খেয়ে নেয়:
+ *   `…<E0>` + `,` + `Art`  →  একটা অদ্ভুত অক্ষর + `rt`
+ * ইউজারের ফাইলে ঠিক এটাই হয়েছিল — `Art` → `ଁrt`, `Junior` → `ଊunior`, প্রতিটা সারিতে।
+ * 🔴 তাই প্রতিটা ঘর লেখার আগে **বৈধ UTF-8** কিনা দেখা হয়, ভাঙা বাইট থাকলে বাদ।
+ * (`mb_check_encoding()` সস্তা, তাই ভালো ঘরে বাড়তি কাজ হয় না।)
+ */
+function reg_csv_utf8(string $v): string
+{
+    if ($v === '' || mb_check_encoding($v, 'UTF-8')) {
+        return $v;
+    }
+    // 🔴 'none' — নাহলে mbstring ভাঙা বাইটের জায়গায় '?' বসিয়ে দেয়
+    $old = mb_substitute_character();
+    mb_substitute_character('none');
+    $fixed = (string) mb_convert_encoding($v, 'UTF-8', 'UTF-8');
+    mb_substitute_character($old);
+    return $fixed;
+}
+
 /** 🔒 CSV ইনজেকশন গার্ড — Excel `=`/`+`/`-`/`@` দিয়ে শুরু হওয়া ঘরকে সূত্র ভাবে */
 function reg_csv_safe(?string $v): string
 {
@@ -721,7 +745,7 @@ function reg_csv_put($fh, array $values): void
 {
     $out = [];
     foreach ($values as $v) {
-        $v = (string) $v;
+        $v = reg_csv_utf8((string) $v);
         if (preg_match('~^="[0-9+]*"$~', $v)) {
             $out[] = $v;                                   // Excel-এর টেক্সট-সূত্র, কাঁচাই যাবে
         } elseif (strpbrk($v, ",\"\r\n") !== false) {
