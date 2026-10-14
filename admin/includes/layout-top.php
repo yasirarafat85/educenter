@@ -241,7 +241,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
 
         /* 🔴 সার্চ বক্সের হরফ মোবাইলে ১৬px — iOS Safari ১৬px-এর ছোট ইনপুটে ফোকাস করলে
            নিজে থেকেই পাতা জুম করে দেয়, তখন লেখা/কার্সর লাফায় (২০২৬-১০-০৩)। */
-        input[data-autosearch], .fp-input { font-size: 16px; }
+        input[data-autosearch], .fp-input, .list-search { font-size: 16px; }
 
         /* ⚠️ কার্ড-ইন-কার্ড ঠিক করা (২০২৬-০৭-২০, ইউজারের স্ক্রিনশট): টেবিলের মোড়ক
            `.bg-white rounded-2xl shadow` নিজেই একটা সাদা কার্ডের মতো দেখায়, আর ভেতরে প্রতিটা রো-ও
@@ -287,7 +287,10 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
 
     /* ── লিস্ট সার্চ (মোবাইলে অনেক আইটেমের মধ্যে দ্রুত খুঁজে বের করতে) ── */
     .list-search-wrap { position: relative; }
-    .list-search-wrap > i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: rgb(var(--c-text-muted)); }
+    /* 🔴 `> svg`-ও দরকার — `lucide.createIcons()` `<i data-lucide>`-কে `<svg>` বানিয়ে ফেলে,
+       তাই শুধু `> i` লিখলে আইকনটা absolute হতো না আর ইনপুটের **উপরে** আলাদা লাইনে বসত
+       (২০২৬-১০-১৩ স্ক্রিনশটে ধরা — জেনেরিক অটো-সার্চের বাক্সেও একই সমস্যা ছিল)। */
+    .list-search-wrap > i, .list-search-wrap > svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: rgb(var(--c-text-muted)); }
     .list-search { width: 100%; padding: 11px 14px 11px 38px; border: 1px solid rgb(var(--c-border)); border-radius: 12px; background: rgb(var(--c-surface)); color: rgb(var(--c-text)); font-size: 14px; }
     .list-search:focus { outline: none; border-color: rgb(var(--c-primary)); box-shadow: 0 0 0 3px rgb(var(--c-primary) / .15); }
     /* অ্যাক্সেসিবিলিটি: ডিভাইসে "reduce motion" চালু থাকলে অ্যানিমেশন/ট্রানজিশন প্রায় বন্ধ */

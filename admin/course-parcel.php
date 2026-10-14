@@ -12,6 +12,7 @@ require_once __DIR__ . '/includes/courier-notes.php';
 require_once __DIR__ . '/includes/payments.php'; // 🔑 টাকার খাতা — কালেকশনের পরিমাণ এখান থেকেই আসে
 require_once __DIR__ . '/includes/expense-sync.php'; // 💸 ছাড়/মাফ → খরচের বই
 require_once __DIR__ . '/includes/income-sync.php';  // 📒 খাতা বসানোর পর আয় মেলানো (ensure-ledger)
+require_once __DIR__ . '/includes/finance-link.php'; // 📊 হেডারের "এই ব্যাচের আয়/ব্যয়" লিংকের গার্ড
 admin_require_login();
 
 $db = get_db();
@@ -27,6 +28,8 @@ function cp_month_label(int $i): string
 }
 // 💸 এক পার্সেলে সর্বোচ্চ কত টাকা ছাড় দেওয়া যাবে — নিছক টাইপো-গার্ড (৫০০০০ লিখে ফেলা আটকাতে)
 const CP_MAX_WAIVE = 100000;
+// ✅ "কুরিয়ার ডান"-এ এক পার্সেলে সর্বোচ্চ কত টাকা বসানো যাবে — নিছক টাইপো-গার্ড
+const CP_MAX_COLLECT = 1000000;
 
 // প্রদর্শনের জন্য (English সংখ্যা — পড়া সহজ)
 function cp_month_display(int $i): string { return 'মাস ' . $i; }
@@ -36,6 +39,41 @@ function cp_url(int $itemId = 0, int $month = 0): string
     $u = 'course-parcel.php';
     if ($itemId) { $u .= '?item_id=' . $itemId; if ($month) { $u .= '&month=' . $month; } }
     return $u;
+}
+
+// 🔎 এই পাতার সার্চ কত জন হলে দেখানো হবে (এর কম হলে চোখেই সবটা দেখা যায়)
+const CP_SEARCH_MIN = 3;
+
+// 🔎 সার্চের খড়ের গাদা — রোস্টারের সারি ও মাসের কার্ড **দুটোতেই একই ফাংশন**
+// (দুই জায়গায় আলাদা তালিকা রাখলে একটায় যা খুঁজে পাওয়া যেত অন্যটায় পাওয়া যেত না)।
+// 🔴 ইচ্ছাকৃতভাবে সার্ভারেই বানানো হয় — জেনেরিক অটো-সার্চ `el.textContent` দেখত, আর তাতে
+//    সারির ডেলিভারি-ড্রপডাউনের সব অপশন ("ঢাকা"/"ঢাকার বাইরে") ঢুকে যেত, ফলে ওই শব্দ
+//    লিখলে সবাই "মিলে যেত" (ইউজারের অভিযোগ: "ঠিক ভাবে হয়না")।
+function cp_haystack(array $r): string
+{
+    $parts = [
+        $r['customer_name'] ?? '', $r['facebook_id'] ?? '', $r['receiver_name'] ?? '',
+        $r['address'] ?? '', $r['batch'] ?? '', $r['admin_note'] ?? '', $r['notes'] ?? '',
+        $r['phone'] ?? '', $r['receiver_phone'] ?? '', $r['father_mobile'] ?? '',
+    ];
+    $txt = mb_strtolower(trim((string) preg_replace('~\s+~u', ' ', implode(' ', array_map('strval', $parts)))), 'UTF-8');
+    // 🔢 বাংলা অঙ্কে লেখা ঠিকানা/ব্যাচও ("মিরপুর ১০") English অঙ্ক দিয়ে খুঁজে পাওয়া যায় —
+    //    তাই দুই রূপই গাদায় থাকে। 🔴 `en_digits()` নয়: ওটা ক্রমবাচক (৫ম) ইচ্ছাকৃতভাবে বাদ দেয়,
+    //    কিন্তু খোঁজার সময় "5ম ব্যাচ" লিখলেও মেলা উচিত।
+    $en = strtr($txt, bn_digit_map());
+    return $en === $txt ? $txt : $txt . ' ' . $en;
+}
+
+// 📞 শুধু অঙ্ক — মোবাইল নম্বর দিয়ে খোঁজার জন্য। "0171…" · "171…" · "+88017…" তিনভাবেই
+// মেলে, কারণ গাদায় প্রতিটা নম্বরের পুরো রূপটাই থাকে আর JS প্রশ্নটাকেও অঙ্কে নামিয়ে আনে।
+function cp_haystack_digits(array $r): string
+{
+    $out = [];
+    foreach ([$r['phone'] ?? '', $r['receiver_phone'] ?? '', $r['father_mobile'] ?? ''] as $ph) {
+        $d = preg_replace('~[^0-9]+~', '', en_digits((string) $ph));
+        if ($d !== '') { $out[] = $d; }
+    }
+    return implode(' ', array_unique($out));
 }
 
 $dc = [
@@ -120,6 +158,113 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (PDOException $ex) {
             if ($db->inTransaction()) { $db->rollBack(); }
             set_flash('error', 'খাতা বসানো যায়নি — database/migrate-payment-ledger.sql চালানো হয়নি।');
+        }
+        redirect(cp_url($itemId, $month));
+
+    } elseif ($action === 'parcel-done') {
+        /* ✅ "কুরিয়ার ডান" — আগে এন্ট্রি দেওয়া পার্সেল কুরিয়ার API ছাড়াই পাঠানো ধরে নেওয়া,
+         *    আর হাতে পাওয়া টাকাটা খাতায় বসিয়ে আয় মিলিয়ে নেওয়া (ইউজারের চাওয়া, ২০২৬-১০-১৩)।
+         *
+         * 🔴🔴 এখান থেকে কোনো আসল কুরিয়ার API ডাকা হয় না — তাই কোনো চালান তৈরি হয় না।
+         *     এটা নিছক "এটা আমি নিজে পাঠিয়ে দিয়েছি" বলে চিহ্নিত করা (`courier_provider='manual'`)।
+         * 🔴 টাকা বসানোর পথ হুবহু `registrations.php`-এর `pay-collect` — `pay_ensure_plan()` →
+         *    `pay_apply_payment()` → `pay_save_rows()` → **তারপর** `sync_income_for_status()`
+         *    (আগে সিঙ্ক করলে এইমাত্র বসানো জমা বইয়ে যেত না)। `pay_allocate_paid()` কখনো নয়
+         *    — ওটা সব সারি নতুন করে বসায়, অ্যাডমিনের হাতে বসানো জমা মুছে যেত।
+         * 🔴 মোট জমা ঠিক ততটাই না বাড়লে পুরো ট্রানজ্যাকশন rollback।
+         * 🔴 `admin_delete_actions()`-এ নেই, তাই `parcel`/`orders`-এ **edit** cap-ই যথেষ্ট। */
+        if ($month < 1) { $month = 1; }
+        $period   = cp_month_label($month);
+        // 🔴 ঘরগুলো শিক্ষার্থী-প্রতি (`done[<id>][...]`) — সব কার্ডের ঘরই সাবমিট হয়, কিন্তু
+        //    শুধু যার বোতাম চাপা হয়েছে তারটাই পড়া হয়। এক নামে রাখলে অন্য কার্ডের টিক
+        //    এই কার্ডে বসে যেত (ভুল মানুষের পার্সেল "পাঠানো" হয়ে যেত)।
+        $pdIn     = (array) ($_POST['done'][$regId] ?? []);
+        $markSent = !empty($pdIn['sent']);
+        $amount   = round((float) str_replace(',', '', (string) ($pdIn['amt'] ?? '')), 2);
+
+        // 🔴 রেজিস্ট্রেশনটা সত্যিই এই ব্যাচের ও confirmed কিনা — POST-এর id-তে কখনো ভরসা নয়
+        $pdReg = $db->prepare("SELECT * FROM registrations
+                               WHERE id = :id AND type = 'course' AND item_id = :item AND status = 'confirmed'");
+        $pdReg->execute(['id' => $regId, 'item' => $itemId]);
+        $pdReg = $pdReg->fetch();
+        if (!$pdReg) {
+            set_flash('error', 'শিক্ষার্থীটি এই কোর্স-ব্যাচে পাওয়া যায়নি।');
+            redirect(cp_url($itemId, $month));
+        }
+        if ($amount < 0 || $amount > CP_MAX_COLLECT) {
+            set_flash('error', 'টাকার অঙ্কটা ঠিক নেই — ০ থেকে ৳' . number_format(CP_MAX_COLLECT) . '-এর মধ্যে লিখুন।');
+            redirect(cp_url($itemId, $month));
+        }
+
+        $msgs = [];
+        try {
+            $incBefore = (float) ($db->query('SELECT COALESCE(SUM(amount), 0) AS s FROM income')->fetch()['s'] ?? 0);
+            $db->beginTransaction();
+
+            // ── ১) পাঠানো ধরে নেওয়া (শুধু আগে থেকে তৈরি থাকা পার্সেলে) ──
+            if ($markSent) {
+                $cb = $db->prepare('SELECT * FROM courier_batches WHERE registration_id = :r AND period_label = :p ORDER BY id DESC LIMIT 1');
+                $cb->execute(['r' => $regId, 'p' => $period]);
+                $cb = $cb->fetch();
+                if (!$cb) {
+                    $db->rollBack();
+                    set_flash('error', 'এই মাসের পার্সেলটা এখনো তৈরি হয়নি — আগে একবার "সেভ" চাপুন, তারপর "কুরিয়ার ডান" করা যাবে।');
+                    redirect(cp_url($itemId, $month));
+                }
+                if ((string) $cb['send_status'] === 'sent') {
+                    $msgs[] = 'এই মাসের পার্সেল আগে থেকেই "পাঠানো" ছিল।';
+                } else {
+                    $db->prepare("UPDATE courier_batches
+                                  SET send_status = 'sent', courier_provider = 'manual', sent_at = NOW()
+                                  WHERE id = :id")->execute(['id' => (int) $cb['id']]);
+                    $msgs[] = '✅ ' . cp_month_display($month) . '-এর পার্সেল "পাঠানো হয়েছে" ধরা হলো (হাতে পাঠানো — কোনো চালান তৈরি হয়নি)।';
+                }
+            }
+
+            // ── ২) হাতে পাওয়া টাকা খাতায় ──
+            if ($amount > 0) {
+                pay_ensure_plan($db, $pdReg);   // খাতা না থাকলে কিস্তি বসে; থাকলে কখনো ছোঁয়া হয় না
+                $rows       = pay_fetch_many($db, [$regId])[$regId] ?? [];
+                $paidBefore = pay_paid_total($rows);
+                if (!$rows) {
+                    $db->rollBack();
+                    set_flash('error', 'এই অর্ডারে কিস্তির ছক বসানো যায়নি — উপরের "📒 সবার খাতা বসান" একবার চাপুন।');
+                    redirect(cp_url($itemId, $month));
+                }
+                pay_save_rows($db, $regId, pay_apply_payment($rows, $amount));
+                $afterRows = pay_fetch_many($db, [$regId])[$regId] ?? [];
+                $paidAfter = pay_paid_total($afterRows);
+                if (abs($paidAfter - ($paidBefore + $amount)) > 0.05) {
+                    $db->rollBack();
+                    set_flash('error', 'টাকা বসানো বাতিল করা হলো — মোট জমা মিলছিল না (৳'
+                        . number_format($paidBefore, 2) . ' → ৳' . number_format($paidAfter, 2) . ')।');
+                    redirect(cp_url($itemId, $month));
+                }
+                $summary = pay_summary($afterRows);
+                $db->prepare('UPDATE registrations SET due_amount = :due WHERE id = :id')
+                    ->execute(['due' => $summary['balance'], 'id' => $regId]);
+                sync_income_for_status($db, $pdReg, (string) $pdReg['status']);
+                $msgs[] = '💰 ৳' . number_format($amount, 2) . ' খাতায় জমা বসানো হলো — এই অর্ডারে মোট জমা ৳'
+                    . number_format($paidAfter, 2) . '।'
+                    . ($summary['balance'] > 0 ? ' বাকি ৳' . number_format($summary['balance'], 2) . '।' : ' ✅ পুরো পেইড।');
+            }
+
+            $db->commit();
+
+            if (!$msgs) {
+                set_flash('error', 'কিছুই করা হয়নি — "পাঠানো ধরে নিন" টিক দিন অথবা টাকার অঙ্ক লিখুন।');
+                redirect(cp_url($itemId, $month));
+            }
+            if ($amount > 0) {
+                $incAfter = (float) ($db->query('SELECT COALESCE(SUM(amount), 0) AS s FROM income')->fetch()['s'] ?? 0);
+                $msgs[] = 'বইয়ের মোট আয় ৳' . number_format($incBefore, 2) . ' → ৳' . number_format($incAfter, 2) . '।';
+            }
+            // ⚠️ ফ্ল্যাশ layout-top-এ `e()` দিয়ে রেন্ডার হয়, তাই নামটা কাঁচাই দেওয়া যায়
+            set_flash('success', (string) $pdReg['customer_name'] . ' — ' . implode(' ', $msgs));
+        } catch (PDOException $ex) {
+            if ($db->inTransaction()) { $db->rollBack(); }
+            set_flash('error', 'কাজটা করা যায়নি — ডাটাবেসে "registration_payments" টেবিলটি আছে কিনা দেখুন '
+                . '(phpMyAdmin-এ database/migrate-payment-ledger.sql একবার চালিয়ে নিন)।');
         }
         redirect(cp_url($itemId, $month));
 
@@ -462,6 +607,17 @@ function cp_cell(?array $b): array
             <div class="text-xs text-gray-400">কোর্স · ব্যাচ</div>
             <h1 class="text-lg font-black text-gray-800 break-words"><?= e($course['title'] ?? '') ?> <span class="text-indigo-600 font-semibold text-sm">— <?= e($course['batch_name'] ?? '') ?></span></h1>
             <div class="text-xs text-gray-400 mt-0.5">মান্থলি ফি ৳<?= e(number_format($courseFee)) ?> · প্রতি মাসে এক পার্সেল</div>
+            <?php // 📊 এই ব্যাচের আয়-ব্যয় মিলিয়ে দেখার সরাসরি পথ (ইউজারের চাওয়া "আয় ব্যয় মেলানো যাবে")।
+                  // 🔴 `fin_link_ready()` false হলে (migrate-finance-course-link.sql চলেনি) লিংকগুলো
+                  //    দেখানো হয় না — ওখানে ফিল্টারটাই কাজ করত না। ?>
+            <?php if (admin_can('finance') && fin_link_ready($db)): ?>
+                <div class="flex flex-wrap items-center gap-2 mt-2" style="font-size:12px">
+                    <span class="text-gray-400">📊 এই ব্যাচের:</span>
+                    <a href="income.php?item=<?= $itemId ?>" class="text-green-700 font-semibold underline">আয়</a>
+                    <a href="expenses.php?item=<?= $itemId ?>" class="text-red-600 font-semibold underline">ব্যয়</a>
+                    <a href="finance.php" class="text-indigo-600 font-semibold underline">লাভ-ক্ষতি</a>
+                </div>
+            <?php endif; ?>
         </div>
         <form method="post" action="course-parcel.php" class="flex items-end gap-2 flex-shrink-0"
               onsubmit="return <?= $totalParcels ? "confirmSubmit(this, 'মোট পার্সেল সংখ্যা বদলাচ্ছেন — এটা প্রতি শিক্ষার্থীর মাসের সংখ্যা বদলে দেবে। নিশ্চিত?', 'সংখ্যা বদলাবেন?')" : 'true' ?>;">
@@ -538,7 +694,8 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
     $sentCount = 0;
     for ($i = 1; $i <= $months; $i++) { if (($byRegPeriod[$rid][cp_month_label($i)]['send_status'] ?? '') === 'sent') { $sentCount++; } }
     ?>
-    <tr class="border-b last:border-0 hover:bg-gray-50 <?= $active ? '' : 'opacity-70' ?>">
+    <tr class="cp-row border-b last:border-0 hover:bg-gray-50 <?= $active ? '' : 'opacity-70' ?>"
+        data-s="<?= e(cp_haystack($r)) ?>" data-d="<?= e(cp_haystack_digits($r)) ?>">
         <td class="py-2.5 px-3" style="min-width:150px;vertical-align:top;">
             <?php // 🔴 তিন লাইন একটাই মোড়কে — মোবাইল কার্ড-লেআউটে `td` flex হয়ে যায়, খোলা রাখলে
                   //    নাম/ফেসবুক/ফোন পাশাপাশি তিন কলামে চেপে যেত (স্ক্রিনশটে ধরা) ?>
@@ -603,6 +760,23 @@ function cpPermZone(sel) {
 }
 </script>
 
+<?php // ══════ 🔎 তালিকায় খুঁজুন — নাম / মোবাইল / ফেসবুক / ঠিকানা ══════
+      // 🔴 এই বাক্সটা থাকলে `layout-bottom.php`-এর জেনেরিক অটো-সার্চ এই পাতায় বসে না
+      //    (গার্ড-লিস্টে `#cpSearchBox` যোগ করা আছে) — নাহলে তিনটা টেবিলে তিনটা আলাদা
+      //    বাক্স বসত, আর সেটা সারির ড্রপডাউনের অপশনও "মিল" ধরত।
+      // 🔴 নিষ্ক্রিয়দের ভাঁজ-করা অংশে মিল পেলে সেটা নিজে থেকে খুলে যায় — নাহলে
+      //    "পাওয়া যায়নি" মনে হতো যদিও মানুষটা ওখানেই ছিল। ?>
+<?php if (count($regs) >= CP_SEARCH_MIN): ?>
+    <div id="cpSearchBox" class="mb-3">
+        <div class="list-search-wrap">
+            <i data-lucide="search" class="w-4 h-4"></i>
+            <input type="search" id="cpRosterSearch" class="list-search" autocomplete="off"
+                   aria-label="তালিকায় খুঁজুন" placeholder="তালিকায় খুঁজুন — নাম, মোবাইল, ফেসবুক, ঠিকানা...">
+        </div>
+        <p id="cpRosterNote" class="text-xs text-gray-500 mt-1 hidden"></p>
+    </div>
+<?php endif; ?>
+
 <div class="bg-white rounded-2xl shadow overflow-x-auto mb-3">
     <table class="w-full text-sm">
         <thead><tr class="text-left text-gray-500 border-b bg-gray-50">
@@ -629,7 +803,7 @@ function cpPermZone(sel) {
 <?php else: ?><div class="mb-6"></div><?php endif; ?>
 
 <?php if ($inactiveRegs): ?>
-    <details class="mb-6" <?= $pendingGroupRemoval ? 'open' : '' ?>>
+    <details id="cpInactive" class="mb-6" <?= $pendingGroupRemoval ? 'open' : '' ?>>
         <summary class="cursor-pointer select-none text-sm font-semibold <?= $pendingGroupRemoval ? 'text-red-600' : 'text-gray-500' ?> py-2 px-1 flex items-center gap-1.5">
             <i data-lucide="chevron-right" class="w-4 h-4"></i> নিষ্ক্রিয় শিক্ষার্থী (<?= count($inactiveRegs) ?> জন)<?= $pendingGroupRemoval ? ' — ' . count($pendingGroupRemoval) . ' জন এখনো গ্রুপে (বাদ দিন)' : ' — দেখতে/আবার সক্রিয় করতে ক্লিক করুন' ?>
         </summary>
@@ -689,6 +863,34 @@ function cpPermZone(sel) {
     <?php if (!$activeRegs): ?>
         <div class="bg-white rounded-2xl shadow empty-state mt-3"><div class="empty-ic"><i data-lucide="user-x" class="w-8 h-8"></i></div>কোনো সক্রিয় শিক্ষার্থী নেই — উপরে থেকে সক্রিয় করলে এখানে আসবে।</div>
     <?php else: ?>
+        <?php // ══════ 🔎 এই মাসের কার্ডে খুঁজুন ══════
+              // 🔴 ফর্মের **বাইরে** — ভেতরে দিলে ইনপুটে Enter চাপলেই ব্রাউজার `roundForm`
+              //    সাবমিট করে বসত, অর্থাৎ ভুল করে পুরো মাসের পার্সেল সেভ হয়ে যেত।
+              // 🔴 কার্ড লুকানো হয় `display:none` দিয়ে, `disabled` দিয়ে নয় — লুকানো কার্ডের
+              //    ঘরগুলোও সাবমিট হয়, তাই খোঁজা কখনো সেভ/পাঠানোর ফলাফল বদলায় না। ?>
+        <?php if (count($activeRegs) >= CP_SEARCH_MIN): ?>
+            <div class="mb-3">
+                <div class="list-search-wrap">
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                    <input type="search" id="cpCardSearch" class="list-search" autocomplete="off"
+                           aria-label="এই মাসের কার্ডে খুঁজুন" placeholder="এই মাসের কার্ডে খুঁজুন — নাম, মোবাইল, ফেসবুক, ঠিকানা...">
+                </div>
+                <p id="cpCardNote" class="text-xs text-gray-500 mt-1 hidden"></p>
+            </div>
+        <?php endif; ?>
+
+        <?php // ✅ "কুরিয়ার ডান" — roundForm-এর **বাইরে** একটা স্বতন্ত্র ফর্ম (HTML-এ নেস্টেড ফর্ম চলে না)।
+              // কার্ডের ভেতরের ঘরগুলো `form="cpDoneForm"` দিয়ে এই ফর্মের সাথে বাঁধা, তাই "সেভ"/
+              // "কুরিয়ারে পাঠান" চাপলে ওগুলো কখনো যায় না। কোন শিক্ষার্থী — সেটা JS নিচের
+              // hidden `id` ঘরে বসায় (🔴 `form.submit()` সাবমিট-বোতামের name/value পাঠায় না)। ?>
+        <form method="post" id="cpDoneForm" action="course-parcel.php">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="parcel-done">
+            <input type="hidden" name="item_id" value="<?= $itemId ?>">
+            <input type="hidden" name="month" value="<?= $selMonth ?>">
+            <input type="hidden" name="id" id="cpDoneId" value="">
+        </form>
+
         <form method="post" id="roundForm" action="course-parcel.php">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="round-save"><input type="hidden" name="mode" id="roundMode" value="draft">
@@ -740,7 +942,8 @@ function cpPermZone(sel) {
                 // সব কিস্তিই ⊘ বাদ দেওয়া থাকলেই "বাদ" বার্তা
                 $lSkip  = $lMonth && count(array_filter($lMonth, 'pay_is_skipped')) === count($lMonth);
             ?>
-                <div class="stu bg-white rounded-2xl shadow p-4 <?= $isNo ? 'opacity-60' : '' ?>" data-fee="<?= (int) $courseFee ?>" data-due="<?= (int) round($lDue) ?>" data-sent="<?= $isSent ? 1 : 0 ?>" data-waive0="<?= (int) round($exWaive) ?>">
+                <div class="stu bg-white rounded-2xl shadow p-4 <?= $isNo ? 'opacity-60' : '' ?>" data-fee="<?= (int) $courseFee ?>" data-due="<?= (int) round($lDue) ?>" data-sent="<?= $isSent ? 1 : 0 ?>" data-waive0="<?= (int) round($exWaive) ?>"
+                     data-s="<?= e(cp_haystack($r)) ?>" data-d="<?= e(cp_haystack_digits($r)) ?>">
                     <input type="hidden" name="bd[<?= $rid ?>][present]" value="1">
                     <input type="hidden" name="bd[<?= $rid ?>][decision]" class="decision" value="<?= $isNo ? 'no' : 'go' ?>">
                     <input type="hidden" name="bd[<?= $rid ?>][unlocked]" class="unlocked" value="">
@@ -863,6 +1066,60 @@ function cpPermZone(sel) {
                             </div>
                         </div>
                     </div>
+
+                    <?php // ══════ ✅ কুরিয়ার ডান + 💰 টাকা মিলিয়ে নেওয়া ══════
+                          // 🔴 `.builder`-এর **বাইরে** — পাঠানো কার্ডে builder লক থাকে, অথচ
+                          //    আগে পাঠানো পার্সেলের টাকাটা তখনই মেলাতে হয়।
+                          // 🔴 "পাঠানো ধরে নিন" শুধু আগে তৈরি করা (সেভ করা) পার্সেলে — ইউজারের
+                          //    কথাই: "কারোর পার্সেল আগে এন্ট্রি দেয়া থাকলে"। ?>
+                    <?php
+                    $pdCanSend = $ex && !$isSent && !$isNo;          // তৈরি আছে, এখনো পাঠানো হয়নি
+                    $pdMoney   = $lRows && $lDue > 0.009;            // খাতা আছে ও এই পার্সেলে বাকি আছে
+                    ?>
+                    <?php if ($pdCanSend || $pdMoney): ?>
+                        <div class="mt-3 pt-3 border-t">
+                            <details>
+                                <summary class="cursor-pointer select-none text-sm font-semibold text-green-700">
+                                    ✅ হাতে পাঠানো / 💰 টাকা মিলিয়ে নিন
+                                </summary>
+                                <div class="mt-2 rounded-lg border border-green-200 bg-green-50 px-2.5 py-2">
+                                    <?php if ($pdCanSend): ?>
+                                        <label class="flex items-start gap-1.5 text-sm text-green-800">
+                                            <input type="checkbox" form="cpDoneForm" name="done[<?= $rid ?>][sent]" value="1"
+                                                   class="doneSent w-4 h-4 accent-indigo-600" style="margin-top:3px">
+                                            <span>এই পার্সেলটা <b>পাঠানো হয়েছে</b> ধরে নিন
+                                                <span class="block text-xs text-gray-500">কুরিয়ারের API ডাকা হবে না, নতুন চালানও তৈরি হবে না — শুধু এখানে "✓ পাঠানো" দেখাবে।</span>
+                                            </span>
+                                        </label>
+                                    <?php elseif ($isSent): ?>
+                                        <div class="text-sm text-green-800">✓ এই মাসের পার্সেল পাঠানো হয়ে গেছে — নিচে শুধু টাকাটা মিলিয়ে নিন।</div>
+                                    <?php endif; ?>
+
+                                    <?php if ($pdMoney): ?>
+                                        <div class="<?= $pdCanSend ? 'mt-2 pt-2 border-t border-green-200' : 'mt-2' ?>">
+                                            <div class="text-sm text-green-800">💰 হাতে কত টাকা এলো? <span class="text-gray-500">(খাতায় জমা বসবে, আয়ের বইও মিলে যাবে)</span></div>
+                                            <div class="flex items-center flex-wrap gap-2 mt-1">
+                                                <input type="number" step="1" min="0" max="<?= CP_MAX_COLLECT ?>"
+                                                       form="cpDoneForm" name="done[<?= $rid ?>][amt]" value="" placeholder="0"
+                                                       class="doneAmt border rounded-lg px-2 py-2 text-sm font-bold text-right" style="width:120px;min-width:0">
+                                                <?php // 🔴 অঙ্কটা নিজে থেকে বসে না — ট্যাপ করলে তবেই বসে (অনুমান নিষিদ্ধ) ?>
+                                                <button type="button" class="doneChip text-xs font-semibold text-green-700 bg-white border border-green-200 rounded-lg px-2 py-1"
+                                                        data-amt="<?= (int) round($lDue) ?>">এই পার্সেলের বাকি ৳<?= e(number_format($lDue)) ?></button>
+                                            </div>
+                                            <div class="text-xs text-gray-500 mt-1">ডেলিভারি চার্জ বাদে — শুধু কোর্সের টাকাটা লিখুন।</div>
+                                        </div>
+                                    <?php elseif (!$lRows): ?>
+                                        <div class="<?= $pdCanSend ? 'mt-2 pt-2 border-t border-green-200' : '' ?> text-xs text-gray-500">
+                                            💰 টাকা বসাতে হলে আগে উপরের <b>“📒 সবার খাতা বসান”</b> একবার চাপুন — তারপর এখানে ঘরটা আসবে।
+                                        </div>
+                                    <?php endif; ?>
+
+                                    <button type="button" class="doneBtn mt-2 bg-green-600 hover:bg-green-700 text-white font-bold px-3 py-2 rounded-xl text-sm"
+                                            data-rid="<?= $rid ?>" data-name="<?= e($r['customer_name']) ?>">✅ করে ফেলুন</button>
+                                </div>
+                            </details>
+                        </div>
+                    <?php endif; ?>
                 </div>
             <?php endforeach; ?>
             </div>
@@ -988,9 +1245,100 @@ function cpPermZone(sel) {
     if(periodHasExisting){ msg='⚠️ এই মাসের কিছু আগে থেকেই আছে — পরিবর্তন হবে।\n\n'+msg; }
     showConfirmModal(msg,function(){ form.submit(); }, mode==='send'?'কুরিয়ারে পাঠাবেন?':'সেভ করবেন?');
   }
+  // ══════ ✅ কুরিয়ার ডান + 💰 টাকা ══════
+  // 🔴 `form.submit()` সাবমিট-বোতামের name/value পাঠায় না, তাই কোন শিক্ষার্থী সেটা
+  //    hidden `#cpDoneId`-তে বসিয়ে দেওয়া হয়।
+  var doneForm=document.getElementById('cpDoneForm'), doneId=document.getElementById('cpDoneId');
+  document.querySelectorAll('.stu').forEach(function(el){
+    var chip=el.querySelector('.doneChip'), amt=el.querySelector('.doneAmt');
+    if(chip&&amt){ chip.addEventListener('click',function(){ amt.value=chip.getAttribute('data-amt')||''; amt.focus(); }); }
+    var btn=el.querySelector('.doneBtn');
+    if(!btn||!doneForm||!doneId){ return; }
+    btn.addEventListener('click',function(){
+      var sentEl=el.querySelector('.doneSent'), sent=!!(sentEl&&sentEl.checked),
+          money=Math.max(0,+(amt?amt.value:0)||0), nm=btn.getAttribute('data-name')||'';
+      if(!sent&&money<=0){
+        showConfirmModal('কিছুই বাছাই করা হয়নি — "পাঠানো হয়েছে ধরে নিন" টিক দিন অথবা হাতে পাওয়া টাকার অঙ্কটা লিখুন।',function(){},'কিছু বাছাই করুন');
+        return;
+      }
+      var msg=nm+' — ';
+      if(sent){ msg+='মাস '+selMonth+'-এর পার্সেল "পাঠানো হয়েছে" ধরে নেওয়া হবে (কুরিয়ারে আসলে কিছু যাবে না, নতুন চালানও হবে না)। '; }
+      if(money>0){ msg+='আর ৳'+money+' টাকার খাতায় জমা বসবে — এতে আয়ের বইয়ের অঙ্কও বদলাবে। '; }
+      msg+='চালিয়ে যাবেন?';
+      showConfirmModal(msg,function(){ doneId.value=btn.getAttribute('data-rid')||''; doneForm.submit(); },'করে ফেলবেন?');
+    });
+  });
+
   var d1=document.getElementById('draftBtn'); if(d1){ d1.addEventListener('click',function(){ doSubmit('draft'); }); }
   var s1=document.getElementById('sendBtn'); if(s1){ s1.addEventListener('click',function(){ doSubmit('send'); }); }
   form.addEventListener('input',refresh); form.addEventListener('change',refresh); refresh();
+})();
+</script>
+
+<script>
+// ══════ 🔎 কোর্স পার্সেলের নিজের সার্চ (রোস্টার + এই মাসের কার্ড) ══════
+// একটাই ম্যাচিং-ফাংশন দুই জায়গায় — তাই এক বাক্সে যাকে পাওয়া যায় অন্য বাক্সেও পাওয়া যায়।
+// 🔴 গাদা (`data-s`/`data-d`) সার্ভারে বানানো (`cp_haystack()`), `textContent` নয় —
+//    নাহলে সারির ড্রপডাউনের অপশনও "মিল" ধরত।
+(function () {
+    var BN = {'\u09e6':'0','\u09e7':'1','\u09e8':'2','\u09e9':'3','\u09ea':'4','\u09eb':'5','\u09ec':'6','\u09ed':'7','\u09ee':'8','\u09ef':'9'};
+
+    // বাংলা অঙ্কে টাইপ করলেও যাতে নম্বর মেলে
+    function enDigits(t) { return t.replace(/[\u09e6-\u09ef]/g, function (c) { return BN[c]; }); }
+
+    function matches(el, q, qd) {
+        if (q === '') { return true; }
+        if ((el.getAttribute('data-s') || '').indexOf(q) !== -1) { return true; }
+        // 📞 প্রশ্নে অঙ্ক থাকলে নম্বরের গাদাতেও দেখা হয় — "171" দিয়ে "01712..." মেলে
+        return qd.length >= 2 && (el.getAttribute('data-d') || '').indexOf(qd) !== -1;
+    }
+
+    function wire(inputId, noteId, items, word, onApply) {
+        var input = document.getElementById(inputId), note = document.getElementById(noteId);
+        if (!input || !items.length) { return; }
+        function apply() {
+            var raw = enDigits(input.value.trim()),
+                q = raw.toLowerCase(),
+                qd = raw.replace(/[^0-9]+/g, ''),
+                shown = 0;
+            items.forEach(function (el) {
+                var hit = matches(el, q, qd);
+                el.style.display = hit ? '' : 'none';
+                if (hit) { shown++; }
+            });
+            if (note) {
+                if (q === '') { note.classList.add('hidden'); note.textContent = ''; }
+                else {
+                    note.classList.remove('hidden');
+                    note.textContent = shown
+                        ? ('🔎 ' + shown + ' ' + word + ' মিলেছে (মোট ' + items.length + ') — খোঁজা শুধু দেখার সুবিধার জন্য, সেভ / পাঠানোয় সবাই আগের মতোই থাকবে।')
+                        : '🔎 এই লেখার সাথে কেউ মেলেনি। নাম, মোবাইল নম্বর, ফেসবুক আইডি বা ঠিকানার অংশ দিয়ে চেষ্টা করুন।';
+                }
+            }
+            if (onApply) { onApply(q); }
+        }
+        // 🔴 Enter-এ কিছু সাবমিট হবে না (ফিল্টার সম্পূর্ণ ব্রাউজারে, রিলোড লাগে না)
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); }
+            if (e.key === 'Escape') { input.value = ''; apply(); }
+        });
+        input.addEventListener('input', apply);
+        apply();
+    }
+
+    var rows = Array.prototype.slice.call(document.querySelectorAll('tr.cp-row'));
+    var det = document.getElementById('cpInactive');
+    wire('cpRosterSearch', 'cpRosterNote', rows, 'জন', function (q) {
+        // নিষ্ক্রিয়দের ভাঁজ-করা অংশে মিল থাকলে নিজে থেকেই খুলে যায়
+        if (!det) { return; }
+        if (q === '') { return; }
+        var inside = det.querySelectorAll('tr.cp-row');
+        for (var i = 0; i < inside.length; i++) {
+            if (inside[i].style.display !== 'none') { det.open = true; return; }
+        }
+    });
+
+    wire('cpCardSearch', 'cpCardNote', Array.prototype.slice.call(document.querySelectorAll('.stu')), 'জন', null);
 })();
 </script>
 

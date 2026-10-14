@@ -679,6 +679,145 @@ if ($action === 'view' || $action === 'edit') {
 
 $courierConfigured = get_setting('courier_active_provider') !== '';
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * 📤 CSV ডাউনলোড (২০২৬-১০-১৪, ইউজারের চাওয়া: "কোর্স অনুযায়ী ব্যাচ অনুযায়ী
+ *    ডেটা ফিলটার করে CSV excel download করা যাবে")
+ *
+ * 🔴 ট্রিগার `?export=csv` — ইচ্ছাকৃতভাবে `action=` **নয়**। কেন্দ্রীয় গার্ড
+ *    (`admin_require_login()`) POST-এ `action` দেখে edit/delete cap চায়; এটা নিছক
+ *    পড়া, তাই পাতার সাধারণ `orders` view অনুমতিই যথেষ্ট।
+ * 🔴 কলামগুলো তালিকার তিন লেআউটের প্রতিধ্বনি — কোর্সে কোর্সের ঘর, ওয়ার্কশিট/
+ *    প্রোডাক্টে ওগুলোর ঘর, টাইপ বাছা না থাকলে মেশানো। **নতুন ফিল্ড যোগ করলে
+ *    এখানেও যোগ করুন** (তালিকায় কলাম বাড়ানো নিষেধ, কিন্তু CSV-তে জায়গা আছে)।
+ * ════════════════════════════════════════════════════════════════════════ */
+
+/** 🔒 CSV ইনজেকশন গার্ড — Excel `=`/`+`/`-`/`@` দিয়ে শুরু হওয়া ঘরকে সূত্র ভাবে */
+function reg_csv_safe(?string $v): string
+{
+    $v = trim(str_replace(["\r\n", "\r", "\n"], ' ', (string) $v));
+    if ($v !== '' && strpbrk($v[0], "=+-@\t") !== false) {
+        $v = "'" . $v;
+    }
+    return $v;
+}
+
+/** 📞 ফোন — Excel-এ শুরুর ০ যেন না হারায়। শুধু অঙ্ক/+ রাখা হয়, তাই সূত্র বসানো অসম্ভব */
+function reg_csv_phone(?string $v): string
+{
+    $d = preg_replace('~[^0-9+]~', '', en_digits((string) $v));
+    return $d === '' ? '' : '="' . $d . '"';
+}
+
+function reg_csv_money(float $v): string { return number_format($v, 2, '.', ''); }
+
+/**
+ * এক সারি লেখা — `fputcsv()` ইচ্ছাকৃতভাবে ব্যবহার করা হয়নি।
+ * 🔴 কারণ: ফোনের ঘর `="01711000001"` রূপে যেতে হবে (Excel-এ শুরুর ০ বাঁচাতে), কিন্তু
+ *    ওতে কোট থাকায় `fputcsv()` পুরো ঘরটা আবার কোট করে ফেলত, আর তখন কিছু প্রোগ্রাম
+ *    ঐ লেখাটাই হুবহু দেখায়। তাই আগে থেকে তৈরি ঐ রূপটা কাঁচা যায়, বাকি সব ঘর
+ *    RFC 4180 নিয়মে কোট হয়। (PHP ৮.৪-এর `$escape` deprecation-ও এতে আর লাগে না।)
+ */
+function reg_csv_put($fh, array $values): void
+{
+    $out = [];
+    foreach ($values as $v) {
+        $v = (string) $v;
+        if (preg_match('~^="[0-9+]*"$~', $v)) {
+            $out[] = $v;                                   // Excel-এর টেক্সট-সূত্র, কাঁচাই যাবে
+        } elseif (strpbrk($v, ",\"\r\n") !== false) {
+            $out[] = '"' . str_replace('"', '""', $v) . '"';
+        } else {
+            $out[] = $v;
+        }
+    }
+    fwrite($fh, implode(',', $out) . "\r\n");               // RFC 4180 — CRLF
+}
+
+function reg_csv_date(?string $v): string
+{
+    $t = strtotime((string) $v);
+    return $t ? date('Y-m-d H:i', $t) : '';
+}
+
+/**
+ * টাইপ-অনুযায়ী কলাম: [শিরোনাম => fn(array $row, array $ledger): string]
+ * $type খালি = "সব টাইপ" (মেশানো লেআউট)।
+ */
+function reg_csv_columns(string $type, array $statusLabels, array $typeLabels): array
+{
+    $common = [
+        'আইডি'      => fn($r, $l) => (string) $r['id'],
+        'তারিখ'     => fn($r, $l) => reg_csv_date($r['created_at'] ?? ''),
+        'স্ট্যাটাস'  => fn($r, $l) => $statusLabels[$r['status']][0] ?? (string) $r['status'],
+    ];
+    $money = [
+        'জমা'  => fn($r, $l) => reg_csv_money($l ? pay_paid_total($l) : 0.0),
+        'বাকি' => fn($r, $l) => reg_csv_money($l ? pay_summary($l)['balance'] : (float) ($r['due_amount'] ?? 0)),
+        'আয় (অনুমোদিত)' => fn($r, $l) => !empty($r['income_approved']) ? reg_csv_money((float) ($r['income_amount'] ?? 0)) : '',
+    ];
+    $notes = [
+        'অভিভাবকের মন্তব্য' => fn($r, $l) => reg_csv_safe($r['notes'] ?? ''),
+        'নোট'              => fn($r, $l) => reg_csv_safe($r['admin_note'] ?? ''),
+    ];
+
+    if ($type === 'course') {
+        // course-register.php ফর্মের ক্রমেই (তালিকার কোর্স-লেআউটের মতো)
+        return $common + [
+            'কোর্স'            => fn($r, $l) => reg_csv_safe($r['item_title'] ?? ''),
+            'ব্যাচ'            => fn($r, $l) => reg_csv_safe($r['batch'] ?? ''),
+            'শিশুর নাম'        => fn($r, $l) => reg_csv_safe($r['customer_name'] ?? ''),
+            'মোবাইল (মা)'      => fn($r, $l) => reg_csv_phone($r['phone'] ?? ''),
+            'জন্ম তারিখ'       => fn($r, $l) => reg_csv_safe($r['date_of_birth'] ?? ''),
+            'ফেসবুক আইডি'      => fn($r, $l) => reg_csv_safe($r['facebook_id'] ?? ''),
+            'মোবাইল (বাবা)'    => fn($r, $l) => reg_csv_phone($r['father_mobile'] ?? ''),
+            'রিসিভারের নাম'    => fn($r, $l) => reg_csv_safe($r['receiver_name'] ?? ''),
+            'রিসিভারের নম্বর'  => fn($r, $l) => reg_csv_phone($r['receiver_phone'] ?? ''),
+            'ঠিকানা'           => fn($r, $l) => reg_csv_safe($r['address'] ?? ''),
+            'ডেলিভারি এলাকা'   => fn($r, $l) => reg_csv_safe($r['delivery_zone'] ?? ''),
+            'FB গ্রুপে'        => fn($r, $l) => !empty($r['fb_group_added']) ? 'হ্যাঁ' : 'না',
+            'মেসেঞ্জার গ্রুপে' => fn($r, $l) => !empty($r['messenger_group_added']) ? 'হ্যাঁ' : 'না',
+            'কুরিয়ারে যাবে'    => fn($r, $l) => (int) ($r['courier_active'] ?? 1) ? 'হ্যাঁ' : 'না',
+        ] + $money + $notes;
+    }
+
+    if ($type === 'worksheet' || $type === 'product') {
+        // register.php ফর্ম — ওয়ার্কশিট ও প্রোডাক্ট একই ফর্ম শেয়ার করে
+        return $common + [
+            'আইটেম'   => fn($r, $l) => reg_csv_safe($r['item_title'] ?? ''),
+            'পরিমাণ'  => fn($r, $l) => (string) (int) ($r['quantity'] ?? 1),
+            'নাম'     => fn($r, $l) => reg_csv_safe($r['customer_name'] ?? ''),
+            'মোবাইল'  => fn($r, $l) => reg_csv_phone($r['phone'] ?? ''),
+            'ইমেইল'   => fn($r, $l) => reg_csv_safe($r['email'] ?? ''),
+            'ঠিকানা'  => fn($r, $l) => reg_csv_safe($r['address'] ?? ''),
+            'জেলা'    => fn($r, $l) => reg_csv_safe($r['district'] ?? ''),
+            'থানা'    => fn($r, $l) => reg_csv_safe($r['thana'] ?? ''),
+        ] + $money + $notes;
+    }
+
+    // টাইপ বাছা নেই — মেশানো
+    return $common + [
+        'ধরন'     => fn($r, $l) => $typeLabels[$r['type']][0] ?? (string) $r['type'],
+        'আইটেম'   => fn($r, $l) => reg_csv_safe($r['item_title'] ?? ''),
+        'ব্যাচ'    => fn($r, $l) => reg_csv_safe($r['batch'] ?? ''),
+        'নাম'     => fn($r, $l) => reg_csv_safe($r['customer_name'] ?? ''),
+        'মোবাইল'  => fn($r, $l) => reg_csv_phone($r['phone'] ?? ''),
+        'ঠিকানা'  => fn($r, $l) => reg_csv_safe($r['address'] ?? ''),
+        'পরিমাণ'  => fn($r, $l) => (string) (int) ($r['quantity'] ?? 1),
+    ] + $money + $notes;
+}
+
+/** ফাইলের নাম — ASCII-নিরাপদ (বাংলা নাম কিছু ব্রাউজারে ভাঙে) */
+function reg_csv_filename(string $type, string $item, string $batch): string
+{
+    $bits = ['orders'];
+    if ($type !== '') { $bits[] = $type; }
+    // 🔴 বাংলা কোর্স/ব্যাচের নাম ফাইলনামে দেওয়া যায় না — তাই শুধু ইঙ্গিত
+    if ($item !== '') { $bits[] = 'filtered'; }
+    elseif ($batch !== '') { $bits[] = 'batch'; }
+    $bits[] = date('Ymd-His');
+    return implode('-', $bits) . '.csv';
+}
+
 $filterStatus = $_GET['status'] ?? '';
 $filterType = $_GET['type'] ?? '';
 $search = trim($_GET['q'] ?? '');
@@ -733,6 +872,56 @@ if ($action === 'list') {
     }
 
     $whereSql = $where ? (' WHERE ' . implode(' AND ', $where)) : '';
+
+    // ── 📤 CSV ডাউনলোড — চলতি সব ফিল্টার মেনে, পেজিনেশন ছাড়া পুরোটা ──────────
+    // 🔴 এখানেই, `$whereSql` তৈরির পরপর — তাই তালিকা যা দেখাচ্ছে CSV-তেও হুবহু তাই
+    //    (ফিল্টারের নিয়ম দুই জায়গায় লিখলে সময়ের সাথে আলাদা হয়ে যেত)।
+    if (($_GET['export'] ?? '') === 'csv') {
+        $cols = reg_csv_columns($filterType, $statusLabels, $typeLabels);
+        $fn   = reg_csv_filename($filterType, $filterItem, $filterBatch);
+
+        while (ob_get_level() > 0) { ob_end_clean(); }   // কোনো আগের আউটপুট যেন ফাইলে না ঢোকে
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $fn . '"');
+        header('Cache-Control: no-store');
+        $out = fopen('php://output', 'w');
+        // 🔴 UTF-8 BOM — নাহলে Excel বাংলা লেখা mojibake দেখায়
+        fwrite($out, "\xEF\xBB\xBF");
+        reg_csv_put($out, array_keys($cols));
+
+        // বড় ব্যাচেও মেমরি না বাড়ে — ৫০০ করে টেনে, প্রতি গুচ্ছের খাতা একবারে
+        $chunk = 500;
+        $off   = 0;
+        while (true) {
+            // 🔴 `id DESC` টাই-ব্রেকার বাধ্যতামূলক — একই সেকেন্ডে বসা সারিগুলোর ক্রম
+            //    স্থির না থাকলে OFFSET দিয়ে টানায় কেউ দুইবার আসত, কেউ বাদ পড়ত।
+            //    LIMIT/OFFSET কোডের নিজের গোনা সংখ্যা (int-কাস্ট), কখনো ইউজার-ইনপুট নয়।
+            $st = $db->prepare("SELECT * FROM registrations{$whereSql}
+                                ORDER BY created_at DESC, id DESC
+                                LIMIT " . (int) $chunk . " OFFSET " . (int) $off);
+            $st->execute($params);
+            $batchRows = $st->fetchAll();
+            if (!$batchRows) { break; }
+
+            // 🔑 খাতা একবারে (N+1 এড়াতে) — টেবিল না থাকলেও যেন ডাউনলোড না ভাঙে
+            $ledgers = [];
+            try {
+                $ledgers = pay_fetch_many($db, array_map(fn($r) => (int) $r['id'], $batchRows));
+            } catch (PDOException $ex) {
+                $ledgers = [];
+            }
+            foreach ($batchRows as $r) {
+                $lg   = $ledgers[(int) $r['id']] ?? [];
+                $line = [];
+                foreach ($cols as $cb) { $line[] = $cb($r, $lg); }
+                reg_csv_put($out, $line);
+            }
+            if (count($batchRows) < $chunk) { break; }
+            $off += $chunk;
+        }
+        fclose($out);
+        exit;
+    }
 
     // ── উপরের সারাংশ কার্ড: স্ট্যাটাস **বাদে** বাকি সব ফিল্টার মেনে গণনা
     // (তাই "পেন্ডিং ৯ / কনফার্ম ২" কার্ডে ক্লিক করে স্ট্যাটাস বদলালেও সংখ্যাগুলো একই থাকে)
@@ -1398,11 +1587,18 @@ require __DIR__ . '/includes/layout-top.php';
                 <input type="date" name="date_to" value="<?= e($dateTo) ?>" onchange="document.getElementById('regFilterForm').submit()" class="w-full border rounded-xl px-3 py-2.5 text-sm">
             </div>
         </div>
-        <?php if ($hasActiveFilters): ?>
-        <div class="flex flex-wrap gap-2 mt-3">
-            <a href="registrations.php" class="bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold px-4 py-2.5 rounded-xl text-sm">✕ সব ফিল্টার মুছুন</a>
+        <div class="flex flex-wrap items-center gap-2 mt-3">
+            <?php if ($hasActiveFilters): ?>
+                <a href="registrations.php" class="bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold px-4 py-2.5 rounded-xl text-sm">✕ সব ফিল্টার মুছুন</a>
+            <?php endif; ?>
+            <?php // 📤 উপরের ফিল্টার যা দেখাচ্ছে ঠিক সেটাই নামে — পেজিনেশন ছাড়া পুরোটা।
+                  // 🔴 লিংকটা `reg_url()` থেকে, তাই নতুন ফিল্টার যোগ করলে এখানে কিছু করতে হয় না। ?>
+            <a href="<?= e(reg_url(['export' => 'csv'])) ?>"
+               class="bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 font-semibold px-4 py-2.5 rounded-xl text-sm">
+                📤 Excel/CSV ডাউনলোড<?= $hasActiveFilters ? ' (এই ফিল্টারের)' : '' ?>
+            </a>
+            <span class="text-xs text-gray-400">ফাইলটা Excel / Google Sheets দুটোতেই খোলে।</span>
         </div>
-        <?php endif; ?>
     </form>
 
     <?php
