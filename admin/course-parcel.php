@@ -56,37 +56,13 @@ function cp_mark_sent_manual(PDO $db, int $batchId): void
                   WHERE id = :id AND send_status <> 'sent'")->execute(['id' => $batchId]);
 }
 
-/**
- * 💰 হাতে পাওয়া টাকা খাতায় জমা বসানো — পথটা হুবহু `registrations.php`-এর `pay-collect`:
- *    `pay_ensure_plan()` → `pay_apply_payment()` → `pay_save_rows()` → **তারপর**
- *    `sync_income_for_status()` (আগে সিঙ্ক করলে এইমাত্র বসানো জমা বইয়ে যেত না)।
- * 🔴🔴 `pay_allocate_paid()` কখনো নয় — ওটা সব সারি নতুন করে বসায়, অ্যাডমিনের হাতে বসানো
- *     জমা মুছে যেত। `pay_apply_payment()` শুধু **যোগ** করে।
- * 🔴 কলার অবশ্যই ট্রানজ্যাকশনের ভেতর থেকে ডাকবে — মোট জমা ঠিক ততটাই না বাড়লে
- *    `ok => false` ফেরে, আর তখন কলার পুরোটা rollback করবে (টাকার হিসাব নীরবে সরতে পারে না)।
+/* 💰 হাতে পাওয়া টাকা খাতায় জমা বসানো — আগে এখানে নিজের ২৮ লাইন ছিল; ২০২৬-১০-১৫-তে
+ * (ধাপ ২) সেটা তুলে দিয়ে শেয়ার্ড **`pay_collect()`** (admin/includes/income-sync.php)
+ * ডাকা হয় — registrations.php-এর "নতুন টাকা জমা নিন" আর payment-inbox.php-এর
+ * "খাতায় বসান"-ও ঠিক সেটাই ডাকে।
+ * 🔴 টাকার নিয়ম এখন একটাই জায়গায়; এখানে আলাদা করে আর লিখবেন না।
+ * 🔴 কলার নিজে ট্রানজ্যাকশন খোলে, আর `ok => false` হলে rollback করে (নিচে দেখুন)।
  */
-function cp_collect_payment(PDO $db, array $reg, float $amount): array
-{
-    $regId = (int) $reg['id'];
-    pay_ensure_plan($db, $reg);   // খাতা না থাকলে কিস্তি বসে; থাকলে কখনো ছোঁয়া হয় না
-    $rows = pay_fetch_many($db, [$regId])[$regId] ?? [];
-    if (!$rows) {
-        return ['ok' => false, 'err' => 'কিস্তির ছক বসানো যায়নি — উপরের "📒 সবার খাতা বসান" একবার চাপুন', 'paid' => 0.0, 'balance' => 0.0];
-    }
-    $before = pay_paid_total($rows);
-    pay_save_rows($db, $regId, pay_apply_payment($rows, $amount));
-    $afterRows = pay_fetch_many($db, [$regId])[$regId] ?? [];
-    $paid      = pay_paid_total($afterRows);
-    if (abs($paid - ($before + $amount)) > 0.05) {
-        return ['ok' => false, 'err' => 'মোট জমা মিলছিল না (৳' . number_format($before, 2) . ' → ৳' . number_format($paid, 2) . ')',
-                'paid' => $paid, 'balance' => 0.0];
-    }
-    $summary = pay_summary($afterRows);
-    $db->prepare('UPDATE registrations SET due_amount = :due WHERE id = :id')
-       ->execute(['due' => $summary['balance'], 'id' => $regId]);
-    sync_income_for_status($db, $reg, (string) $reg['status']);
-    return ['ok' => true, 'err' => '', 'paid' => $paid, 'balance' => (float) $summary['balance']];
-}
 
 // প্রদর্শনের জন্য (English সংখ্যা — পড়া সহজ)
 function cp_month_display(int $i): string { return 'মাস ' . $i; }
@@ -360,7 +336,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($doneAmt > 0.009) {
                 try {
                     $db->beginTransaction();
-                    $res = cp_collect_payment($db, $regMap[$rid], $doneAmt);
+                    $res = pay_collect($db, $regMap[$rid], $doneAmt, 'parcel');
                     if (!empty($res['ok'])) {
                         $db->commit();
                         $moneyOk++; $moneyTotal += $doneAmt;

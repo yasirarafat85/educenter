@@ -196,31 +196,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $db->beginTransaction();
 
-            // খাতা না থাকলে ব্যাচের সেটিংস দেখে বসিয়ে নেওয়া (ধাপ ১-এর হেল্পার, জমা ০)
-            pay_ensure_plan($db, $reg);
-
-            $rows      = pay_fetch_many($db, [$regId])[$regId] ?? [];
-            $paidBefore = pay_paid_total($rows);
-            if (!$rows) {
-                $db->rollBack();
-                set_flash('error', 'এই অর্ডারের খাতা তৈরি করা যায়নি — অর্ডারে গিয়ে "টাকা" চিপে একবার সেভ করে দেখুন।');
-                redirect('payment-inbox.php');
-            }
-
-            pay_save_rows($db, $regId, pay_apply_payment($rows, $amount));
-
-            // 🔴 মোট জমা ঠিক ততটাই বেড়েছে কিনা — না মিললে পুরো ট্রানজ্যাকশন rollback
-            //    (`pay-rebuild` হ্যান্ডলারের মতোই; টাকা নীরবে হারাতে/বাড়তে পারে না)
-            $after = pay_fetch_many($db, [$regId])[$regId] ?? [];
-            if (abs(pay_paid_total($after) - ($paidBefore + $amount)) > 0.05) {
-                $db->rollBack();
-                set_flash('error', 'হিসাব মিলছে না, তাই কিছুই বসানো হয়নি। অর্ডারের "টাকা" খাতায় নিজে বসান।');
-                redirect('payment-inbox.php');
-            }
-
             /* অর্ডারটা এখনো pending হলে কনফার্ম করা — নাহলে টাকা খাতায় বসলেও আয়ে যেত না
              * (আয়ের গেট `INCOME_STATUSES`)। 🔴 শুধু pending → confirmed, আর শুধু
-             * অ্যাডমিন টিক রাখলে; অন্য কোনো স্ট্যাটাস কখনো বদলানো হয় না। */
+             * অ্যাডমিন টিক রাখলে; অন্য কোনো স্ট্যাটাস কখনো বদলানো হয় না।
+             * 🔴 এটা `pay_collect()`-এর **আগে**, একই ট্রানজ্যাকশনের ভেতরে — কারণ ঐ
+             *    ফাংশনের ভেতরের `sync_income_for_status()` `$reg['status']`-ই দেখে।
+             *    টাকা বসাতে ব্যর্থ হলে নিচের rollback এই কনফার্মটাও ফিরিয়ে নেয়। */
             $didConfirm = false;
             if ($alsoConfirm && ($reg['status'] ?? '') === 'pending') {
                 $db->prepare("UPDATE registrations SET status = 'confirmed' WHERE id = :id")->execute(['id' => $regId]);
@@ -228,13 +209,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $didConfirm = true;
             }
 
-            // 🔴 সিঙ্ক সবসময় খাতা লেখার **পরে** (আগে করলে এইমাত্র বসানো জমা বইয়ে যেত না)
-            sync_income_for_status($db, $reg, (string) $reg['status']);
-
-            // বাকি টাকা registrations.due_amount-এ (খাতাই আসল উৎস, এটা দ্রুত রেফারেন্স)
-            $sum = pay_summary($after);
-            $db->prepare('UPDATE registrations SET due_amount = :due WHERE id = :id')
-               ->execute(['due' => $sum['balance'], 'id' => $regId]);
+            /* 🔴 টাকা বসানোর একটাই দরজা — `pay_collect()` (admin/includes/income-sync.php)।
+             *    ভেতরে হুবহু সেই প্রমাণিত পথ: pay_ensure_plan() → pay_apply_payment() →
+             *    pay_save_rows() → due_amount → **তারপর** sync_income_for_status()।
+             *    registrations.php-এর ড্রয়ার ও course-parcel.php-এর "টাকা মিলিয়ে নিন"-ও
+             *    এই একটাই ফাংশন ডাকে — এখানে আলাদা করে আর লিখবেন না। */
+            $res = pay_collect($db, $reg, $amount, 'claim');
+            if (!$res['ok']) {
+                $db->rollBack();
+                set_flash('error', $res['code'] === 'mismatch'
+                    ? 'হিসাব মিলছে না, তাই কিছুই বসানো হয়নি। অর্ডারের "টাকা" খাতায় নিজে বসান।'
+                    : $res['err']);
+                redirect('payment-inbox.php');
+            }
+            $sum = ['balance' => $res['balance']];
 
             /* 🔗 মিলে যাওয়া বার্তাটা এখনো জোড়া না লাগানো থাকলে এখানেই লাগিয়ে দেওয়া —
              * নাহলে টাকাটা খাতায় বসার পরেও বার্তাটা "দাবি হয়নি এমন টাকা" তালিকায়

@@ -91,3 +91,112 @@ function sync_income_for_status(PDO $db, array $reg, string $newStatus): void
             ->execute(['id' => $reg['id']]);
     }
 }
+
+/* ============================================================================
+ * 💰💰 টাকা জমা নেওয়ার **একটাই দরজা** — `pay_collect()`  (২০২৬-১০-১৫, ধাপ ২)
+ * ============================================================================
+ *
+ * এর আগে ঠিক একই ৭ ধাপ **তিন জায়গায় আলাদা করে** লেখা ছিল:
+ *   • `admin/registrations.php`   → `action=pay-collect`  (ড্রয়ারের "নতুন টাকা জমা নিন")
+ *   • `admin/course-parcel.php`   → `cp_collect_payment()` ("💰 টাকা মিলিয়ে নিন")
+ *   • `admin/payment-inbox.php`   → `action=claim-post`    ("💰 খাতায় বসান")
+ * তিনটেই হুবহু এক নিয়ম, তাই একটায় কিছু বদলালে বাকি দুটোয় বদলাতে ভুলে যাওয়ার
+ * ঝুঁকি ছিল — আর টাকার নিয়ম দুই জায়গায় দু-রকম হলে সেটা **নীরবে** ভুল হয়।
+ * এখন তিনটেই এই ফাংশনটাই ডাকে।
+ *
+ * 🔴🔴 ক্রমটা কখনো বদলাবেন না:
+ *      pay_ensure_plan() → pay_apply_payment() → pay_save_rows()
+ *                        → due_amount ডিনরমালাইজ → **তারপর** sync_income_for_status()
+ *      সিঙ্ক আগে করলে এইমাত্র বসানো জমাটা বইয়ে যেত না।
+ *
+ * 🔴🔴 `pay_allocate_paid()` এখানে কখনো নয় — ওটা "মোট এতটুকু জমা" ধরে **সব সারি নতুন
+ *      করে** বসায়, অর্থাৎ অ্যাডমিনের হাতে বসানো কিস্তির জমা মুছে যেত।
+ *      `pay_apply_payment()` শুধু **যোগ** করে (advance শেষ সারিতে বসে, ⊘ বাদ সারিতে কিছুই নয়)।
+ *
+ * 🔴 এটা **"যোগ করা"** (incremental), **"বসিয়ে দেওয়া" (absolute) নয়** — এই পার্থক্যটা
+ *    জরুরি। `admin/income-fix.php` কাজটা করে উল্টো অর্থে ("আসলে কত টাকা এসেছে" =
+ *    মোট), তাই সেটা ইচ্ছাকৃতভাবে এই দরজা দিয়ে যায় না; গেলে `pay_ensure_plan()`-এর
+ *    prefill-এর উপরে আবার যোগ হয়ে **অর্থ দ্বিগুণ** হয়ে যেত (orphan দলে income_approved=1)।
+ *
+ * 🔴 কলার নিজে ট্রানজ্যাকশন খোলে — এই ফাংশন খোলে না, commit/rollback-ও করে না।
+ *    `ok => false` ফিরলে কলার **অবশ্যই rollback করবে** (টাকার হিসাব নীরবে সরতে পারে না)।
+ * 🔴 অঙ্কের সীমা কলারের (প্রতিটার নিজের ধ্রুবক ও নিজের বার্তা আছে) — এখানে শুধু
+ *    শেষ রক্ষাকবচ হিসেবে ০/ঋণাত্মক আটকানো হয়।
+ * 🔴 `$reg` অ্যারেটা কলার যেভাবে দেয় সেভাবেই ব্যবহার হয় — অর্থাৎ স্ট্যাটাস বদলাতে
+ *    হলে (claim-post-এর pending → confirmed) কলার **এই ফাংশন ডাকার আগে** একই
+ *    ট্রানজ্যাকশনের ভেতরে বদলে নেবে, তাহলে সিঙ্ক নতুন স্ট্যাটাসই দেখবে।
+ *
+ * @param string $source  কোন পাতা থেকে — শুধু **ভুল হলে কী করতে হবে** সেই ইঙ্গিতটা
+ *                        বাছতে ব্যবহার হয়; DB-তে এর কোনো প্রভাব নেই।
+ * @return array{ok:bool, code:string, err:string, before:float, paid:float, balance:float}
+ */
+function pay_collect(PDO $db, array $reg, float $amount, string $source = ''): array
+{
+    $regId = (int) ($reg['id'] ?? 0);
+    $fail  = fn(string $code, string $err, float $before = 0.0, float $paid = 0.0): array
+        => ['ok' => false, 'code' => $code, 'err' => $err, 'before' => $before, 'paid' => $paid, 'balance' => 0.0];
+
+    if ($regId <= 0) {
+        return $fail('noreg', 'অর্ডারটি পাওয়া যায়নি।');
+    }
+    // শেষ রক্ষাকবচ — কলারের নিজের গার্ড আগেই থাকে
+    if (!($amount > 0)) {
+        return $fail('amount', 'জমার অঙ্কটা ঠিক নেই।');
+    }
+
+    // খাতা না থাকলে ব্যাচের সেটিংস দেখে কিস্তিগুলো বসে (জমা ০); থাকলে কখনো ছোঁয়া হয় না
+    pay_ensure_plan($db, $reg);
+
+    $rows = pay_fetch_many($db, [$regId])[$regId] ?? [];
+    if (!$rows) {
+        return $fail('noplan', pay_collect_noplan_hint($source));
+    }
+    $before = pay_paid_total($rows);
+
+    pay_save_rows($db, $regId, pay_apply_payment($rows, $amount));
+
+    // 🔴 নিরাপত্তা-জাল: মোট জমা ঠিক এই অঙ্কটাই না বাড়লে কলার পুরোটা বাতিল করবে
+    $after = pay_fetch_many($db, [$regId])[$regId] ?? [];
+    $paid  = pay_paid_total($after);
+    if (abs($paid - ($before + $amount)) > 0.05) {
+        return $fail(
+            'mismatch',
+            'মোট জমা মিলছিল না (৳' . number_format($before, 2) . ' → ৳' . number_format($paid, 2) . ')',
+            $before,
+            $paid
+        );
+    }
+
+    // বাকি টাকা registrations.due_amount-এ (খাতাই আসল উৎস, এটা দ্রুত রেফারেন্স)
+    $summary = pay_summary($after);
+    $db->prepare('UPDATE registrations SET due_amount = :due WHERE id = :id')
+        ->execute(['due' => $summary['balance'], 'id' => $regId]);
+
+    // 🔴 সিঙ্ক সবসময় খাতা লেখার **পরে**
+    sync_income_for_status($db, $reg, (string) ($reg['status'] ?? ''));
+
+    return [
+        'ok'      => true,
+        'code'    => '',
+        'err'     => '',
+        'before'  => $before,
+        'paid'    => $paid,
+        'balance' => (float) $summary['balance'],
+    ];
+}
+
+// খাতা বসানোই গেল না — কোন পাতা থেকে এসেছে সেই অনুযায়ী "এখন কী করুন" ইঙ্গিত।
+// 🔴 প্রতিটা পাতার নিজের বোতামের নামই বলা হয় (সাধারণ বার্তা দিলে অ্যাডমিন কোথায়
+//    যাবেন বুঝতেন না)। DB-তে এর কোনো প্রভাব নেই।
+function pay_collect_noplan_hint(string $source): string
+{
+    switch ($source) {
+        case 'parcel':
+            return 'কিস্তির ছক বসানো যায়নি — উপরের "📒 সবার খাতা বসান" একবার চাপুন';
+        case 'claim':
+            return 'এই অর্ডারের খাতা তৈরি করা যায়নি — অর্ডারে গিয়ে "টাকা" চিপে একবার সেভ করে দেখুন।';
+        case 'drawer':
+        default:
+            return 'এই অর্ডারে কিস্তির ছক বসানো যায়নি — নিচের খাতা থেকে একবার "সংরক্ষণ করুন" চাপুন।';
+    }
+}

@@ -311,33 +311,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'pay-collect') {
         $incBefore = (float) ($db->query('SELECT COALESCE(SUM(amount), 0) AS s FROM income')->fetch()['s'] ?? 0);
 
         $db->beginTransaction();
-        pay_ensure_plan($db, $regRow);   // খাতা না থাকলে কিস্তিগুলো বসে; থাকলে কখনো ছোঁয়া হয় না
-        $rows       = pay_fetch_many($db, [$id])[$id] ?? [];
-        $paidBefore = pay_paid_total($rows);
-        if (!$rows) {
+        // 🔴 টাকা বসানোর একটাই দরজা — `pay_collect()` (admin/includes/income-sync.php)।
+        //    ভেতরে হুবহু সেই প্রমাণিত পথ: pay_ensure_plan() → pay_apply_payment() →
+        //    pay_save_rows() → due_amount → **তারপর** sync_income_for_status()।
+        //    এখানে আলাদা করে ঐ ধাপগুলো আর লিখবেন না (course-parcel ও payment-inbox-ও
+        //    এই একটাই ফাংশন ডাকে — নিয়ম দুই জায়গায় রাখা যাবে না)।
+        $res = pay_collect($db, $regRow, $amount, 'drawer');
+        if (!$res['ok']) {
             $db->rollBack();
-            set_flash('error', 'এই অর্ডারে কিস্তির ছক বসানো যায়নি — নিচের খাতা থেকে একবার "সংরক্ষণ করুন" চাপুন।');
+            set_flash('error', $res['code'] === 'mismatch'
+                ? 'টাকা বসানো বাতিল করা হলো — ' . $res['err'] . '।'
+                : $res['err']);
             redirect(reg_anchor_url($returnUrl, $id));
         }
-
-        pay_save_rows($db, $id, pay_apply_payment($rows, $amount));
-        $after     = pay_fetch_many($db, [$id])[$id] ?? [];
-        $paidAfter = pay_paid_total($after);
-
-        // 🔴 নিরাপত্তা-জাল (pay-rebuild/claim-post-এর মতোই): মোট জমা ঠিক এই অঙ্কটাই না বাড়লে পুরোটা বাতিল
-        if (abs($paidAfter - ($paidBefore + $amount)) > 0.05) {
-            $db->rollBack();
-            set_flash('error', 'টাকা বসানো বাতিল করা হলো — মোট জমা মিলছিল না (৳'
-                . number_format($paidBefore, 2) . ' → ৳' . number_format($paidAfter, 2) . ')।');
-            redirect(reg_anchor_url($returnUrl, $id));
-        }
-
-        $summary = pay_summary($after);
-        $db->prepare('UPDATE registrations SET due_amount = :due WHERE id = :id')
-            ->execute(['due' => $summary['balance'], 'id' => $id]);
-        sync_income_for_status($db, $regRow, (string) $regRow['status']);
         $db->commit();
 
+        $paidAfter = $res['paid'];
+        $summary   = ['balance' => $res['balance']];
         $incAfter = (float) ($db->query('SELECT COALESCE(SUM(amount), 0) AS s FROM income')->fetch()['s'] ?? 0);
         $msg = '💰 ৳' . number_format($amount, 2) . ' জমা বসানো হলো — এই অর্ডারে মোট জমা ৳'
             . number_format($paidAfter, 2) . '।'
@@ -1356,6 +1346,10 @@ function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, in
                     </div>
                     <p class="text-[11px] text-gray-500 mt-2">
                         যা লিখবেন সেটা <strong>আগের জমার সাথে যোগ</strong> হবে — উপরের কিস্তি থেকে নিচে বসবে, বাড়তি থাকলে শেষ কিস্তিতে (advance)।
+                        <?php /* 🚪 ধাপ ২ (২০২৬-১০-১৫): তিন জায়গা থেকেই টাকা বসানো যায়, আর তিনটেই
+                               এখন একটাই শেয়ার্ড `pay_collect()` ডাকে — অ্যাডমিনকে "কোনটা দিয়ে
+                               বসাব" ভাবতে হয় না। এই লাইনটা নিছক লেখা, কিছুই বদলায় না। */ ?>
+                        <br><span class="text-indigo-700">🚪 এখান থেকে, <strong>কোর্স পার্সেল</strong> থেকে, আর <strong>পেমেন্ট ইনবক্স</strong> থেকে — তিন জায়গায় টাকা বসালে হিসাব হুবহু একই হয়।</span>
                         <?php if ($isNew): ?> <strong>খাতা এখনো সেভ হয়নি — টাকা বসালে কিস্তিগুলোও একসাথে তৈরি হয়ে যাবে।</strong><?php endif; ?>
                     </p>
                 </div>
