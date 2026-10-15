@@ -190,6 +190,10 @@ function pay_row_months(array $row): array
 //    সেটা `pay_row_months()`-এ আগেই বসানো আছে।
 function pay_row_slots(array $row, int $maxSlot = 0): array
 {
+    // 🚚 ধরে রাখা ডেলিভারি চার্জ (kind = 'delivery') কোনো পার্সেলের কালেকশনে **নিজে থেকে**
+    //    বসে না — অ্যাডমিন যে মাসে ইচ্ছা "এই পার্সেলে কী কী তুলবেন" ছকে টিক দিয়ে তোলেন।
+    // 🔴 এটা সম্পূর্ণ নতুন kind (২০২৬-১০-১৫), পুরনো কোনো সারি এর আওতায় পড়ে না।
+    if ((string) ($row['kind'] ?? '') === PAY_PART_DELIVERY) { return []; }
     $slots = pay_row_months($row);
     if ($slots || (string) ($row['kind'] ?? '') !== 'monthly') {
         return $slots;
@@ -213,7 +217,9 @@ function pay_rows_for_month(array $rows, int $month, int $maxSlot = 0): array
             $months = array_values(array_unique(array_map(fn($m) => min((int) $m, $maxSlot), $months)));
         }
         // মাস-পরিসর জানা থাকলে সেটাই মানি; না জানলে প্রথম পার্সেল
-        if ($months ? in_array($month, $months, true) : $month === 1) {
+        // 🔴 ব্যতিক্রম ডেলিভারি — ওটা কোনো পার্সেলে নিজে থেকে যায় না (উপরে দেখুন)
+        if ($months ? in_array($month, $months, true)
+                    : ($month === 1 && (string) ($r['kind'] ?? '') !== PAY_PART_DELIVERY)) {
             $out[] = $r;
         }
     }
@@ -230,6 +236,107 @@ function pay_month_outstanding(array $rows, int $month, int $maxSlot = 0): float
         $sum += pay_row_outstanding($r);
     }
     return round($sum, 2);
+}
+
+/* ═══════ 🧾 এই পার্সেলে কী কী তোলা হবে — বেছে নেওয়ার ছক (২০২৬-১০-১৫) ═══════
+ * ইউজারের চাওয়া: *"কেউ জানাল আমার পার্সেল শুধু ডেলিভারি চার্জ দিয়ে যাবে, বেতন পরে
+ * দিবো"* — তখন ঐ কিস্তিটা **কুরিয়ারের কালেকশনে যাবে না**, কিন্তু খাতায় বাকিই থাকবে।
+ *
+ * 🔴 টোকেন = খাতার সারির `id` (শুধু অঙ্ক) অথবা ধ্রুবক `delivery` (ডেলিভারি চার্জ + ওজন)।
+ * 🔴🔴 `$tokens === null` মানে **কিছু বেছে দেওয়া হয়নি = আগের আচরণ হুবহু** (এই মাসের সব
+ *     কিস্তি + ডেলিভারি)। তাই পুরনো সব পার্সেল আর মাইগ্রেশনের আগের অবস্থা অপরিবর্তিত।
+ *     "সব টিক তুলে দেওয়া" আলাদা অবস্থা — সেটা `PAY_PART_NONE` হয়ে সেভ হয় (খালি স্ট্রিং
+ *     নয়), নাহলে "কিছুই তুলব না" আর "বেছে দেওয়া হয়নি" এক হয়ে যেত।
+ * 🔴 ফাংশনগুলো **বিশুদ্ধ** (DB/সেশন/আউটপুট নেই) — পাবলিক account.php-ও এই ফাইল require করে।
+ */
+const PAY_PART_DELIVERY = 'delivery';
+const PAY_PART_NONE     = 'none';
+
+// এই পার্সেলে বেছে নেওয়ার মতো কিস্তিগুলো — খাতার **সব** বাকি সারি।
+// `on` = এই মাসেই পড়ে (ডিফল্টে টিক); বাকিগুলো আগের মাসের বকেয়া, টিক দিলে এই পার্সেলেই উঠবে।
+// 🔴 পুরো পেইড ও ⊘ বাদ দেওয়া সারি তালিকায় আসেই না (`pay_row_outstanding()` ০)।
+function pay_month_picklist(array $rows, int $month, int $maxSlot = 0): array
+{
+    $now = [];
+    foreach (pay_rows_for_month($rows, $month, $maxSlot) as $r) {
+        $now[(string) ($r['id'] ?? '')] = true;
+    }
+    $out = [];
+    foreach ($rows as $r) {
+        $id  = (string) ($r['id'] ?? '');
+        $due = pay_row_outstanding($r);
+        if ($id === '' || $due <= 0.009) { continue; }
+        $slots = pay_row_slots($r, $maxSlot);
+        $out[] = [
+            'token' => $id,
+            'label' => (string) ($r['label'] ?? ''),
+            'kind'  => (string) ($r['kind'] ?? ''),
+            'due'   => $due,
+            'on'    => isset($now[$id]),
+            // কোন পার্সেলের কিস্তি (০ = কোনোটার নয়, যেমন ধরে রাখা ডেলিভারি চার্জ) —
+            // শুধু "আগের বাকি / পরের মাসের" লেখাটা বাছতে, টাকার হিসাবে নয়
+            'slot'  => $slots ? min(array_map('intval', $slots)) : 0,
+        ];
+    }
+    return $out;
+}
+
+// সেভ করা স্ট্রিং → টোকেনের তালিকা। খালি/NULL = `null` (বেছে দেওয়া হয়নি = ডিফল্ট)।
+function pay_parts_parse(?string $raw): ?array
+{
+    $raw = trim((string) $raw);
+    if ($raw === '') { return null; }
+    $out = [];
+    foreach (explode(',', $raw) as $t) {
+        $t = trim($t);
+        if ($t === PAY_PART_DELIVERY || ctype_digit($t)) { $out[] = $t; }
+    }
+    return $out;   // `none` হলে খালি অ্যারে — অর্থাৎ ইচ্ছাকৃতভাবে কিছুই তোলা হবে না
+}
+
+function pay_parts_build(array $tokens): string
+{
+    $clean = [];
+    foreach ($tokens as $t) {
+        $t = trim((string) $t);
+        if (($t === PAY_PART_DELIVERY || ctype_digit($t)) && !in_array($t, $clean, true)) { $clean[] = $t; }
+    }
+    return $clean ? implode(',', $clean) : PAY_PART_NONE;
+}
+
+// টিক দেওয়া কিস্তিগুলোর বাকির যোগফল = কুরিয়ারের কালেকশনের ভিত্তি।
+// 🔴 `$tokens === null` হলে ফল হুবহু `pay_month_outstanding()`-এর সমান (একই সারি, একই অঙ্ক)।
+function pay_parts_basis(array $picklist, ?array $tokens): float
+{
+    $sum = 0.0;
+    foreach ($picklist as $p) {
+        $on = $tokens === null ? !empty($p['on']) : in_array((string) $p['token'], $tokens, true);
+        if ($on) { $sum += (float) $p['due']; }
+    }
+    return round($sum, 2);
+}
+
+function pay_parts_delivery_on(?array $tokens): bool
+{
+    return $tokens === null || in_array(PAY_PART_DELIVERY, $tokens, true);
+}
+
+// ধরে রাখা ডেলিভারি চার্জ খাতায় যে নামে বসে — এক (শিক্ষার্থী, মাস)-এ একটাই সারি।
+// 🔴 নামটাই চাবি, তাই এটা বদলালে পুরনো সারিগুলো অনাথ হয়ে যাবে — বদলাবেন না।
+function pay_delivery_label(string $periodLabel): string
+{
+    return 'ডেলিভারি চার্জ — ' . $periodLabel;
+}
+
+// 🚚 এই মাসের **নিজের** ডেলিভারি চার্জটা ছক থেকে বাদ — ওটার একটাই নিয়ন্ত্রণ, 🚚 টিকবক্স।
+// 🔴 অন্য মাসের ধরে রাখা ডেলিভারি চার্জ "আগের বাকি" হিসেবে ছকেই থাকে, টিক দিয়ে তোলা যায়।
+function pay_picklist_drop_own_delivery(array $pick, string $periodLabel): array
+{
+    $own = pay_delivery_label($periodLabel);
+    return array_values(array_filter(
+        $pick,
+        fn($p) => !(($p['kind'] ?? '') === PAY_PART_DELIVERY && ($p['label'] ?? '') === $own)
+    ));
 }
 
 // ঐ পার্সেলের প্রথম কিস্তি (শুধু লেবেল দেখানোর জন্য; টাকার হিসাবে

@@ -64,6 +64,67 @@ function cp_mark_sent_manual(PDO $db, int $batchId): void
  * 🔴 কলার নিজে ট্রানজ্যাকশন খোলে, আর `ok => false` হলে rollback করে (নিচে দেখুন)।
  */
 
+/**
+ * 🚚 ধরে রাখা ডেলিভারি চার্জ খাতায় বসানো / তুলে নেওয়া (২০২৬-১০-১৫)
+ *
+ * ইউজার: *"ডেলিভারি চার্জ সহ ডিউ থাকতে পারে"*। কোর্স ফি/বেতন আগে থেকেই খাতায় আছে,
+ * তাই সেগুলোর টিক তুলে দিলে বাকিটা **নিজে থেকেই** থেকে যায় — কিছু লিখতে হয় না।
+ * কিন্তু ডেলিভারি চার্জ খাতায় নেই (ওটা কালেকশনের সময় যোগ হয়), তাই সেটা ধরে রাখলে
+ * **খাতায় একটা বাকি-কিস্তি বসাতে হয়** — নাহলে টাকাটা নীরবে হারিয়ে যেত।
+ *
+ * 🔴 চাবি = (registration_id, kind='delivery', label) — এক (শিক্ষার্থী, মাস)-এ একটাই সারি
+ *    (`expense_sync_parcel_waiver()`-এর হুবহু প্যাটার্ন)।
+ * 🔴 মাসের ঘর দুটো **NULL** — `pay_row_slots()` এই kind-কে কোনো পার্সেলের কালেকশনে
+ *    নিজে থেকে বসায় না; অ্যাডমিন যে মাসে ইচ্ছা ছকে "আগের বাকি" হিসেবে টিক দিয়ে তোলেন।
+ * 🔴🔴 জমা পড়ে যাওয়া সারি **কখনো মোছা হয় না** (টাকা হারাত)।
+ * 🔴 আয়ের বই ছোঁয়া হয় না — এটা শুধু **প্রাপ্য**, জমা ০; আয় = মোট জমা, তাই অপরিবর্তিত।
+ */
+function cp_sync_delivery_due(PDO $db, int $regId, string $periodLabel, float $amount): string
+{
+    if ($regId <= 0) { return ''; }
+    $label  = pay_delivery_label($periodLabel);
+    $amount = max(0.0, round($amount, 2));
+    try {
+        $sel = $db->prepare("SELECT id, amount_paid FROM registration_payments
+                             WHERE registration_id = :r AND kind = 'delivery' AND label = :l LIMIT 1");
+        $sel->execute(['r' => $regId, 'l' => $label]);
+        $old = $sel->fetch();
+        $out = '';
+        if ($amount < 0.01) {
+            if ($old && (float) $old['amount_paid'] < 0.01) {
+                $db->prepare('DELETE FROM registration_payments WHERE id = :id')->execute(['id' => (int) $old['id']]);
+                $out = 'removed';
+            }
+        } elseif ($old) {
+            // 🔴 মাসের ঘর দুটো NULL-ই থাকে — `pay_row_slots()` এই kind-কে কোনো পার্সেলে
+            //    বসায় না (অ্যাডমিন ছকে টিক দিয়ে যে মাসে ইচ্ছা তোলেন)
+            $db->prepare('UPDATE registration_payments SET amount_due = :a WHERE id = :id')
+               ->execute(['a' => $amount, 'id' => (int) $old['id']]);
+            $out = 'updated';
+        } else {
+            // seq ৯০০ — খাতার একদম নিচে বসে (রেজি ফি/বেতনের কিস্তির ক্রম অক্ষত থাকে)
+            $db->prepare("INSERT INTO registration_payments
+                            (registration_id, seq, kind, label, amount_due, amount_paid)
+                          VALUES (:r, 900, 'delivery', :l, :a, 0)")
+               ->execute(['r' => $regId, 'l' => $label, 'a' => $amount]);
+            $out = 'added';
+        }
+        if ($out !== '') {
+            // খাতার বাকি বদলেছে → `registrations.due_amount` ডিনরমালাইজ (আয় নড়ে না)
+            $sum = pay_summary(pay_fetch_many($db, [$regId])[$regId] ?? []);
+            $db->prepare('UPDATE registrations SET due_amount = :d WHERE id = :id')
+               ->execute(['d' => $sum['balance'], 'id' => $regId]);
+        }
+        return $out;
+    } catch (PDOException $e) {
+        // খাতার টেবিল নেই — পার্সেল সেভ করা কখনো আটকাবে না।
+        // 🔴 তবু লগে লেখা হয়: এই নীরব catch-টাই একবার `SQLSTATE[HY093]` (একই প্লেসহোল্ডার
+        //    দুইবার) লুকিয়ে রেখেছিল — টেস্ট না থাকলে ধরাই পড়ত না।
+        error_log('cp_sync_delivery_due: ' . $e->getMessage());
+        return '';
+    }
+}
+
 // প্রদর্শনের জন্য (English সংখ্যা — পড়া সহজ)
 function cp_month_display(int $i): string { return 'মাস ' . $i; }
 
@@ -269,6 +330,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ? $db->prepare('UPDATE courier_batches SET waived_amount = :w, waived_reason = :wr WHERE id = :id')
             : null;
 
+        // 🧾 "এই পার্সেলে কী কী তুলব" — একই কারণে আলাদা ছোট UPDATE (মাইগ্রেশনের আগে চুপচাপ বাদ)
+        $partsReady = db_has_column($db, 'courier_batches', 'collect_parts');
+        $updParts = $partsReady
+            ? $db->prepare('UPDATE courier_batches SET collect_parts = :p WHERE id = :id')
+            : null;
+
         $prep = 0; $declined = 0; $sent = 0; $resent = 0; $failed = []; $editedSent = 0;
         // ✅ হাতে পাঠানো / 💰 টাকা — ঘরগুলো এখন এই ফর্মেই, তাই গণনাও এখানেই
         $manualSent = 0; $manualNew = 0; $moneyOk = 0; $moneyTotal = 0.0; $moneyFail = [];
@@ -276,6 +343,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try { $incBefore = (float) ($db->query('SELECT COALESCE(SUM(amount), 0) AS s FROM income')->fetch()['s'] ?? 0); }
         catch (PDOException $e) { /* বইয়ের মোট আয় দেখানো যাবে না — সেভ করা আটকাবে না */ }
         $waiveTotal = 0.0; $waiveSet = 0; $waiveCleared = 0;
+        $holdCount = 0; $holdTotal = 0.0; $delivDue = 0; $delivCleared = 0;
 
         // পার্সেলের সারিতে অঙ্কটা লেখা + বইয়ের খরচ-সারি মিলিয়ে দেওয়া — এক জায়গায় (তিন শাখা থেকেই ডাকা হয়)
         $applyWaive = function (int $batchId, int $rid, float $w, string $wr)
@@ -285,6 +353,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $res = expense_sync_parcel_waiver($db, $rid, $period, $w, $wr, (string) ($regMap[$rid]['customer_name'] ?? ''));
             if ($res === 'removed') { $waiveCleared++; }
             elseif ($res !== '')    { $waiveSet++; $waiveTotal += $w; }
+        };
+
+        /* 🧾 কোন কোন অংশ তোলা হচ্ছে সেটা সারিতে লেখা + ধরে রাখা ডেলিভারি চার্জ খাতায় বসানো।
+         * 🔴 `$tokens === null` (ছক রেন্ডারই হয়নি / মাইগ্রেশন চলেনি) হলে কিচ্ছু বদলায় না। */
+        $applyParts = function (int $batchId, int $rid, ?array $tokens, float $heldDeliv)
+                use ($updParts, $db, $period, &$delivDue, &$delivCleared): void {
+            if ($tokens === null) { return; }
+            if ($updParts && $batchId > 0) {
+                $updParts->execute(['p' => pay_parts_build($tokens), 'id' => $batchId]);
+            }
+            $res = cp_sync_delivery_due($db, $rid, $period, $heldDeliv);
+            if ($res === 'removed')  { $delivCleared++; }
+            elseif ($res !== '')     { $delivDue++; }
         };
         foreach (($_POST['bd'] ?? []) as $rid => $row) {
             $rid = (int) $rid;
@@ -311,9 +392,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ledgerRows = $ledgerMap[$rid] ?? [];
             // 🔴 এই মাসে খাতার **সব** কিস্তির বাকি মিলিয়ে (রেজি ফি + বেতন একসাথে পড়তে পারে;
             //    এক-কালীন/পুরনো সারি প্রথম পার্সেলে) — নিচের কার্ডের `data-due`-তেও হুবহু এই সংখ্যা
-            $basis = $ledgerRows ? pay_month_outstanding($ledgerRows, $month, $slotMax) : $courseFee;
-            $amt  = courier_compute_collection($basis, 1, $zone, $wx, $adj); // মাল্টিপ্লায়ার সবসময় ১
+            /* 🧾 এই পার্সেলে কী কী তোলা হবে (২০২৬-১০-১৫) — কার্ডের ছক থেকে।
+             * 🔴🔴 `parts_on` মার্কার না থাকলে `$tokens = null` = **আগের আচরণ হুবহু**
+             *     (এই মাসের সব কিস্তি + ডেলিভারি)। ছকটা রেন্ডার না হলে, বা মাইগ্রেশন
+             *     না চললে, বা বাসি পাতা থেকে POST এলে — সব ক্ষেত্রেই পুরনো পথ।
+             * 🔴 সব টিক তুলে দিলে `$tokens = []` (খালি অ্যারে), `null` নয় — তখন ভিত্তি ০। */
+            $tokens = (!empty($row['parts_on']) && $partsReady)
+                ? pay_parts_parse(pay_parts_build(is_array($row['parts'] ?? null) ? $row['parts'] : []))
+                : null;
+            $picklist = $ledgerRows
+                ? pay_picklist_drop_own_delivery(pay_month_picklist($ledgerRows, $month, $slotMax), $period)
+                : [];
+            $basis = $tokens === null
+                ? ($ledgerRows ? pay_month_outstanding($ledgerRows, $month, $slotMax) : $courseFee)
+                : pay_parts_basis($picklist, $tokens);
+            // 🚚 ডেলিভারি চার্জও ধরে রাখা যায় — তখন জোন খালি পাঠিয়ে শেয়ার্ড ফর্মুলাটাই
+            //    শূন্য চার্জ দেয় (হিসাব দুই জায়গায় লেখা হয় না)
+            $delivOn   = pay_parts_delivery_on($tokens);
+            $delivCost = courier_compute_collection(0, 1, $zone, $wx, 0);   // শুধু ডেলিভারি + ওজন
+            $amt  = courier_compute_collection($basis, 1, $delivOn ? $zone : '', $delivOn && $wx, $adj);
             $amt  = max(0, $amt - $waive);                                     // 💸 ছাড় বাদ (০-এর নিচে নামে না)
+            // ধরে রাখা ডেলিভারি চার্জ খাতায় বসবে (পার্সেল যাচ্ছে অথচ চার্জ তোলা হচ্ছে না)
+            $heldDeliv = (!$delivOn && $decision === 'go') ? $delivCost : 0.0;
+            if ($tokens !== null) {
+                $heldAmt = pay_parts_basis($picklist, null) - $basis;   // খাতার যতটুকু আজ তোলা হচ্ছে না
+                if ($heldAmt > 0.009 || $heldDeliv > 0.009) { $holdCount++; $holdTotal += max(0.0, $heldAmt) + $heldDeliv; }
+            }
             if (is_numeric($row['amt'] ?? null)) { $amt = max(0, round((float) $row['amt'])); } // সরাসরি লেখা পরিমাণই চূড়ান্ত
             $desc   = trim($row['desc'] ?? '') ?: null;
             $reason = trim($row['reason'] ?? '') ?: null;
@@ -361,6 +465,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $manualNew++;
                 }
                 $applyWaive($existId, $rid, $waive, $waiveReason);
+                $applyParts($existId, $rid, $tokens, $heldDeliv);
                 cp_mark_sent_manual($db, $existId);
                 $manualSent++;
                 continue;   // 🔴 আসল কুরিয়ারে কিছু যায় না — ডুপ্লিকেট চালান ঠেকাতে
@@ -371,6 +476,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (empty($row['unlocked'])) { continue; } // 🔓 আনলক না করলে ছোঁয়া হবে না
                 $updSent->execute(['d' => $desc, 'amt' => $amt, 'z' => $zone, 'wx' => $wx ? 1 : 0, 'adj' => $adj, 'rs' => $reason, 'addr' => $addr, 'id' => $existId]);
                 $applyWaive($existId, $rid, $waive, $waiveReason);
+                $applyParts($existId, $rid, $tokens, $heldDeliv);
                 if ($mode === 'send' && $resend) {
                     try {
                         $res = send_courier_batch($db, $provider, $regMap[$rid], [], $existId); // নতুন consignment
@@ -388,6 +494,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 else { $insDeclined->execute(['r' => $rid, 'p' => $period]); $existId = (int) $db->lastInsertId(); }
                 // 🔴 এই মাসে পার্সেলই যাচ্ছে না — তাই ছাড়ও ০, আগের খরচ-সারি থাকলে মুছে যাবে
                 $applyWaive($existId, $rid, 0.0, '');
+                // 🔴 পার্সেলই যাচ্ছে না — ধরে রাখা ডেলিভারি চার্জও থাকে না (আগে বসানো থাকলে মুছে যায়)
+                $applyParts($existId, $rid, $tokens, 0.0);
                 $declined++;
                 continue;
             }
@@ -400,6 +508,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $draftId = (int) $db->lastInsertId();
             }
             $applyWaive($draftId, $rid, $waive, $waiveReason);
+            $applyParts($draftId, $rid, $tokens, $heldDeliv);
             $prep++;
 
             if ($mode === 'send') {
@@ -437,6 +546,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // 💸 ছাড় দিলে/তুলে নিলে খরচের বইয়ে কী হলো — স্পষ্ট করে বলা হয় (টাকা জড়িত)
             if ($waiveSet)     { $bits[] = $waiveSet . ' জনের ছাড় ৳' . number_format($waiveTotal) . ' খরচে যোগ হয়েছে'; }
             if ($waiveCleared) { $bits[] = $waiveCleared . ' জনের ছাড় খরচ থেকে বাদ গেছে'; }
+            // 🧾 কুরিয়ারে না পাঠিয়ে খাতায় বাকি রেখে দেওয়া টাকা
+            if ($holdCount)    { $bits[] = '🧾 ' . $holdCount . ' জনের ৳' . number_format($holdTotal) . ' এই পার্সেলে তোলা হয়নি — খাতায় বাকি থাকল'; }
+            if ($delivDue)     { $bits[] = $delivDue . ' জনের ডেলিভারি চার্জ খাতায় বাকি হিসেবে বসেছে'; }
+            if ($delivCleared) { $bits[] = $delivCleared . ' জনের ডেলিভারি-চার্জের বাকি খাতা থেকে বাদ গেছে'; }
             if ($moneyFail) {
                 $names = implode(', ', array_map(static fn(array $f): string => $f['name'] . ' (' . $f['reason'] . ')', $moneyFail));
                 $bits[] = '⚠️ টাকা বসানো যায়নি — ' . $names;
@@ -522,9 +635,10 @@ if ($regs) {
     $in = implode(',', array_fill(0, count($ids), '?'));
     // 🔴 ছাড়ের ঘর দুটো শর্তসাপেক্ষে — মাইগ্রেশন না চালানো থাকলে কলামই নেই, সরাসরি চাইলে পুরো পাতা ভাঙত
     $cbWaiveCols = expense_waiver_ready($db) ? ', waived_amount, waived_reason' : '';
+    $cbPartsCol  = db_has_column($db, 'courier_batches', 'collect_parts') ? ', collect_parts' : '';
     $st = $db->prepare("SELECT id, registration_id, period_label, send_status, amount_to_collect,
                                delivery_zone, weight_extra, adjustment, adjustment_reason, recipient_address
-                               $cbWaiveCols
+                               $cbWaiveCols $cbPartsCol
                         FROM courier_batches WHERE registration_id IN ($in) ORDER BY id ASC");
     $st->execute($ids);
     foreach ($st->fetchAll() as $row) { $byRegPeriod[(int) $row['registration_id']][$row['period_label']] = $row; }
@@ -577,6 +691,8 @@ $pendingGroupRemoval = array_values(array_filter($inactiveRegs, fn($r) => !empty
 
 // 💸 ছাড়/মাফের ঘর দেখানো যাবে কিনা (মাইগ্রেশন চালানো হয়েছে কিনা)
 $cpWaiveReady = expense_waiver_ready($db);
+// 🧾 "এই পার্সেলে কী কী তুলব" ছকটা দেখানো যাবে? (মাইগ্রেশন না চললে চুপচাপ বাদ)
+$cpPartsReady = db_has_column($db, 'courier_batches', 'collect_parts');
 
 $periodHasExisting = false;
 if ($selLabel) { foreach ($activeRegs as $r) { if (isset($byRegPeriod[(int) $r['id']][$selLabel])) { $periodHasExisting = true; break; } } }
@@ -974,6 +1090,15 @@ function cpPermZone(sel) {
                 $lMonth = $lRows ? pay_rows_for_month($lRows, $selMonth, $totalParcels) : [];
                 $lDue   = $lRows ? pay_month_outstanding($lRows, $selMonth, $totalParcels) : (float) $courseFee;   // খাতা না থাকলে পুরনো নিয়ম
                 $lSum   = $lRows ? pay_summary($lRows) : null;
+                // 🧾 এই পার্সেলে কী কী তোলা যায় + আগে কী বেছে দেওয়া হয়েছিল
+                $pick       = $lRows
+                    ? pay_picklist_drop_own_delivery(pay_month_picklist($lRows, $selMonth, $totalParcels), cp_month_label($selMonth))
+                    : [];
+                $savedParts = $cpPartsReady ? pay_parts_parse((string) ($ex['collect_parts'] ?? '')) : null;
+                $delivOnCard = pay_parts_delivery_on($savedParts);
+                // 💰 "হাতে কত টাকা এলো" চিপের অঙ্ক — ধরে রাখা কিস্তি বাদ দিয়ে (নাহলে
+                //    যতটা তোলাই হয়নি ততটা জমা বসানোর পরামর্শ দিত)
+                $chipDue = $savedParts === null ? $lDue : pay_parts_basis($pick, $savedParts);
                 // সব কিস্তিই ⊘ বাদ দেওয়া থাকলেই "বাদ" বার্তা
                 $lSkip  = $lMonth && count(array_filter($lMonth, 'pay_is_skipped')) === count($lMonth);
             ?>
@@ -1092,8 +1217,37 @@ function cpPermZone(sel) {
                         </div>
                         <?php endif; ?>
 
+                        <?php /* ══════ 🧾 এই পার্সেলে কী কী তুলবেন? (২০২৬-১০-১৫) ══════
+                                 ইউজার: "কেউ জানাল পার্সেল শুধু ডেলিভারি চার্জ দিয়ে যাবে, বেতন পরে দিবো"।
+                                 🔴 টিক তুলে দিলে ঐ টাকাটা কুরিয়ারের কালেকশনে যায় না, খাতায় বাকিই থাকে।
+                                 🔴 ঘরগুলো `roundForm`-এর ভেতরেই (`bd[<id>][parts][]`) — `form=` অ্যাট্রিবিউট নয়। */ ?>
+                        <?php if ($cpPartsReady && ($pick || $lRows)): ?>
+                        <div class="mt-2 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-2">
+                            <div class="text-sm font-semibold text-indigo-800">🧾 এই পার্সেলে কী কী তুলবেন?</div>
+                            <div class="text-xs text-indigo-700 mb-1">টিক তুলে দিলে ঐ টাকাটা <b>কুরিয়ারে যাবে না</b> — খাতায় বাকিই থেকে যাবে।</div>
+                            <input type="hidden" name="bd[<?= $rid ?>][parts_on]" value="1" class="partsOn">
+                            <?php foreach ($pick as $pk):
+                                $pkOn = $savedParts === null ? !empty($pk['on']) : in_array((string) $pk['token'], $savedParts, true); ?>
+                                <label class="flex items-start gap-1.5 text-sm text-gray-800 py-0.5">
+                                    <input type="checkbox" class="part w-4 h-4 accent-indigo-600" style="margin-top:3px"
+                                           name="bd[<?= $rid ?>][parts][]" value="<?= e((string) $pk['token']) ?>"
+                                           data-amt="<?= (int) round($pk['due']) ?>" <?= $pkOn ? 'checked' : '' ?>>
+                                    <span class="min-w-0"><?= e($pk['label']) ?> · <b>৳<?= e(number_format($pk['due'])) ?></b><?php
+                                        // 🔴 স্লট ০ = ধরে রাখা ডেলিভারি চার্জ (কোনো পার্সেলের নয়) → "আগের বাকি"
+                                        if (empty($pk['on'])): ?> <span class="text-xs text-amber-700">(<?= (int) $pk['slot'] > $selMonth ? 'পরের মাসের' : 'আগের বাকি' ?>)</span><?php endif; ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                            <label class="flex items-start gap-1.5 text-sm text-gray-800 py-0.5 mt-1 pt-1 border-t border-indigo-200">
+                                <input type="checkbox" class="partDeliv w-4 h-4 accent-indigo-600" style="margin-top:3px"
+                                       name="bd[<?= $rid ?>][parts][]" value="<?= PAY_PART_DELIVERY ?>" <?= $delivOnCard ? 'checked' : '' ?>>
+                                <span class="min-w-0">🚚 ডেলিভারি চার্জ · <b>৳<span class="delivVal">0</span></b></span>
+                            </label>
+                            <div class="partHint text-xs text-amber-800 mt-1"></div>
+                        </div>
+                        <?php endif; ?>
+
                         <div class="flex items-center justify-between gap-2 mt-3 pt-3 border-t">
-                            <div class="text-sm font-semibold text-gray-600">কালেকশন (টাকা)<div class="autohint text-xs text-gray-500"><?= $lRows ? 'খাতার বাকি + ডেলিভারি' : 'মাসিক ফি + ডেলিভারি' ?><span class="autowv"></span> = ৳<span class="autoval">0</span> · <button type="button" class="text-indigo-600 font-semibold underline autobtn">অটো বসান</button></div></div>
+                            <div class="text-sm font-semibold text-gray-600">কালেকশন (টাকা)<div class="autohint text-xs text-gray-500"><?= ($cpPartsReady && ($pick || $lRows)) ? 'বেছে নেওয়া কিস্তি + ডেলিভারি' : ($lRows ? 'খাতার বাকি + ডেলিভারি' : 'মাসিক ফি + ডেলিভারি') ?><span class="autowv"></span> = ৳<span class="autoval">0</span> · <button type="button" class="text-indigo-600 font-semibold underline autobtn">অটো বসান</button></div></div>
                             <div class="flex items-center gap-1.5 flex-shrink-0">
                                 <span class="text-lg font-black text-gray-900">৳</span>
                                 <input type="number" step="1" min="0" name="bd[<?= $rid ?>][amt]" value="<?= e($exAmt) ?>" class="amt border-2 border-indigo-200 focus:border-indigo-500 rounded-lg px-2 py-1.5 text-lg font-black text-gray-900 text-right" style="width:120px;">
@@ -1149,7 +1303,7 @@ function cpPermZone(sel) {
                                                        class="doneAmt border rounded-lg px-2 py-2 text-sm font-bold text-right" style="width:120px;min-width:0">
                                                 <?php // 🔴 অঙ্কটা নিজে থেকে বসে না — ট্যাপ করলে তবেই বসে (অনুমান নিষিদ্ধ) ?>
                                                 <button type="button" class="doneChip text-xs font-semibold text-green-700 bg-white border border-green-200 rounded-lg px-2 py-1"
-                                                        data-amt="<?= (int) round($lDue) ?>">এই পার্সেলের বাকি ৳<?= e(number_format($lDue)) ?></button>
+                                                        data-amt="<?= (int) round($chipDue) ?>">এই পার্সেলে তোলার কথা ৳<?= e(number_format($chipDue)) ?></button>
                                             </div>
                                             <div class="text-xs text-gray-500 mt-1">ডেলিভারি চার্জ বাদে — শুধু কোর্সের টাকাটা লিখুন।</div>
                                         </div>
@@ -1201,11 +1355,32 @@ function cpPermZone(sel) {
   }
   function calc(el){
     // ভিত্তি = খাতায় এই মাসের বাকি (খাতা না থাকলে মাসিক ফি) — সার্ভারেও হুবহু একই হিসাব
-    var base=+el.getAttribute('data-due'), zone=el.querySelector('.zone').value;
+    var zone=el.querySelector('.zone').value;
     var wx=el.querySelector('.wx').checked?WX:0, adj=+el.querySelector('.adj').value||0;
+    // 🧾 ছক রেন্ডার হয়ে থাকলে ভিত্তি = **টিক দেওয়া** কিস্তিগুলোর যোগফল; নাহলে আগের মতোই
+    //    এই মাসের পুরো বাকি (`data-due`)। সার্ভারের round-save-এও হুবহু এই নিয়ম —
+    //    একটা বদলালে অন্যটাও বদলান, নাহলে UI আর সেভ আলাদা টাকা দেখাবে।
+    var base, held=0, delivOn=true, pDel=el.querySelector('.partDeliv');
+    if(el.querySelector('.partsOn')){
+      base=0;
+      el.querySelectorAll('.part').forEach(function(c){
+        var v=+c.getAttribute('data-amt')||0;
+        if(c.checked){ base+=v; } else { held+=v; }
+      });
+      delivOn = !pDel || pDel.checked;
+    } else { base=+el.getAttribute('data-due'); }
+    var dcOnly=(DC[zone]||0)+wx;
+    var dvEl=el.querySelector('.delivVal'); if(dvEl){ dvEl.textContent=dcOnly; }
     // 💸 ছাড়/মাফ — কালেকশন থেকে বাদ (সার্ভারের round-save-এও হুবহু একই হিসাব, একটা বদলালে অন্যটাও)
     var wvEl=el.querySelector('.waive'), wv=wvEl?Math.max(0,+wvEl.value||0):0;
-    var auto=Math.max(0,Math.round(base+(DC[zone]||0)+wx+adj-wv));
+    var auto=Math.max(0,Math.round(base+(delivOn?dcOnly:0)+adj-wv));
+    var ph=el.querySelector('.partHint');
+    if(ph){
+      var msg=[];
+      if(held>0){ msg.push('৳'+held+' এই পার্সেলে তোলা হচ্ছে না — খাতায় বাকি থাকবে।'); }
+      if(!delivOn&&dcOnly>0){ msg.push('ডেলিভারি চার্জ ৳'+dcOnly+' খাতায় নতুন কিস্তি হিসেবে বসবে।'); }
+      ph.textContent=msg.join(' ');
+    }
     var amtEl=el.querySelector('.amt'), manual=el.querySelector('.manual').value==='1';
     el.querySelector('.autoval').textContent=auto;
     var wvl=el.querySelector('.autowv');
@@ -1238,6 +1413,11 @@ function cpPermZone(sel) {
     if(btn){ btn.addEventListener('click',function(){ var d=el.querySelector('.decision'); d.value=(d.value==='no')?'go':'no'; refresh(); }); }
     var amtEl=el.querySelector('.amt'), manualEl=el.querySelector('.manual');
     if(amtEl){ amtEl.addEventListener('input',function(){ manualEl.value='1'; refresh(); }); }
+    // 🧾 কিস্তির টিক বদলালে অঙ্কটা আবার হিসাব হয় — 🔴 `manual` রিসেট করা হয়, নাহলে
+    //    আগে হাতে লেখা অঙ্কটাই থেকে যেত আর টিক তোলার কোনো ফল দেখা যেত না
+    el.querySelectorAll('.part, .partDeliv').forEach(function(c){
+      c.addEventListener('change',function(){ if(manualEl){ manualEl.value=''; } refresh(); });
+    });
     // শুধু এই মাসের এলাকা বদলাতে গেলে নিশ্চিতকরণ (স্থায়ীটা এতে বদলায় না)
     var zoneEl=el.querySelector('.zone');
     if(zoneEl){ zoneEl.addEventListener('change',function(){

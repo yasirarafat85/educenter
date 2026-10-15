@@ -105,6 +105,7 @@ function sc_file_notes(): array
         'migrate-reg-quick-fields.sql'           => 'অর্ডারের তালিকা থেকেই বকেয়া ও নোট লেখা',
         'migrate-reg-delivery-zone.sql'          => 'অর্ডারে স্থায়ী ডেলিভারি এলাকা',
         'migrate-parcel-waiver.sql'              => 'পার্সেলে ছাড়/মাফ দিলে সেটা খরচের বইয়ে বসা',
+        'migrate-parcel-hold.sql'                => 'পার্সেলে "কী কী তুলব" বেছে নেওয়া — বেতন/ডেলিভারি চার্জ ডিউ রেখে কুরিয়ারে পাঠানো',
         'migrate-finance-course-link.sql'        => 'কোর্স-ব্যাচ অনুযায়ী আয়-খরচ ও লাভ-ক্ষতি',
         'migrate-payment-sms.sql'                => 'SMS দিয়ে অটো পেমেন্ট যাচাই (পেমেন্ট ইনবক্স + SMS ছাঁচ)',
         'migrate-payment-qr.sql'                 => 'পেমেন্ট পাতায় bKash/নগদের QR ছবি',

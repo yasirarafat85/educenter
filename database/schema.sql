@@ -477,6 +477,7 @@ CREATE TABLE courier_batches (
     delivery_type TINYINT UNSIGNED DEFAULT 48, -- 48 = Normal Delivery, 12 = On Demand Delivery
     special_instruction VARCHAR(500),
     amount_to_collect DECIMAL(10,2) DEFAULT 0,
+    collect_parts VARCHAR(255) NOT NULL DEFAULT '', -- 🧾 এই পার্সেলে কোন কোন কিস্তি তোলা হবে (খাতার সারির id / `delivery`, কমা দিয়ে; খালি = সব)
     courier_provider VARCHAR(50),
     courier_consignment_id VARCHAR(100),
     tracking_url VARCHAR(500),
