@@ -96,31 +96,68 @@ function admin_nav_groups(): array
         }
     }
 
-    $orders = [];
+    /* ────────────────────────────────────────────────────────────────────
+     * 📅 রোজকার কাজ — মাসের আসল কাজটা যে চারটা পাতায় হয় (২০২৬-১০-১৫, ধাপ ৩)
+     *
+     * 🔴 গোছানোটা নিছক **দেখানোর** ব্যবস্থা — প্রতিটা আইটেমের `key` ও
+     *    `admin_can()` গার্ড হুবহু আগের মতোই আছে। কোনো পাতা, হ্যান্ডলার বা
+     *    অনুমতি বদলায়নি; পিন করা লিংকও (`nav_pins_*`) আগের মতো উপরেই বসে
+     *    (ওগুলো `key` ধরে মেলে, গ্রুপ ধরে নয়)।
+     * ──────────────────────────────────────────────────────────────────── */
+    $daily = [];
+    // 🔴 month-work-এর গার্ড `permissions.php`-এর ম্যাপের হুবহু প্রতিধ্বনি
+    //    (`['parcel', 'orders']` = যেকোনো একটা) — আগে শুধু `orders` দেখা হতো, তাই
+    //    শুধু `parcel` পাওয়া মডারেটর পাতাটা খুলতে পারতেন অথচ লিংকটাই দেখতেন না।
+    if (admin_can('parcel') || admin_can('orders')) {
+        $daily[] = ['key' => 'month-work', 'href' => 'month-work.php', 'file' => 'month-work.php', 'icon' => 'calendar-check', 'label' => 'এই মাসের কাজ'];
+    }
     if (admin_can('orders')) {
-        // 📅 রোজকার কাজ — ইচ্ছাকৃতভাবে এই গ্রুপের সবার উপরে
-        $orders[] = ['key' => 'month-work',       'href' => 'month-work.php',       'file' => 'month-work.php',       'icon' => 'calendar-check',    'label' => 'এই মাসের কাজ'];
-        $orders[] = ['key' => 'registrations',    'href' => 'registrations.php',    'file' => 'registrations.php',    'icon' => 'clipboard-list',    'label' => 'রেজিস্ট্রেশন/অর্ডার'];
-        $orders[] = ['key' => 'course-data',      'href' => 'course-data.php',      'file' => 'course-data.php',      'icon' => 'table',             'label' => 'ডেটা টেবিল'];
-        $orders[] = ['key' => 'income-fix',       'href' => 'income-fix.php',       'file' => 'income-fix.php',       'icon' => 'scale',             'label' => 'আয় মেলানো'];
-        $orders[] = ['key' => 'course-interests', 'href' => 'course-interests.php', 'file' => 'course-interests.php', 'icon' => 'heart-handshake',   'label' => 'আগ্রহ তালিকা'];
-        $orders[] = ['key' => 'legacy-students',  'href' => 'legacy-students.php',  'file' => 'legacy-students.php',  'icon' => 'user-round-search', 'label' => 'পুরাতন শিক্ষার্থী'];
-        $orders[] = ['key' => 'payment-inbox',    'href' => 'payment-inbox.php',    'file' => 'payment-inbox.php',    'icon' => 'inbox',             'label' => 'পেমেন্ট ইনবক্স'];
+        $daily[] = ['key' => 'registrations', 'href' => 'registrations.php', 'file' => 'registrations.php', 'icon' => 'clipboard-list', 'label' => 'রেজিস্ট্রেশন/অর্ডার'];
     }
     if (admin_can('parcel')) {
-        $orders[] = ['key' => 'course-parcel', 'href' => 'course-parcel.php', 'file' => 'course-parcel.php', 'icon' => 'package-check', 'label' => 'কোর্স পার্সেল'];
+        $daily[] = ['key' => 'course-parcel', 'href' => 'course-parcel.php', 'file' => 'course-parcel.php', 'icon' => 'package-check', 'label' => 'কোর্স পার্সেল'];
+    }
+    if (admin_can('orders')) {
+        $daily[] = ['key' => 'payment-inbox', 'href' => 'payment-inbox.php', 'file' => 'payment-inbox.php', 'icon' => 'inbox', 'label' => 'পেমেন্ট ইনবক্স'];
+    }
+
+    // 💰 টাকা মেলানো — "আয় মেলানো" আর বইয়ের তিন পাতা একসাথে (আগে দুই আলাদা গ্রুপে ছিল,
+    //    অথচ কাজটা একটাই: টাকার হিসাব মেলানো)
+    $money = [];
+    if (admin_can('orders')) {
+        $money[] = ['key' => 'income-fix', 'href' => 'income-fix.php', 'file' => 'income-fix.php', 'icon' => 'scale', 'label' => 'আয় মেলানো'];
+    }
+    if (admin_can('finance')) {
+        $money[] = ['key' => 'income',   'href' => 'income.php',   'file' => 'income.php',   'icon' => 'trending-up',   'label' => 'আয়'];
+        $money[] = ['key' => 'expenses', 'href' => 'expenses.php', 'file' => 'expenses.php', 'icon' => 'trending-down', 'label' => 'খরচ'];
+        $money[] = ['key' => 'finance',  'href' => 'finance.php',  'file' => 'finance.php',  'icon' => 'pie-chart',     'label' => 'আয়-ব্যয় ড্যাশবোর্ড'];
+    }
+
+    // 🚚 কুরিয়ার — পাঠানো · ট্র্যাকিং · শিপমেন্ট লগ (লগটা আগে "লগ" গ্রুপে একা পড়ে থাকত,
+    //    অথচ কুরিয়ার নিয়ে কাজ করতে করতেই ওটা দেখতে হয়)
+    $courier = [];
+    if (admin_can('courier')) {
+        $courier[] = ['key' => 'courier',              'href' => 'courier.php',              'file' => 'courier.php',              'icon' => 'truck',          'label' => 'কুরিয়ার'];
+        $courier[] = ['key' => 'courier-tracking',     'href' => 'courier-tracking.php',     'file' => 'courier-tracking.php',     'icon' => 'calendar-check', 'label' => 'কুরিয়ার ট্র্যাকিং'];
+        $courier[] = ['key' => 'courier-shipment-logs','href' => 'courier-shipment-logs.php','file' => 'courier-shipment-logs.php','icon' => 'history',        'label' => 'কুরিয়ার শিপমেন্ট লগ'];
+    }
+
+    // 🔎 মাঝেমধ্যে — দরকার পড়ে, কিন্তু রোজ নয়
+    $sometimes = [];
+    if (admin_can('orders')) {
+        $sometimes[] = ['key' => 'course-data', 'href' => 'course-data.php', 'file' => 'course-data.php', 'icon' => 'table', 'label' => 'ডেটা টেবিল'];
     }
     // 👥 গ্রুপ মিলিয়ে দেখা — parcel বা orders, যেকোনো একটা থাকলেই (permissions.php-এর ম্যাপের সাথে মিল)
     if (admin_can('parcel') || admin_can('orders')) {
-        $orders[] = ['key' => 'group-match', 'href' => 'group-match.php', 'file' => 'group-match.php', 'icon' => 'users-round', 'label' => 'গ্রুপ মিলিয়ে দেখা'];
+        $sometimes[] = ['key' => 'group-match', 'href' => 'group-match.php', 'file' => 'group-match.php', 'icon' => 'users-round', 'label' => 'গ্রুপ মিলিয়ে দেখা'];
+    }
+    if (admin_can('orders')) {
+        $sometimes[] = ['key' => 'course-interests', 'href' => 'course-interests.php', 'file' => 'course-interests.php', 'icon' => 'heart-handshake',   'label' => 'আগ্রহ তালিকা'];
+        $sometimes[] = ['key' => 'legacy-students',  'href' => 'legacy-students.php',  'file' => 'legacy-students.php',  'icon' => 'user-round-search', 'label' => 'পুরাতন শিক্ষার্থী'];
     }
     if (admin_can('users')) {
-        $orders[] = ['key' => 'users', 'href' => 'users.php', 'file' => 'users.php', 'icon' => 'users', 'label' => 'অভিভাবক অ্যাকাউন্ট'];
-        $orders[] = ['key' => 'user-requests', 'href' => 'user-requests.php', 'file' => 'user-requests.php', 'icon' => 'message-square', 'label' => 'অনুরোধ / মন্তব্য'];
-    }
-    if (admin_can('courier')) {
-        $orders[] = ['key' => 'courier',          'href' => 'courier.php',          'file' => 'courier.php',          'icon' => 'truck',          'label' => 'কুরিয়ার'];
-        $orders[] = ['key' => 'courier-tracking', 'href' => 'courier-tracking.php', 'file' => 'courier-tracking.php', 'icon' => 'calendar-check', 'label' => 'কুরিয়ার ট্র্যাকিং'];
+        $sometimes[] = ['key' => 'users',         'href' => 'users.php',         'file' => 'users.php',         'icon' => 'users',          'label' => 'অভিভাবক অ্যাকাউন্ট'];
+        $sometimes[] = ['key' => 'user-requests', 'href' => 'user-requests.php', 'file' => 'user-requests.php', 'icon' => 'message-square', 'label' => 'অনুরোধ / মন্তব্য'];
     }
 
     $logs = [];
@@ -130,16 +167,6 @@ function admin_nav_groups(): array
         $logs[] = ['key' => 'registration-errors', 'href' => 'registration-errors.php', 'file' => 'registration-errors.php', 'icon' => 'alert-triangle', 'label' => 'রেজিস্ট্রেশন এরর'];
         $logs[] = ['key' => 'download-logs',       'href' => 'download-logs.php',       'file' => 'download-logs.php',       'icon' => 'download',       'label' => 'ডাউনলোড লগ'];
         $logs[] = ['key' => 'visitor-logs',        'href' => 'visitor-logs.php',        'file' => 'visitor-logs.php',        'icon' => 'footprints',     'label' => 'ভিজিটর লগ'];
-    }
-    if (admin_can('courier')) {
-        $logs[] = ['key' => 'courier-shipment-logs', 'href' => 'courier-shipment-logs.php', 'file' => 'courier-shipment-logs.php', 'icon' => 'history', 'label' => 'কুরিয়ার শিপমেন্ট লগ'];
-    }
-
-    $finance = [];
-    if (admin_can('finance')) {
-        $finance[] = ['key' => 'finance',  'href' => 'finance.php',  'file' => 'finance.php',  'icon' => 'pie-chart',      'label' => 'আয়-ব্যয় ড্যাশবোর্ড'];
-        $finance[] = ['key' => 'income',   'href' => 'income.php',   'file' => 'income.php',   'icon' => 'trending-up',    'label' => 'আয়'];
-        $finance[] = ['key' => 'expenses', 'href' => 'expenses.php', 'file' => 'expenses.php', 'icon' => 'trending-down',  'label' => 'খরচ'];
     }
 
     $settings = [];
@@ -167,11 +194,16 @@ function admin_nav_groups(): array
         ['key' => 'index', 'href' => 'index.php', 'file' => 'index.php', 'icon' => 'layout-dashboard', 'label' => 'ড্যাশবোর্ড'],
         ['key' => 'guide', 'href' => 'guide.php', 'file' => 'guide.php', 'icon' => 'help-circle',      'label' => 'গাইড / সাহায্য'],
     ]];
-    $groups[] = ['section' => 'কনটেন্ট', 'items' => $content];
-    $groups[] = ['section' => 'অর্ডার',   'items' => $orders];
-    $groups[] = ['section' => 'লগ',       'items' => $logs];
-    $groups[] = ['section' => 'আয়-ব্যয়', 'items' => $finance];
-    $groups[] = ['section' => 'সেটিংস',   'items' => $settings];
+    // 🔴 ক্রম = ইউজারের কাজের ক্রম (রোজকার আগে, মাঝেমধ্যেরটা পরে)। খালি গ্রুপ
+    //    নিচের `array_filter()`-এ এমনিতেই বাদ যায়, তাই অনুমতিহীন মডারেটর
+    //    খালি শিরোনাম দেখেন না।
+    $groups[] = ['section' => '📅 রোজকার কাজ',  'items' => $daily];
+    $groups[] = ['section' => '💰 টাকা মেলানো', 'items' => $money];
+    $groups[] = ['section' => '🚚 কুরিয়ার',     'items' => $courier];
+    $groups[] = ['section' => '🗂️ কনটেন্ট',     'items' => $content];
+    $groups[] = ['section' => '🔎 মাঝেমধ্যে',   'items' => $sometimes];
+    $groups[] = ['section' => '🕘 লগ',          'items' => $logs];
+    $groups[] = ['section' => '⚙️ সেটিংস',      'items' => $settings];
 
     return array_values(array_filter($groups, fn($g) => !empty($g['items'])));
 }
