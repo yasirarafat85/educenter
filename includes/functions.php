@@ -644,6 +644,24 @@ function render_fee_box(?string $price, ?string $secLabel, ?string $secAmount, s
 // 🔴 `SHOW COLUMNS` নয়, `SELECT <col> … LIMIT 0` — MySQL ও SQLite দুটোতেই চলে
 //    (isolated টেস্টের কপি SQLite-এ চলে), আর কোনো সারি পড়ে না বলে খরচও নেই।
 // ফল স্ট্যাটিক ক্যাশে — এক রিকোয়েস্টে একবারই কোয়েরি হয়।
+//
+// 🔎 `db_has_table()` একই জিনিসের টেবিল-সংস্করণ (২০২৬-১০-১৫, "🩺 সিস্টেম চেক"
+//    পাতার জন্য) — একই তিনটা নিয়ম মানে: নাম কোডে লেখা ধ্রুবক, `SHOW TABLES` নয়,
+//    ফল স্ট্যাটিক ক্যাশড।
+function db_has_table(?PDO $db, string $table): bool
+{
+    static $cache = [];
+    if (isset($cache[$table])) {
+        return $cache[$table];
+    }
+    try {
+        ($db ?: get_db())->query("SELECT 1 FROM `$table` LIMIT 0");
+        return $cache[$table] = true;
+    } catch (Throwable $e) {
+        return $cache[$table] = false;
+    }
+}
+
 function db_has_column(?PDO $db, string $table, string $column): bool
 {
     static $cache = [];

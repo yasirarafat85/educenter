@@ -143,6 +143,7 @@ function admin_nav_groups(): array
     $settings = [];
     if (admin_can('settings')) {
         $settings[] = ['key' => 'settings', 'href' => 'settings.php', 'file' => 'settings.php', 'icon' => 'settings', 'label' => 'সাইট সেটিংস'];
+        $settings[] = ['key' => 'system-check', 'href' => 'system-check.php', 'file' => 'system-check.php', 'icon' => 'stethoscope', 'label' => 'সিস্টেম চেক'];
         $settings[] = ['key' => 'sms-patterns', 'href' => 'sms-patterns.php', 'file' => 'sms-patterns.php', 'icon' => 'message-square-code', 'label' => 'SMS ছাঁচ (প্যাটার্ন)'];
     }
     if (admin_can('payment')) {

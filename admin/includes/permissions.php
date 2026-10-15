@@ -86,6 +86,8 @@ function admin_page_sections(): array
         'income.php'                => ['finance'],
         'expenses.php'              => ['finance'],
         'settings.php'              => ['settings'],
+        // 🩺 সিস্টেম চেক — শুধু পড়ে (কোন SQL বাকি), কিছুই লেখে না; তাই settings সেকশনেই
+        'system-check.php'          => ['settings'],
         'payment-methods.php'       => ['payment'],
         'backup.php'                => ['backup'],
         'archive.php'               => ['archive'],
