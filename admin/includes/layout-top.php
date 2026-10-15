@@ -259,6 +259,15 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
         main .overflow-x-auto > table thead { display: none; }
         main .overflow-x-auto > table, main .overflow-x-auto > table tbody { display: block; width: 100%; }
         main .overflow-x-auto > table tr { display: block; border: 1px solid rgb(var(--c-border)); border-radius: 12px; margin: 0 0 12px; padding: 4px 14px; background: rgb(var(--c-surface)); box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+        /* 🔴🔴 উপরের `tr { display: block }` নিয়মটা ব্রাউজারের নিজের `[hidden]{display:none}`-কে
+           হারিয়ে দিত (ক্লাস/এলিমেন্ট সিলেক্টর UA-স্টাইলশিটের চেয়ে শক্তিশালী) — ফলে **মোবাইলে
+           লুকানো সারিগুলো লুকাতই না**। `registrations.php`-এর প্রতিটা সারির নিচে দুটো ভাঁজ-করা
+           ড্রয়ার রেন্ডার হয় (টাকার খাতা ~১,১৪৪px + তথ্য ~৪১৬px); ১৯ জনের তালিকায় সেটা
+           **২৭,৮৪৮px অদৃশ্য জায়গা** খেয়ে পাতাটাকে ৪৬ স্ক্রিন লম্বা করে দিচ্ছিল, অথচ ডেস্কটপে
+           ঠিকই লুকাত (২০২৬-১০-১৫, ইউজারের মোবাইল রিপোর্ট থেকে মেপে ধরা)।
+           🔴 ড্রয়ার খোলে `el.hidden = false` দিয়ে (কখনো `style.display` নয়), তাই এই নিয়মে
+              খোলা-বন্ধ অক্ষত থাকে; সার্চের `style.display` ইনলাইন বলে সেটাও আগের মতোই চলে। */
+        main .overflow-x-auto > table tr[hidden] { display: none; }
         main .overflow-x-auto > table td { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 8px 0; border: none !important; text-align: right; background: none !important; min-width: 0; }
         main .overflow-x-auto > table td + td { border-top: 1px solid rgb(var(--c-border) / .5) !important; }
         main .overflow-x-auto > table td::before { content: attr(data-label); font-weight: 600; color: rgb(var(--c-text-muted)); text-align: left; flex-shrink: 0; }

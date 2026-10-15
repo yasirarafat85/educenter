@@ -603,6 +603,15 @@ function cp_cell(?array $b): array
 <style>
 .cp-hd{display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem}
 .cp-hd .bar{width:4px;height:18px;border-radius:2px;background:rgb(var(--c-primary))}
+/* 📱 "অবস্থা" তালিকাটা ফোনে ভাঁজ করা থাকে (২০২৬-১০-১৫, ইউজার: "উপরে আলাদা করে দরকার নেই")
+   — রোজকার কাজ "এই মাসের পার্সেল" আগে ৭,২৬৩px (৮.৬ স্ক্রিন) নিচে শুরু হতো।
+   🔴 HTML-এ `open` থাকে, বন্ধ করে নিচের ছোট স্ক্রিপ্ট শুধু ছোট পর্দায় — তাই JS না চললেও
+      আগের আচরণই (খোলা) থাকে, আর ডেস্কটপ হুবহু অপরিবর্তিত। */
+#cpRoster > summary{cursor:pointer;list-style:none}
+#cpRoster > summary::-webkit-details-marker{display:none}
+.cp-fold-hint{margin-left:auto;white-space:nowrap}
+#cpRoster[open] .cp-fold-show{display:none}
+#cpRoster:not([open]) .cp-fold-hide{display:none}
 .cp-tab{flex-shrink:0;padding:.5rem .9rem;border-radius:.6rem .6rem 0 0;font-weight:600;font-size:.875rem;border-bottom:3px solid transparent;white-space:nowrap}
 .cp-tab.on{background:#fff;border-color:rgb(var(--c-primary));color:rgb(var(--c-primary));box-shadow:0 -1px 3px rgba(0,0,0,.05)}
 .cp-tab.off{background:#f3f4f6;color:#6b7280}
@@ -692,8 +701,12 @@ function cp_cell(?array $b): array
     </div>
 <?php endif; ?>
 
-<?php // ══════════ Section 1 — শিক্ষার্থী × মাস ম্যাট্রিক্স ══════════ ?>
-<div class="cp-hd"><span class="bar"></span><span class="text-sm font-bold text-gray-700">অবস্থা</span><span class="text-xs text-gray-400">গ্রুপে যোগ · সক্রিয়/নিষ্ক্রিয় · কোন মাসে কী (মাসে ক্লিক করে নিচে কাজ)</span></div>
+<?php // ══════════ Section 1 — শিক্ষার্থী × মাস ম্যাট্রিক্স ══════════
+      // 🔴 পুরো সেকশনটা `<details id="cpRoster" open>`-এ — ফোনে নিচের স্ক্রিপ্ট এটা বন্ধ করে
+      //    দেয় (ডেস্কটপে খোলাই থাকে)। গ্রুপ/সক্রিয়/এলাকার ফর্মগুলো আলাদা ছোট ফর্ম, আর
+      //    `roundForm` এই অংশের বাইরে — তাই ভাঁজ করায় কোনো সেভ ক্ষতিগ্রস্ত হয় না। ?>
+<details id="cpRoster" open>
+<summary class="cp-hd"><span class="bar"></span><span class="text-sm font-bold text-gray-700">অবস্থা</span><span class="text-xs text-gray-400">গ্রুপে যোগ · সক্রিয়/নিষ্ক্রিয় · কোন মাসে কী</span><span class="cp-fold-hint text-xs text-indigo-600 font-semibold"><span class="cp-fold-show">▼ দেখুন</span><span class="cp-fold-hide">▲ লুকান</span></span></summary>
 
 <?php
 $grp_toggle = function (array $r, string $field, bool $on, int $itemId, int $selMonth) {
@@ -833,6 +846,19 @@ function cpPermZone(sel) {
         </tbody></table></div>
     </details>
 <?php endif; ?>
+
+</details>
+<script>
+// 📱 ফোনে "অবস্থা" তালিকাটা ভাঁজ করা থাকে — ইউজার রোজ যেটা করেন ("এই মাসের পার্সেল")
+// সেটাই যেন প্রথম পর্দাতেই থাকে। ডেস্কটপে কিছুই বদলায় না।
+// 🔴 স্ক্রিপ্ট ভেঙে গেলেও তালিকাটা **খোলাই** থাকে (HTML-এ `open`) — নিরাপদ দিক।
+(function () {
+    try {
+        var d = document.getElementById('cpRoster');
+        if (d && window.matchMedia('(max-width: 767px)').matches) { d.open = false; }
+    } catch (e) {}
+})();
+</script>
 
 <?php // ══════════ Section 2 — মাস ট্যাব + এই মাসের পার্সেল ══════════ ?>
 <?php if ($months): ?>

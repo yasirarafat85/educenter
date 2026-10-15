@@ -1615,6 +1615,21 @@ require __DIR__ . '/includes/layout-top.php';
        🔴 `display:none` ইচ্ছাকৃত, `disabled` নয় — ইনপুটগুলো তবু সাবমিট হয়; নাহলে সেভ করলে
        pay_save_rows() ঐ সারিগুলোর প্রাপ্য/ছাড় হারিয়ে ফেলত। */
     form.pay-form.pay-lean .pay-x { display: none !important; }
+
+    /* 📱 মোবাইলে ফিল্টার ফর্মের বাকি ঘরগুলো ভাঁজ (২০২৬-১০-১৫) — আগে স্ট্যাটাস/টাইপ পিল +
+       ফিল্টার ফর্ম + সারাংশ কার্ড মিলে ১,১২৪px (১.৩ স্ক্রিন) পেরিয়ে তবে প্রথম নামটা আসত।
+       সার্চ বাক্স ও "🔍 খুঁজুন" সবসময় দেখা যায়, বাকিটা "⚙️ আরও ফিল্টার"-এ।
+       🔴 `display:none` ইচ্ছাকৃত, `disabled` নয় — লুকানো ঘরগুলোও সাবমিট হয়, তাই
+          চলতি ফিল্টার হারায় না (খাতার `.pay-x`-এর হুবহু একই নীতি)।
+       🔴 `flt-lean` ক্লাসটা HTML-এ নেই — নিচের স্ক্রিপ্ট শুধু ছোট পর্দায় বসায়, তাই JS না
+          চললে সব ঘরই দেখা যায় (আগের আচরণ)। */
+    .flt-more { display: none; }
+    @media screen and (max-width: 767px) {
+        .flt-more { display: inline-flex; align-items: center; }
+        #regFilterForm.flt-lean .flt-x { display: none; }
+    }
+    #regFilterForm.flt-lean .flt-close { display: none; }
+    #regFilterForm:not(.flt-lean) .flt-open { display: none; }
     /* কমপ্যাক্ট অবস্থায় জায়গা খালি থাকে, তাই কিস্তির নামের ঘরটা বাকিটুকু নিয়ে নেয় —
        নাহলে "বেতন (কিস্তি 1/2 — 1.5 মাস)" জাতীয় নাম কেটে যেত (স্ক্রিনশটে ধরা)। */
     form.pay-form.pay-lean .pay-name { flex: 1 1 11rem; min-width: 0; max-width: 24rem; }
@@ -1661,9 +1676,13 @@ require __DIR__ . '/includes/layout-top.php';
                     <input type="text" name="q" value="<?= e($search) ?>" placeholder="নাম / ফোন / রিসিভার / ঠিকানা / ব্যাচ / নোট…" id="regSearchInput" data-autosearch="regFilterForm" class="flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm">
                     <button type="submit" class="flex-shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap">🔍 খুঁজুন</button>
                 </div>
-                <p class="text-[11px] text-gray-500 mt-1">🔎 শিশুর নাম · মা/বাবার মোবাইল · রিসিভারের নাম ও নম্বর · ফেসবুক আইডি · ঠিকানা · জেলা/থানা · ব্যাচ · কোর্সের নাম · ইমেইল · নোট · কনসাইনমেন্ট আইডি · অর্ডার নম্বর — যেকোনোটা দিয়ে খোঁজা যায় (বাংলা অঙ্কেও)।</p>
+                <button type="button" class="flt-more mt-2 gap-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-3 py-2 rounded-xl text-sm"
+                        onclick="this.closest('form').classList.toggle('flt-lean')">
+                    <span class="flt-open">⚙️ আরও ফিল্টার</span><span class="flt-close">✕ ফিল্টার লুকান</span>
+                </button>
+                <p class="flt-x text-[11px] text-gray-500 mt-1">🔎 শিশুর নাম · মা/বাবার মোবাইল · রিসিভারের নাম ও নম্বর · ফেসবুক আইডি · ঠিকানা · জেলা/থানা · ব্যাচ · কোর্সের নাম · ইমেইল · নোট · কনসাইনমেন্ট আইডি · অর্ডার নম্বর — যেকোনোটা দিয়ে খোঁজা যায় (বাংলা অঙ্কেও)।</p>
             </div>
-            <div>
+            <div class="flt-x">
                 <label class="block text-xs font-semibold text-gray-500 mb-1">নির্দিষ্ট আইটেম</label>
                 <select name="item" id="regItemSelect" onchange="document.getElementById('regBatchSelect').value=''; document.getElementById('regFilterForm').submit()" class="w-full border rounded-xl px-3 py-2.5 text-sm">
                     <option value="">সব আইটেম</option>
@@ -1672,7 +1691,7 @@ require __DIR__ . '/includes/layout-top.php';
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div>
+            <div class="flt-x">
                 <label class="block text-xs font-semibold text-gray-500 mb-1">ব্যাচ (কোর্স)</label>
                 <select name="batch" id="regBatchSelect" onchange="document.getElementById('regFilterForm').submit()" class="w-full border rounded-xl px-3 py-2.5 text-sm">
                     <option value="">সব ব্যাচ</option>
@@ -1681,16 +1700,16 @@ require __DIR__ . '/includes/layout-top.php';
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div>
+            <div class="flt-x">
                 <label class="block text-xs font-semibold text-gray-500 mb-1">তারিখ থেকে</label>
                 <input type="date" name="date_from" value="<?= e($dateFrom) ?>" onchange="document.getElementById('regFilterForm').submit()" class="w-full border rounded-xl px-3 py-2.5 text-sm">
             </div>
-            <div>
+            <div class="flt-x">
                 <label class="block text-xs font-semibold text-gray-500 mb-1">তারিখ পর্যন্ত</label>
                 <input type="date" name="date_to" value="<?= e($dateTo) ?>" onchange="document.getElementById('regFilterForm').submit()" class="w-full border rounded-xl px-3 py-2.5 text-sm">
             </div>
         </div>
-        <div class="flex flex-wrap items-center gap-2 mt-3">
+        <div class="flt-x flex flex-wrap items-center gap-2 mt-3">
             <?php if ($hasActiveFilters): ?>
                 <a href="registrations.php" class="bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold px-4 py-2.5 rounded-xl text-sm">✕ সব ফিল্টার মুছুন</a>
             <?php endif; ?>
@@ -1714,6 +1733,19 @@ require __DIR__ . '/includes/layout-top.php';
         ['key' => 'confirmed', 'label' => 'কনফার্ম',   'value' => (int) ($listSummary['confirmed'] ?? 0),         'color' => 'text-green-600'],
     ];
     ?>
+    <script>
+    // 📱 ছোট পর্দায় ফিল্টার ফর্মটা ভাঁজ করা থাকে — সার্চ বাক্সই যথেষ্ট।
+    // 🔴 আইটেম/ব্যাচ/তারিখের কোনো ফিল্টার চালু থাকলে ভাঁজ করা হয় না — নাহলে
+    //    "কেন কম ফলাফল দেখাচ্ছে" সেটা বোঝার উপায় থাকত না।
+    (function () {
+        try {
+            var f = document.getElementById('regFilterForm');
+            var advOn = <?= ($filterItem !== '' || $filterBatch !== '' || $dateFrom !== '' || $dateTo !== '') ? 'true' : 'false' ?>;
+            if (f && !advOn && window.matchMedia('(max-width: 767px)').matches) { f.classList.add('flt-lean'); }
+        } catch (e) {}
+    })();
+    </script>
+
     <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
         <?php foreach ($sumCards as $card): $isOn = ($filterStatus === $card['key']); ?>
             <a href="<?= e(reg_url(['status' => $card['key'] !== '' ? $card['key'] : null])) ?>"
