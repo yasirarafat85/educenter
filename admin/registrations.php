@@ -818,6 +818,9 @@ function reg_csv_columns(string $type, array $statusLabels, array $typeLabels): 
         'ব্যাচ'    => fn($r, $l) => reg_csv_safe($r['batch'] ?? ''),
         'নাম'     => fn($r, $l) => reg_csv_safe($r['customer_name'] ?? ''),
         'মোবাইল'  => fn($r, $l) => reg_csv_phone($r['phone'] ?? ''),
+        // তালিকার মেশানো লেআউটেও রিসিভার দেখানো হয় (কোর্সের সারিতে), তাই CSV-তেও
+        'রিসিভারের নাম'   => fn($r, $l) => reg_csv_safe($r['receiver_name'] ?? ''),
+        'রিসিভারের নম্বর' => fn($r, $l) => reg_csv_phone($r['receiver_phone'] ?? ''),
         'ঠিকানা'  => fn($r, $l) => reg_csv_safe($r['address'] ?? ''),
         'পরিমাণ'  => fn($r, $l) => (string) (int) ($r['quantity'] ?? 1),
     ] + $money + $notes;
@@ -833,6 +836,40 @@ function reg_csv_filename(string $type, string $item, string $batch): string
     elseif ($batch !== '') { $bits[] = 'batch'; }
     $bits[] = date('Ymd-His');
     return implode('-', $bits) . '.csv';
+}
+
+// ── 🔎 তালিকার সার্চ — "সকল তথ্য দিয়ে খোঁজা" (২০২৬-১০-১৫, ইউজারের চাওয়া) ─────────
+// আগে শুধু ৩টা ঘরে খোঁজা হতো (নাম · ফোন · আইটেম), তাই রিসিভারের নাম/নম্বর, বাবার
+// মোবাইল, ফেসবুক আইডি, ঠিকানা, ব্যাচ, নোট, কনসাইনমেন্ট আইডি — কিছু দিয়েই খুঁজে
+// পাওয়া যেত না।
+//
+// 🔴 খড়ের গাদা **একটাই SQL এক্সপ্রেশনে** (`CONCAT_WS`) — তাই প্রতি শব্দের জন্য
+//    একটাই প্লেসহোল্ডার লাগে। ঘর-প্রতি আলাদা `LIKE` লিখলে ১৭ ঘর × ২ রূপ = ৩৪
+//    প্লেসহোল্ডার হতো, আর নতুন ঘর যোগ করতে একাধিক জায়গা এডিট করা লাগত।
+//    (`ATTR_EMULATE_PREPARES => false` বলে একই নামের প্লেসহোল্ডার দুইবার দেওয়াও
+//     যায় না — HY093।) `CONCAT_WS` নিজেই NULL ঘর বাদ দেয়।
+// 🔴 কলামের নামগুলো **কোডে লেখা ধ্রুবক**, কখনো GET/POST থেকে নয়।
+// 🔴 স্ট্যাটাস/ধরন/টাকার ঘর ইচ্ছাকৃতভাবে বাদ — ওগুলোর নিজের ফিল্টার আছে, আর
+//    অঙ্ক দিয়ে খুঁজলে প্রতিটা সারির বাকি/আয়ের সংখ্যাও "মিলত"।
+function reg_search_haystack_sql(): string
+{
+    return "CONCAT_WS(' ', id, customer_name, phone, item_title, batch,"
+        . " receiver_name, receiver_phone, father_mobile, facebook_id, email,"
+        . " address, district, thana, date_of_birth, notes, admin_note,"
+        . " courier_consignment_id, courier_provider)";
+}
+
+// খোঁজার শব্দের রূপগুলো — কাঁচা লেখা, আর বাংলা অঙ্ক থাকলে তার English রূপও।
+// 🔴 **দুটোই রাখা হয়** — ফোন নম্বর DB-তে English অঙ্কে, কিন্তু ব্যাচের নাম ("৫ম ব্যাচ")
+//    বাংলা অঙ্কে; একটা বাদ দিলে অন্য ধরনের লেখা খুঁজে পাওয়া যেত না।
+// 🔴 `en_digits()` নয় — ওটা ক্রমবাচক ("৫ম") ইচ্ছাকৃতভাবে ছোঁয় না, অথচ "০১৭" লিখে
+//    ফোন খুঁজতে পুরো রূপান্তরই দরকার (course-parcel.php-এর সার্চেও একই নিয়ম)।
+function reg_search_terms(string $search): array
+{
+    $terms = [$search];
+    $en = strtr($search, bn_digit_map());
+    if ($en !== $search) { $terms[] = $en; }
+    return $terms;
 }
 
 $filterStatus = $_GET['status'] ?? '';
@@ -873,11 +910,16 @@ if ($action === 'list') {
         $params['batch'] = $filterBatch;
     }
     if ($search !== '') {
-        $where[] = '(customer_name LIKE :q1 OR phone LIKE :q2 OR item_title LIKE :q3)';
-        $like = '%' . $search . '%';
-        $params['q1'] = $like;
-        $params['q2'] = $like;
-        $params['q3'] = $like;
+        // 🔴 `%`/`_` escape বাধ্যতামূলক — নাহলে `%` লিখলেই সব সারি "মিলত"
+        //    (search.php-এর একই নিয়ম; escape-অক্ষর `!`, ব্যাকস্ল্যাশ নয় —
+        //     তার আচরণ MySQL-এর `NO_BACKSLASH_ESCAPES` মোডের উপর নির্ভর করে)।
+        $hay = reg_search_haystack_sql();
+        $ors = [];
+        foreach (reg_search_terms($search) as $i => $term) {
+            $ors[] = $hay . " LIKE :q{$i} ESCAPE '!'";
+            $params["q{$i}"] = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $term) . '%';
+        }
+        $where[] = '(' . implode(' OR ', $ors) . ')';
     }
     if ($dateFrom !== '') {
         $where[] = 'DATE(created_at) >= :date_from';
@@ -1058,17 +1100,54 @@ function reg_income_cell(array $row): void
 // আগে নাম/ফোন/ঠিকানা তিনটা আলাদা কলাম ছিল; এক ঘরে তিন স্তরে বসানোয় তালিকা অনেক সরু হয়েছে।
 function reg_person_cell(array $row): void
 {
-    $name  = trim((string) ($row['customer_name'] ?? ''));
-    $phone = trim((string) ($row['phone'] ?? ''));
-    $addr  = trim((string) ($row['address'] ?? ''));
+    $isCourse = ($row['type'] ?? '') === 'course';
+    $name   = trim((string) ($row['customer_name'] ?? ''));
+    $phone  = trim((string) ($row['phone'] ?? ''));
+    $rName  = trim((string) ($row['receiver_name'] ?? ''));
+    $rPhone = trim((string) ($row['receiver_phone'] ?? ''));
+    $addr   = trim((string) ($row['address'] ?? ''));
+    // 🔴 লেবেলগুলো course-register.php / register.php ফর্মের ঘরের নামের সংক্ষেপ —
+    //    "কোনটা শিশুর নাম, কোনটা রিসিভারের, কোনটা কার মোবাইল" এক নজরে বোঝার জন্য
+    //    (২০২৬-১০-১৫, ইউজারের চাওয়া)। **নতুন কলাম বাড়ানো হয়নি** — তালিকার নিয়ম।
+    $nameLabel  = $isCourse ? 'শিশু' : 'ক্রেতা';
+    $phoneLabel = $isCourse ? 'মা' : 'ফোন';
+    // 🔴 মোড়কটা `min-w-0` — মোবাইল কার্ড-লেআউটে `td` flex হয়ে যায়, খোলা রাখলে
+    //    লাইনগুলো পাশাপাশি কলামে চেপে যেত (course-parcel.php-এর রোস্টারে ধরা পড়েছিল)।
     ?>
-    <div class="font-semibold text-gray-800 leading-tight"><?= e($name !== '' ? $name : '—') ?></div>
-    <?php if ($phone !== ''): ?>
-        <a href="tel:<?= e($phone) ?>" class="text-[11px] text-indigo-600 font-semibold" title="ফোন করুন"><?= e($phone) ?></a>
-    <?php endif; ?>
-    <?php if ($addr !== ''): ?>
-        <div class="text-[10px] text-gray-400 max-w-[200px] truncate" title="<?= e($addr) ?>">📍 <?= e($addr) ?></div>
-    <?php endif;
+    <div class="min-w-0">
+        <?php reg_person_line($nameLabel, $name !== '' ? $name : '—', '', true); ?>
+        <?php if ($phone !== '') { reg_person_line($phoneLabel, $phone, 'tel:' . $phone); } ?>
+        <?php if ($rName !== '' || $rPhone !== ''): ?>
+            <?php // রিসিভারের দুটো লাইন আলাদা দাগে — তাই নিচের "ফোন" কারটা তা নিয়ে ভুল হয় না ?>
+            <div class="mt-0.5" style="border-left:2px solid #E5E7EB;padding-left:5px">
+                <?php if ($rName !== '') { reg_person_line('রিসিভার', $rName); } ?>
+                <?php if ($rPhone !== '') { reg_person_line('ফোন', $rPhone, 'tel:' . $rPhone); } ?>
+            </div>
+        <?php endif; ?>
+        <?php if ($addr !== ''): ?>
+            <div class="text-[10px] text-gray-400 max-w-[200px] truncate mt-0.5" title="<?= e($addr) ?>">📍 <?= e($addr) ?></div>
+        <?php endif; ?>
+    </div>
+    <?php
+}
+
+// ছোট ধূসর লেবেল + মান এক লাইনে (ফোন হলে `tel:` লিংক — ফোনে এক ট্যাপে কল)।
+// 🔴 লেবেলের জন্য ফিক্সড প্রস্থের কলাম দেওয়া হয়নি — ৩২০px পর্দায় ঐ প্রস্থটা নামের
+//    জায়গা খেয়ে ফেলত; বদলে "লেবেল · মান" রূপ, মান আলাদা রঙে বলে চোখে আলাদাই লাগে।
+function reg_person_line(string $label, string $value, string $href = '', bool $strong = false): void
+{
+    ?>
+    <div class="leading-tight break-words">
+        <span class="text-[10px] text-gray-400 font-semibold"><?= e($label) ?> ·</span>
+        <?php if ($href !== ''): ?>
+            <a href="<?= e($href) ?>" class="text-[11px] text-indigo-600 font-semibold" title="ফোন করুন"><?= e($value) ?></a>
+        <?php elseif ($strong): ?>
+            <span class="font-semibold text-gray-800"><?= e($value) ?></span>
+        <?php else: ?>
+            <span class="text-[11px] text-gray-600"><?= e($value) ?></span>
+        <?php endif; ?>
+    </div>
+    <?php
 }
 
 // ── 📦 আইটেম-সেল (আইটেমের নাম + নিচে ছোট করে ব্যাচ/পরিমাণ) — আলাদা "ব্যাচ"/"পরিমাণ" কলাম আর লাগে না
@@ -1164,11 +1243,13 @@ function reg_more_panel(array $row, int $colspan, string $returnUrl = ''): void
     $viewHref = 'registrations.php?action=view&id=' . $rid
         . ($returnUrl !== '' ? '&return=' . rawurlencode($returnUrl) : '');
     if (($row['type'] ?? '') === 'course') {
+        // 🔴 রিসিভারের নাম/নম্বর এখন প্রথম কলামেই সবসময় দেখা যায় (২০২৬-১০-১৫),
+        //    তাই এখান থেকে তুলে দেওয়া হয়েছে — ডুপ্লিকেট নয় (ফেসবুক আইডির মতোই নীতি)।
         $fields = [
             'জন্ম তারিখ'            => !empty($row['date_of_birth']) ? format_date_bn((string) $row['date_of_birth']) : '',
             'মোবাইল নাম্বার (বাবা)' => (string) ($row['father_mobile'] ?? ''),
-            'রিসিভার নাম'           => (string) ($row['receiver_name'] ?? ''),
-            'রিসিভার নাম্বার'       => (string) ($row['receiver_phone'] ?? ''),
+            'জেলা'                  => (string) ($row['district'] ?? ''),
+            'থানা'                  => (string) ($row['thana'] ?? ''),
         ];
     } else {
         $fields = [
@@ -1575,11 +1656,12 @@ require __DIR__ . '/includes/layout-top.php';
         <?php if ($filterType): ?><input type="hidden" name="type" value="<?= e($filterType) ?>"><?php endif; ?>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
             <div class="lg:col-span-2">
-                <label class="block text-xs font-semibold text-gray-500 mb-1">নাম, ফোন বা আইটেম</label>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">খোঁজা — সব তথ্য দিয়ে</label>
                 <div class="flex gap-2 items-center">
-                    <input type="text" name="q" value="<?= e($search) ?>" placeholder="নাম / ফোন / আইটেম লিখুন" id="regSearchInput" data-autosearch="regFilterForm" class="flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm">
+                    <input type="text" name="q" value="<?= e($search) ?>" placeholder="নাম / ফোন / রিসিভার / ঠিকানা / ব্যাচ / নোট…" id="regSearchInput" data-autosearch="regFilterForm" class="flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm">
                     <button type="submit" class="flex-shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm whitespace-nowrap">🔍 খুঁজুন</button>
                 </div>
+                <p class="text-[11px] text-gray-500 mt-1">🔎 শিশুর নাম · মা/বাবার মোবাইল · রিসিভারের নাম ও নম্বর · ফেসবুক আইডি · ঠিকানা · জেলা/থানা · ব্যাচ · কোর্সের নাম · ইমেইল · নোট · কনসাইনমেন্ট আইডি · অর্ডার নম্বর — যেকোনোটা দিয়ে খোঁজা যায় (বাংলা অঙ্কেও)।</p>
             </div>
             <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1">নির্দিষ্ট আইটেম</label>
