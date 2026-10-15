@@ -33,7 +33,10 @@ function safe_return_url(?string $url, string $fallback): string
     // 🔴 কন্ট্রোল-ক্যারেক্টার ছেঁটে ফেলা হয় — মানটা POST থেকে আসে আর সরাসরি
     //    `Location:` হেডারে বসে (হেডার-ইনজেকশন গার্ড, `nav_safe_return()`-এর মতোই)।
     $url = $url === null ? null : preg_replace('/[\x00-\x1F\x7F]/', '', $url);
-    $allowedPrefixes = ['registrations.php', 'course-data.php'];
+    // 🔴 হোয়াইটলিস্ট — শুধু এই কয়টা পাতা (খোলা রিডাইরেক্ট গার্ড)। `month-work.php`
+    //    যোগ হয়েছে ২০২৬-১০-১৫-তে: "এই মাসের কাজ" পাতার "জমা নিন" বোতাম এখানকার
+    //    `pay-collect` হ্যান্ডলারেই POST করে, আর কাজ শেষে ওখানেই ফেরত যাওয়া দরকার।
+    $allowedPrefixes = ['registrations.php', 'course-data.php', 'month-work.php'];
     foreach ($allowedPrefixes as $prefix) {
         if ($url && strpos($url, $prefix) === 0) {
             return $url;

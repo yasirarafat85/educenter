@@ -98,6 +98,23 @@ function cp_url(int $itemId = 0, int $month = 0): string
     return $u;
 }
 
+/**
+ * 🔙 কাজ শেষে কোথায় ফেরত — "এই মাসের কাজ" (month-work.php) পাতা থেকে
+ *    `action=ensure-ledger` POST করলে অ্যাডমিন যেন এখানে ছিটকে না আসেন।
+ *
+ * 🔴 হোয়াইটলিস্ট — শুধু জানা দুটো পাতা (খোলা রিডাইরেক্ট গার্ড), আর কন্ট্রোল-ক্যারেক্টার
+ *    ছেঁটে ফেলা হয় (মানটা POST থেকে এসে সরাসরি `Location:` হেডারে বসে — হেডার-ইনজেকশন
+ *    গার্ড, `safe_return_url()`/`nav_safe_return()`-এর হুবহু একই নীতি)।
+ */
+function cp_back_url(?string $url, string $fallback): string
+{
+    $url = $url === null ? null : preg_replace('/[\x00-\x1F\x7F]/', '', $url);
+    foreach (['month-work.php', 'course-parcel.php'] as $prefix) {
+        if ($url && strpos($url, $prefix) === 0) { return $url; }
+    }
+    return $fallback;
+}
+
 // 🔎 এই পাতার সার্চ কত জন হলে দেখানো হবে (এর কম হলে চোখেই সবটা দেখা যায়)
 const CP_SEARCH_MIN = 3;
 
@@ -216,7 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($db->inTransaction()) { $db->rollBack(); }
             set_flash('error', 'খাতা বসানো যায়নি — database/migrate-payment-ledger.sql চালানো হয়নি।');
         }
-        redirect(cp_url($itemId, $month));
+        redirect(cp_back_url($_POST['return_url'] ?? null, cp_url($itemId, $month)));
 
     } elseif ($action === 'parcels') {
         $n = max(0, min(60, (int) ($_POST['total_parcels'] ?? 0)));

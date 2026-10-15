@@ -98,6 +98,8 @@ function admin_nav_groups(): array
 
     $orders = [];
     if (admin_can('orders')) {
+        // 📅 রোজকার কাজ — ইচ্ছাকৃতভাবে এই গ্রুপের সবার উপরে
+        $orders[] = ['key' => 'month-work',       'href' => 'month-work.php',       'file' => 'month-work.php',       'icon' => 'calendar-check',    'label' => 'এই মাসের কাজ'];
         $orders[] = ['key' => 'registrations',    'href' => 'registrations.php',    'file' => 'registrations.php',    'icon' => 'clipboard-list',    'label' => 'রেজিস্ট্রেশন/অর্ডার'];
         $orders[] = ['key' => 'course-data',      'href' => 'course-data.php',      'file' => 'course-data.php',      'icon' => 'table',             'label' => 'ডেটা টেবিল'];
         $orders[] = ['key' => 'income-fix',       'href' => 'income-fix.php',       'file' => 'income-fix.php',       'icon' => 'scale',             'label' => 'আয় মেলানো'];

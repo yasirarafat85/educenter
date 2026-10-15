@@ -50,6 +50,9 @@ function admin_page_sections(): array
         //    আলাদা শাখা আছে (কোর্স/ওয়ার্কশিট/প্রোডাক্ট তিনটা আলাদা সেকশনে)। এন্ট্রিটা
         //    এখানে রাখা হয়েছে শুধু "অজানা পেজ → fail-closed" গার্ডে না পড়ার জন্য।
         'course-media.php'          => ['content:courses'],
+        // 📅 এই মাসের কাজ — পার্সেল ও টাকা দুটোই দেখায়; নিজে কিছু লেখে না (POST নেই),
+        //    প্রতিটা বোতাম registrations.php/course-parcel.php-র হ্যান্ডলারে যায় — ওখানেই cap যাচাই হয়
+        'month-work.php'            => ['parcel', 'orders'],
         'registrations.php'         => ['orders'],
         'course-data.php'           => ['orders'],
         // 💰 আয় মেলানো — অর্ডারের টাকার খাতা বসায় (registrations.php-এর "টাকা" ড্রয়ারের মতোই), তাই একই সেকশন
