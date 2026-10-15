@@ -140,6 +140,15 @@ $taskDefs = [
      'label' => 'পেন্ডিং অর্ডার', 'hint' => 'কনফার্ম করা বাকি', 'cls' => 'bg-orange-100 text-orange-500', 'num' => 'text-orange-500',
      'sql' => "SELECT COUNT(*) c FROM registrations WHERE status = 'pending'"],
 
+    // 💰 টাকা বাকি আছে (২০২৬-১০-১৫) — চাপলে registrations.php-এর "বাকি আছে" ফিল্টার
+    // খোলে (সবচেয়ে বেশি বাকি আগে)। 🔴 শর্তটা registrations.php-এর `REG_DUE_WHERE`-এর
+    // হুবহু প্রতিধ্বনি (বাতিল বাদ) — একটা বদলালে অন্যটাও বদলান, নাহলে এখানের সংখ্যা
+    // আর ওখানের তালিকা আলাদা হয়ে যাবে। উৎস খাতা (`due_amount` ডিনরমালাইজড)।
+    ['page' => 'registrations.php', 'url' => 'registrations.php?due=1', 'icon' => 'wallet',
+     'label' => 'টাকা বাকি আছে', 'hint' => 'এঁদের কাছে টাকা পাওয়া বাকি', 'cls' => 'bg-red-100 text-red-600', 'num' => 'text-red-600',
+     'sql' => "SELECT COUNT(*) c FROM registrations
+                 WHERE COALESCE(due_amount, 0) > 0.009 AND status <> 'cancelled'"],
+
     // 💰 পুরনো নিয়মে (কনফার্ম করলেই আয়) বসে যাওয়া আয় — খাতা নেই বলে অঙ্কটা যাচাই করা হয়নি
     ['page' => 'income-fix.php', 'url' => 'income-fix.php', 'icon' => 'scale',
      'label' => 'আয় মেলানো বাকি', 'hint' => 'বইয়ে আয় আছে, টাকার খাতা নেই', 'cls' => 'bg-amber-100 text-amber-600', 'num' => 'text-amber-600',

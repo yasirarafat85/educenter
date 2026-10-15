@@ -285,6 +285,19 @@ $currentUrl = mw_url($itemId, $selMonth);
                     <?php else: ?>
                         <span class="text-green-700 font-semibold text-xs">✓ মিলেছে</span>
                     <?php endif; ?>
+                    <?php
+                    // 💰 দ্বিতীয় লাইনে **সব মাস মিলিয়ে মোট বাকি** (২০২৬-১০-১৫) — উপরের
+                    // অঙ্কটা শুধু এই মাসের কিস্তির, তাই আগের মাসের বকেয়া চোখেই পড়ত না।
+                    // 🔴 নতুন কলাম নয় (তালিকার নিয়ম), আর হিসাবও নতুন করে লেখা হয়নি —
+                    //    `pay_summary()`-র balance, অর্থাৎ registrations.php-র চিপ ও
+                    //    `due_amount` যা দেখায় হুবহু তাই।
+                    // 🔴 এই মাসের অঙ্কের চেয়ে বেশি হলেই কেবল দেখানো হয় (নাহলে একই
+                    //    সংখ্যা দুইবার দেখাত)।
+                    $allDue = $rows ? pay_summary($rows)['balance'] : 0.0;
+                    if ($allDue > $due + 0.009): ?>
+                        <div class="text-[11px] text-red-600 font-semibold mt-0.5"
+                             title="সব মাস মিলিয়ে এখনো বাকি">সব মিলিয়ে ৳<?= number_format($allDue) ?></div>
+                    <?php endif; ?>
                 </td>
                 <td class="py-3 px-4" data-label="টাকা জমা নিন">
                     <?php if ($rows): ?>

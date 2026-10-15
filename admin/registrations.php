@@ -26,6 +26,17 @@ $typeLabels = ['course' => 'কোর্স', 'worksheet' => 'ওয়ার্
 // ফোন নম্বর বা তারিখ ভুলে বসিয়ে ফেলা আটকায়)
 const REG_PAY_MAX_ADD = 1000000;
 
+// 💰 "বাকি আছে" ফিল্টারের শর্ত — **একটাই জায়গায় লেখা ধ্রুবক**, কারণ উপরের সারাংশ
+// কার্ডের গণনা থেকে ঠিক এই শর্তটাই বাদ দিতে হয় (স্ট্যাটাসের মতোই — কার্ডটাই টগল,
+// তাই টগল করলে তার নিজের সংখ্যা বদলানো চলবে না)।
+// 🔴 উৎস `registrations.due_amount` — খাতা (`registration_payments`) থেকে
+//    ডিনরমালাইজড; হাতে লেখা নয়। ০.০০৯ ক্ল্যাম্পটা পয়সার গোলমাল এড়াতে।
+// 🔴 বাতিল অর্ডার ইচ্ছাকৃতভাবে বাদ — বাতিল করলে আয় সরে যায় কিন্তু খাতার সারিগুলো
+//    (আর তাই `due_amount`-ও) থেকে যায়; বাদ না দিলে বাতিল হয়ে যাওয়া শিক্ষার্থীকে
+//    টাকার জন্য তাড়া দিতে বলা হতো।
+// 🔴 বন্ধনীসহ — শর্তটা ভেতরে `AND` রাখে, আর স্ট্রিংটা অন্য শর্তের সাথে জোড়া লাগে।
+const REG_DUE_WHERE = "(COALESCE(due_amount, 0) > 0.009 AND status <> 'cancelled')";
+
 // ফর্ম থেকে পাঠানো return_url শুধুমাত্র চেনা অ্যাডমিন পেজের মধ্যেই থাকা নিশ্চিত করা (open-redirect ঠেকাতে)
 // course-data.php ও এখান থেকে (একই action=delete/update-details ব্যবহার করে) রিটার্ন করতে পারে
 function safe_return_url(?string $url, string $fallback): string
@@ -879,6 +890,10 @@ $filterItem = trim($_GET['item'] ?? '');
 $filterBatch = trim($_GET['batch'] ?? '');
 $dateFrom = trim($_GET['date_from'] ?? '');
 $dateTo = trim($_GET['date_to'] ?? '');
+// 💰 শুধু যাঁদের টাকা বাকি আছে — 🔴 কলামটা আছে কিনা আগে দেখা হয় (মাইগ্রেশনের আগে
+//    ফিল্টারটা চুপচাপ বাদ যায়, তালিকা আগের মতোই চলে)
+$hasDueCol = db_has_column($db, 'registrations', 'due_amount');
+$filterDue = $hasDueCol && ($_GET['due'] ?? '') === '1';
 $page = max(1, (int) ($_GET['page'] ?? 1));
 $perPage = 25;
 
@@ -920,6 +935,9 @@ if ($action === 'list') {
             $params["q{$i}"] = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $term) . '%';
         }
         $where[] = '(' . implode(' OR ', $ors) . ')';
+    }
+    if ($filterDue) {
+        $where[] = REG_DUE_WHERE;   // প্লেসহোল্ডার লাগে না — পুরো শর্তটা কোডে লেখা
     }
     if ($dateFrom !== '') {
         $where[] = 'DATE(created_at) >= :date_from';
@@ -984,7 +1002,12 @@ if ($action === 'list') {
 
     // ── উপরের সারাংশ কার্ড: স্ট্যাটাস **বাদে** বাকি সব ফিল্টার মেনে গণনা
     // (তাই "পেন্ডিং ৯ / কনফার্ম ২" কার্ডে ক্লিক করে স্ট্যাটাস বদলালেও সংখ্যাগুলো একই থাকে)
-    $sumWhere  = array_values(array_filter($where, fn($w) => $w !== 'status = :status'));
+    // 🔴 স্ট্যাটাস **ও বাকির** শর্ত দুটোই বাদ — দুটোরই নিজের কার্ড আছে, কার্ডে চাপলে
+    //    তার নিজের সংখ্যা বদলে গেলে অ্যাডমিন বুঝতেন না আসলে কতজনের বাকি।
+    $sumWhere  = array_values(array_filter(
+        $where,
+        fn($w) => $w !== 'status = :status' && $w !== REG_DUE_WHERE
+    ));
     $sumParams = $params;
     unset($sumParams['status']);
     $sumSql = $sumWhere ? (' WHERE ' . implode(' AND ', $sumWhere)) : '';
@@ -993,7 +1016,8 @@ if ($action === 'list') {
             "SELECT
                 SUM(status = 'pending')   AS pending,
                 SUM(status = 'confirmed') AS confirmed,
-                SUM(COALESCE(due_amount, 0))                                              AS due_total,
+                SUM(CASE WHEN " . REG_DUE_WHERE . " THEN COALESCE(due_amount, 0) ELSE 0 END) AS due_total,
+                SUM(CASE WHEN " . REG_DUE_WHERE . " THEN 1 ELSE 0 END)                       AS due_rows,
                 SUM(CASE WHEN income_approved = 1 THEN COALESCE(income_amount, 0) ELSE 0 END) AS income_total,
                 COUNT(*) AS all_rows
              FROM registrations" . $sumSql
@@ -1011,7 +1035,14 @@ if ($action === 'list') {
     $page = min($page, $totalPages);
     $offset = ($page - 1) * $perPage;
 
-    $sql = 'SELECT * FROM registrations' . $whereSql . ' ORDER BY created_at DESC LIMIT ' . $perPage . ' OFFSET ' . $offset;
+    // 🔴 "বাকি আছে" ফিল্টার চালু থাকলে **সবচেয়ে বেশি বাকি আগে** — তাড়া দেওয়ার কাজে
+    //    ওটাই দরকার। অন্য সময় আগের মতোই নতুন অর্ডার আগে (`idx_reg_status_created`
+    //    তখন কাজে লাগে; বাকির শর্ত বসলে ঐ ইনডেক্স এমনিতেই ব্যবহার হয় না, তাই
+    //    এই ক্রম বদলানোয় বাড়তি খরচ নেই)।
+    $orderBy = $filterDue
+        ? ' ORDER BY COALESCE(due_amount, 0) DESC, created_at DESC'
+        : ' ORDER BY created_at DESC';
+    $sql = 'SELECT * FROM registrations' . $whereSql . $orderBy . ' LIMIT ' . $perPage . ' OFFSET ' . $offset;
     $stmt = $db->prepare($sql);
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
@@ -1050,6 +1081,7 @@ $activeFilters = array_filter([
     'q' => $search,
     'item' => $filterItem,
     'batch' => $filterBatch,
+    'due' => $filterDue ? '1' : '',
     'date_from' => $dateFrom,
     'date_to' => $dateTo,
 ], fn($v) => $v !== '' && $v !== null);
@@ -1754,17 +1786,46 @@ require __DIR__ . '/includes/layout-top.php';
                 <div class="text-2xl font-bold <?= $card['color'] ?>"><?= $card['value'] ?></div>
             </a>
         <?php endforeach; ?>
-        <div class="bg-white rounded-2xl shadow p-3">
-            <div class="text-[11px] text-gray-500 font-semibold">মোট বাকি</div>
-            <div class="text-xl font-bold text-red-600">৳<?= number_format((float) ($listSummary['due_total'] ?? 0), 0) ?></div>
-        </div>
+        <?php
+        // 💰💰 "মোট বাকি" কার্ডটা এখন **বোতামও** (২০২৬-১০-১৫, ইউজারের চাওয়া: "কারোর
+        // ডিউ রাখলে সেটা বোঝার সহজ উপায় রাখো")। চাপলে `?due=1` — শুধু যাঁদের টাকা
+        // বাকি আছে তাঁরাই তালিকায় থাকেন, প্রতিটা সারির "টাকা" চিপে অঙ্কটা লেখা।
+        // 🔴 বাকির অঙ্ক নতুন করে হিসাব করা হয়নি — খাতা থেকেই (`due_amount`)।
+        // 🔴 বাকি কেউ না থাকলে ক্লিকযোগ্য হয় না (খালি তালিকা দেখানোর মানে নেই)।
+        $dueRows = (int) ($listSummary['due_rows'] ?? 0);
+        $dueLink = $hasDueCol && ($dueRows > 0 || $filterDue);
+        $dueTotal = '৳' . number_format((float) ($listSummary['due_total'] ?? 0), 0);
+        ?>
+        <?php if ($dueLink): ?>
+            <a href="<?= e(reg_url(['due' => $filterDue ? null : '1'])) ?>"
+               class="block bg-white rounded-2xl shadow p-3 <?= $filterDue ? 'border border-indigo-400' : '' ?>"
+               title="<?= $filterDue ? 'সবাইকে আবার দেখুন' : 'শুধু যাঁদের টাকা বাকি আছে তাঁদের দেখুন' ?>">
+                <div class="text-[11px] text-gray-500 font-semibold">মোট বাকি<?= $filterDue ? ' ✓' : '' ?></div>
+                <div class="text-xl font-bold text-red-600"><?= $dueTotal ?></div>
+                <div class="text-[10px] font-semibold text-red-600 mt-0.5">
+                    <?= $filterDue ? '← সবাইকে দেখুন' : $dueRows . ' জনের বাকি — দেখুন' ?>
+                </div>
+            </a>
+        <?php else: ?>
+            <div class="bg-white rounded-2xl shadow p-3">
+                <div class="text-[11px] text-gray-500 font-semibold">মোট বাকি</div>
+                <div class="text-xl font-bold text-red-600"><?= $dueTotal ?></div>
+                <?php if ($hasDueCol): ?>
+                    <div class="text-[10px] font-semibold text-green-700 mt-0.5">কারো বাকি নেই ✅</div>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
         <div class="bg-white rounded-2xl shadow p-3">
             <div class="text-[11px] text-gray-500 font-semibold">অনুমোদিত আয়</div>
             <div class="text-xl font-bold text-green-700">৳<?= number_format((float) ($listSummary['income_total'] ?? 0), 0) ?></div>
         </div>
     </div>
 
-    <p class="text-sm text-gray-500 mb-4">এই ফিল্টারে <strong><?= $totalRows ?></strong> টি ফলাফল<?= $totalPages > 1 ? " — পৃষ্ঠা {$page}/{$totalPages}" : '' ?></p>
+    <p class="text-sm text-gray-500 mb-4">
+        <?php if ($filterDue): ?><span class="font-semibold text-red-600">💰 শুধু যাঁদের বাকি আছে —</span> <?php endif; ?>
+        এই ফিল্টারে <strong><?= $totalRows ?></strong> টি ফলাফল<?= $totalPages > 1 ? " — পৃষ্ঠা {$page}/{$totalPages}" : '' ?>
+        <?php if ($filterDue): ?><span class="text-gray-400">(সবচেয়ে বেশি বাকি আগে)</span><?php endif; ?>
+    </p>
 
     <div class="bg-white rounded-2xl shadow overflow-x-auto">
         <table class="w-full text-sm">
