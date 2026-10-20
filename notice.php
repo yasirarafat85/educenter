@@ -6,7 +6,10 @@ $activePage = 'notice';
 $pageDescription = 'ভর্তি, ক্লাসের সময়সূচি ও পরীক্ষা সংক্রান্ত সর্বশেষ নোটিশ ও ঘোষণা এখানে পাবেন।';
 
 $notices = get_db()->query('SELECT * FROM notices WHERE is_active = 1 ORDER BY notice_date DESC, id DESC')->fetchAll();
-$colors = ['blue', 'green', 'yellow', 'purple', 'red'];
+
+// 🎨 রঙ ঘুরেফিরে বসে — তালিকার **অবস্থান** ধরে (`id` ধরে নয়), তাই পরপর দুটো কার্ড
+//    কখনো একই রঙ পায় না; এটাই ইউজারের চাওয়া ("এক একটা এক রকম কালার")।
+$ntColors = notice_palette();
 
 $pageJsonLd = jsonld_breadcrumb([['name' => 'নোটিশ', 'url' => 'notice']]);
 
@@ -16,15 +19,28 @@ require __DIR__ . '/includes/site-header.php';
 <div class="max-w-4xl mx-auto">
     <?= render_page_header('bell', 'ঘোষণা', 'নোটিশ বোর্ড', 'সর্বশেষ আপডেট ও গুরুত্বপূর্ণ ঘোষণা', 'text-red-600') ?>
     <?php if ($notices): ?>
-    <div class="space-y-6 sm:space-y-8">
-        <?php foreach ($notices as $i => $n): $color = $colors[$i % count($colors)]; ?>
-        <div class="colorful-card rounded-2xl shadow-lg p-6 sm:p-8 border-l-8 border-<?= $color ?>-500 card-hover">
-            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4 space-y-2 sm:space-y-0">
-                <h3 class="text-xl sm:text-2xl font-bold text-gray-900"><?= e($n['title']) ?></h3>
-                <span class="text-sm text-<?= $color ?>-700 bg-<?= $color ?>-200 px-4 py-2 rounded-full font-semibold"><?= format_date_bn($n['notice_date']) ?></span>
+    <div class="nt-list">
+        <?php foreach ($notices as $i => $n):
+            $c = $ntColors[$i % count($ntColors)];
+            // 😀 শিরোনামের সামনে ইমোজি থাকলে সেটা রঙিন বৃত্তে ওঠে, শিরোনাম থেকে বাদ যায়
+            [$ntEmoji, $ntTitle] = notice_lead_emoji((string) $n['title']);
+            $ntFresh = notice_is_fresh((string) $n['notice_date']);
+        ?>
+        <article class="nt-card" style="--n: <?= e($c['base']) ?>; --nd: <?= e($c['deep']) ?>;">
+            <div class="nt-top">
+                <span class="nt-ic" aria-hidden="true"><?php
+                    // ইমোজি না থাকলে সাধারণ 📣 আইকন — 🔴 কখনো এলোমেলো আইকন ঘোরানো হয় না
+                    //    (কোনটা কোন নোটিশ সেটা আইকন দেখে ভুল বোঝা যেত); রঙটাই আলাদা করে।
+                    echo $ntEmoji !== '' ? e($ntEmoji) : '<i data-lucide="megaphone"></i>';
+                ?></span>
+                <h3 class="nt-title"><?= e($ntTitle) ?></h3>
+                <div class="nt-meta">
+                    <?php if ($ntFresh): ?><span class="nt-new">নতুন</span><?php endif; ?>
+                    <span class="nt-date"><?= e(format_date_bn($n['notice_date'])) ?></span>
+                </div>
             </div>
-            <p class="text-gray-700 text-base sm:text-lg leading-relaxed"><?= format_rich_text($n['content']) ?></p>
-        </div>
+            <div class="nt-body"><?= format_rich_text($n['content']) ?></div>
+        </article>
         <?php endforeach; ?>
     </div>
     <?php else: ?>

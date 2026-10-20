@@ -9,8 +9,11 @@ module.exports = {
     './includes/courier/*.php',
     './admin/login.php',
   ],
-  // notice.php ডাইনামিকভাবে border-{color}-500 / text-{color}-700 / bg-{color}-200 বানায় ($colors অ্যারে থেকে)
-  // — স্ক্যানার ধরতে পারে না, তাই safelist এ রাখা
+  // ⚠️ নিচের প্রথম তিন সারি **ঐতিহাসিক** — notice.php আগে ডাইনামিক
+  //    border-{color}-500 / text-{color}-700 / bg-{color}-200 বানাত; ২০২৬-১০-২০ থেকে
+  //    নোটিশ কার্ড inline CSS-ভ্যারিয়েবল (`--n`/`--nd`) ব্যবহার করে, তাই ওগুলো আর লাগে না।
+  //    🔴 তবু মুছে ফেলা হয়নি — safelist বদলালে **রিবিল্ড** লাগত, আর না-মুছে রাখার খরচ প্রায় শূন্য।
+  //    index.php-এর স্ট্যাট (bg-{color}-100 / text-{color}-600) এখনো ডাইনামিক, ওগুলো দরকারি।
   safelist: [
     'border-blue-500','border-green-500','border-yellow-500','border-purple-500','border-red-500',
     'text-blue-700','text-green-700','text-yellow-700','text-purple-700','text-red-700',

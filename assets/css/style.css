@@ -1017,3 +1017,89 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
   .pay-num-v{font-size:19px}
   .pay-chan{font-size:14px;padding:12px 8px}
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   📢 নোটিশ কার্ড (notice.php, ২০২৬-১০-২০ — ইউজারের চাওয়া: "এক একটা এক রকম কালার")
+   🔴 রঙ আসে সার্ভার থেকে inline `--n` (মূল) ও `--nd` (গাঢ়, লেখার জন্য) ভ্যারিয়েবলে —
+      তালিকা `notice_palette()`-এ। ডাইনামিক Tailwind ক্লাস নয়, তাই **রিবিল্ড লাগে না**।
+   🔴 লেখা/আইকনে সবসময় `--nd` — হালকা `--n` (কমলা/হলুদ) সাদার উপর পড়াই যেত না।
+   ══════════════════════════════════════════════════════════════════════════════ */
+.nt-list { display: flex; flex-direction: column; gap: 1.15rem; }
+
+.nt-card {
+    position: relative;
+    padding: 1.15rem 1.25rem 1.25rem 1.7rem;
+    border-radius: 1.1rem;
+    background: linear-gradient(135deg, rgb(var(--n) / .11) 0%, rgb(var(--n) / .04) 45%, #fff 88%);
+    border: 1px solid rgb(var(--n) / .24);
+    box-shadow: 0 2px 10px rgb(var(--n) / .10), 0 1px 3px rgba(0, 0, 0, .04);
+    overflow: hidden;
+    transition: transform .2s ease, box-shadow .2s ease;
+}
+
+/* 🔴🔴 বাঁ পাশের রঙিন দাগ `::before`-এ, `border-left` দিয়ে নয় — পরে লোড হওয়া কোনো
+   শর্টহ্যান্ড `border:` নিয়ম (যেমন `.colorful-card`-এর) দাগটা **নীরবে মুছে** দিত;
+   ঠিক এই কারণেই পুরনো নোটিশ পাতার রঙিন দাগ লাইভে অদৃশ্য ছিল। */
+.nt-card::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 7px;
+    background: linear-gradient(180deg, rgb(var(--n)) 0%, rgb(var(--n) / .5) 100%);
+}
+
+.nt-top { display: flex; align-items: flex-start; gap: .7rem; flex-wrap: wrap; }
+
+.nt-ic {
+    flex: none; width: 2.6rem; height: 2.6rem; border-radius: .9rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgb(var(--n) / .17); color: rgb(var(--nd));
+    font-size: 1.3rem; line-height: 1;
+}
+.nt-ic > svg, .nt-ic > i { width: 1.3rem; height: 1.3rem; }
+
+.nt-title {
+    flex: 1 1 12rem; min-width: 0;
+    margin: .25rem 0 0; color: #111827; font-weight: 800; line-height: 1.5;
+    font-size: clamp(1.05rem, .98rem + .6vw, 1.35rem);
+    overflow-wrap: anywhere;
+}
+
+/* 🔴 `margin-left:auto` — জায়গা থাকলে ডান পাশে, না থাকলে নিজে থেকেই নিচের লাইনে */
+.nt-meta { flex: none; margin-left: auto; display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+
+.nt-date {
+    display: inline-flex; align-items: center; white-space: nowrap;
+    background: rgb(var(--n) / .16); color: rgb(var(--nd));
+    border: 1px solid rgb(var(--n) / .3);
+    padding: .3rem .8rem; border-radius: 9999px;
+    font-size: .78rem; font-weight: 700;
+}
+
+.nt-new {
+    display: inline-flex; align-items: center; gap: .2rem; white-space: nowrap;
+    background: rgb(var(--nd)); color: #fff;
+    padding: .3rem .6rem; border-radius: 9999px;
+    font-size: .72rem; font-weight: 800;
+    box-shadow: 0 1px 4px rgb(var(--nd) / .4);
+}
+
+.nt-body { margin-top: .8rem; color: #374151; font-size: 1rem; line-height: 1.85; overflow-wrap: anywhere; }
+.nt-body strong { color: #111827; }
+
+/* 🔴 হোভারের নড়াচড়া শুধু মাউসে — ছোঁয়া-পর্দায় ট্যাপ করলে "আটকে থাকা হোভার" হতো
+   (উপরের `@media (hover: none)` ঘরের একই নীতি, কিন্তু এখানে উল্টোভাবে লেখা বলে
+   নতুন করে ঐ তালিকায় যোগ করার দরকার নেই)। */
+@media (hover: hover) {
+    .nt-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 26px rgb(var(--n) / .22), 0 2px 6px rgba(0, 0, 0, .05);
+    }
+}
+
+@media (max-width: 420px) {
+    .nt-card { padding: 1rem 1rem 1.1rem 1.45rem; border-radius: .95rem; }
+    .nt-card::before { width: 6px; }
+    .nt-ic { width: 2.2rem; height: 2.2rem; border-radius: .75rem; font-size: 1.1rem; }
+    .nt-ic > svg, .nt-ic > i { width: 1.1rem; height: 1.1rem; }
+    .nt-date { font-size: .72rem; padding: .25rem .6rem; }
+    .nt-new  { font-size: .68rem; padding: .25rem .5rem; }
+    .nt-body { font-size: .95rem; line-height: 1.8; }
+}
