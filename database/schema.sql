@@ -322,6 +322,7 @@ CREATE TABLE notices (
     title VARCHAR(255) NOT NULL,
     content TEXT,
     notice_date DATE NOT NULL,
+    expires_at DATETIME NULL DEFAULT NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

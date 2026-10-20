@@ -10,12 +10,30 @@ function get_entities(): array
     // ⚠️ `function_exists` গার্ড — অ্যাডমিন পেজে auth.php সবসময় functions.php লোড করে,
     //    কিন্তু এই ফাইলটা একা (টুল/টেস্ট থেকে) require করলেও যেন না ভাঙে। হেল্পার না
     //    থাকলে ঘরটা **বাদই যায়** (নিরাপদ দিক — দেখিয়ে দিলে সেভে Unknown column হতো)।
+    // ⚠️ `list_columns`-ও একসাথে ছাঁকা হয় — নাহলে তালিকার লুপে `$conf['fields'][$col]`
+    //    না-পাওয়া ঘরে গিয়ে পাতাটাই ভাঙত।
     $ents = get_entities_raw();
     $hasHelper = function_exists('db_has_column');
-    foreach (['worksheets', 'products'] as $e) {
-        if (isset($ents[$e]['fields']['card_excerpt'])
-            && (!$hasHelper || !db_has_column(null, $ents[$e]['table'], 'card_excerpt'))) {
-            unset($ents[$e]['fields']['card_excerpt']);
+    $optional = [
+        'worksheets' => ['card_excerpt'],
+        'products'   => ['card_excerpt'],
+        'notices'    => ['expires_at'],   // migrate-notice-expiry.sql
+    ];
+    foreach ($optional as $e => $cols) {
+        foreach ($cols as $col) {
+            if (!isset($ents[$e]['fields'][$col])) {
+                continue;
+            }
+            if ($hasHelper && db_has_column(null, $ents[$e]['table'], $col)) {
+                continue;
+            }
+            unset($ents[$e]['fields'][$col]);
+            if (!empty($ents[$e]['list_columns'])) {
+                $ents[$e]['list_columns'] = array_values(array_filter(
+                    $ents[$e]['list_columns'],
+                    static fn($c) => $c !== $col
+                ));
+            }
         }
     }
     return $ents;
@@ -157,9 +175,10 @@ function get_entities_raw(): array
                 'title'       => ['label' => 'শিরোনাম', 'type' => 'text', 'required' => true],
                 'content'     => ['label' => 'বিস্তারিত', 'type' => 'textarea', 'help' => 'লেখা মোটা করতে দুই পাশে দুইটা তারা দিন: **এভাবে** — সাইটে বোল্ড হয়ে দেখাবে। *একটা তারা* দিলে বাঁকা (italic)। লিংক (https://...) দিলে অটো ক্লিকযোগ্য হবে। নতুন লাইন সরাসরি নতুন লাইনেই দেখাবে।'],
                 'notice_date' => ['label' => 'তারিখ', 'type' => 'date', 'required' => true],
+                'expires_at'  => ['label' => '⏳ কবে নিজে থেকে সাইট থেকে সরে যাবে (ঐচ্ছিক)', 'type' => 'datetime', 'help' => 'তারিখ ও সময় দিলে ঠিক ঐ সময়ের পর নোটিশটা সাইটে (নোটিশ বোর্ড ও অভিভাবকের ড্যাশবোর্ড) নিজে থেকেই আর দেখাবে না — আপনাকে কিছু করতে হবে না। নোটিশটা এখানে থেকেই যায়, মুছে যায় না — চাইলে সময় বাড়িয়ে আবার দেখাতে পারেন, বা ঘরটা খালি করে সীমা তুলে দিতে পারেন। খালি রাখলে আগের মতোই চিরকাল দেখাবে। সময় বাংলাদেশ সময় ধরে হিসাব হয়।'],
                 'is_active'   => ['label' => 'সাইটে দেখাবে?', 'type' => 'checkbox', 'default' => 1, 'warn_off' => true, 'toggle_label' => 'নোটিশটি সাইটে দেখানো'],
             ],
-            'list_columns' => ['title', 'notice_date', 'is_active'],
+            'list_columns' => ['title', 'notice_date', 'expires_at', 'is_active'],
         ],
 
         'gallery' => [

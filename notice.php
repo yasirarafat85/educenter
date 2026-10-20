@@ -5,7 +5,12 @@ $pageTitle = 'নোটিশ বোর্ড';
 $activePage = 'notice';
 $pageDescription = 'ভর্তি, ক্লাসের সময়সূচি ও পরীক্ষা সংক্রান্ত সর্বশেষ নোটিশ ও ঘোষণা এখানে পাবেন।';
 
-$notices = get_db()->query('SELECT * FROM notices WHERE is_active = 1 ORDER BY notice_date DESC, id DESC')->fetchAll();
+// ⏳ মেয়াদ-শেষ নোটিশ বাদ — ছাঁকনি **PHP-তে** (`notice_filter_live()`), SQL-এ `NOW()` দিয়ে নয়:
+//    MySQL সার্ভারের টাইমজোন ঢাকার সাথে না-ও মিলতে পারে, আর কলামটা না থাকলে (মাইগ্রেশনের
+//    আগে) WHERE-এ লিখলে পুরো কোয়েরিই ভাঙত। `SELECT *` তাই ইচ্ছাকৃত।
+$notices = notice_filter_live(
+    get_db()->query('SELECT * FROM notices WHERE is_active = 1 ORDER BY notice_date DESC, id DESC')->fetchAll()
+);
 
 // 🎨 রঙ ঘুরেফিরে বসে — তালিকার **অবস্থান** ধরে (`id` ধরে নয়), তাই পরপর দুটো কার্ড
 //    কখনো একই রঙ পায় না; এটাই ইউজারের চাওয়া ("এক একটা এক রকম কালার")।

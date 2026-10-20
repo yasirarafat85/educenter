@@ -140,6 +140,53 @@ function notice_is_fresh(string $noticeDate, int $days = 7): bool
     return $ts !== false && $ts >= strtotime('today -' . $days . ' days');
 }
 
+/**
+ * ⏳ নোটিশের "সময় শেষ" কখন — `notices.expires_at` থেকে (খালি হলে null = কোনো সীমা নেই)।
+ *
+ * 🔴 হিসাবটা `course_deadline_ts()` দিয়েই হয় (ভর্তির শেষ সময়ের হুবহু একই ইঞ্জিন) — তাই
+ *    সময় বাংলাদেশ সময় (Asia/Dhaka) ধরে পড়া হয় অথচ সাইটের বাকি কোনো তারিখ সরে যায় না।
+ *    এই নিয়মটা দুই জায়গায় লিখবেন না।
+ * 🔴 কলামটা না থাকলেও (মাইগ্রেশনের আগে) `?? ''` দিয়ে চুপচাপ "সীমা নেই" ধরা হয়।
+ */
+function notice_expires_ts(array $notice): ?int
+{
+    return course_deadline_ts($notice['expires_at'] ?? '');
+}
+
+/** নোটিশটার সময় শেষ হয়ে গেছে কিনা (সীমা না থাকলে কখনোই না) */
+function notice_expired(array $notice, ?int $now = null): bool
+{
+    $ts = notice_expires_ts($notice);
+    if ($ts === null) {
+        return false;
+    }
+    return $ts <= ($now ?? time());
+}
+
+/**
+ * 🔴🔴 পাবলিক সাইটে কোন নোটিশগুলো দেখানো হবে — **একটাই ছাঁকনি**, দুই জায়গা থেকেই
+ *      (notice.php ও account.php) এটাই ডাকা হয়। দুই পাতায় দুই নিয়ম রাখলে কোথাও
+ *      মেয়াদ-শেষ নোটিশ রয়ে যেত।
+ *
+ * 🔴 ছাঁকনি **PHP-তে, SQL-এ `NOW()` দিয়ে নয়** — MySQL সার্ভারের টাইমজোন ঢাকার সাথে
+ *    না-ও মিলতে পারে (হুবহু `index.php`-এর `course_reg_open()` গণনার নিয়ম), আর
+ *    কলামটা না থাকলে (মাইগ্রেশনের আগে) WHERE-এ লিখলে কোয়েরিই ভাঙত।
+ *
+ * `array_values()` জরুরি — `notice.php`-এ রঙ বসে তালিকার **অবস্থান** ধরে, ফাঁকা
+ * ইনডেক্স থাকলে পরপর দুটো কার্ড একই রঙ পেয়ে যেতে পারত।
+ */
+function notice_filter_live(array $rows, ?int $now = null): array
+{
+    $now = $now ?? time();
+    $out = [];
+    foreach ($rows as $r) {
+        if (is_array($r) && !notice_expired($r, $now)) {
+            $out[] = $r;
+        }
+    }
+    return array_values($out);
+}
+
 function redirect(string $url): void
 {
     header('Location: ' . $url);

@@ -71,6 +71,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'save') {
             $columns[$key] = $uploaded ?? trim($_POST[$key] ?? '');
             continue;
         }
+        // তারিখ+সময় (datetime-local) — 🔴 খালি ঘর **NULL** হতে হবে; '' দিলে MySQL-এর
+        // strict মোডে "Incorrect datetime value" এসে সেভ করাই ভেঙে যেত। আর ইনপুট
+        // "Y-m-dTH:i" পাঠায়, DB চায় "Y-m-d H:i:s" — দুটোই `course_deadline_sql()`
+        // সামলায় (ঢাকার সময় ধরে; course-batches.php-এর হুবহু একই হেল্পার)।
+        if ($f['type'] === 'datetime') {
+            $columns[$key] = course_deadline_sql($_POST[$key] ?? '');
+            continue;
+        }
         $val = trim($_POST[$key] ?? '');
         if ($val === '' && isset($f['auto_from']) && isset($_POST[$f['auto_from']])) {
             $val = make_slug($_POST[$f['auto_from']], $id ?? 0);
@@ -288,7 +296,15 @@ require __DIR__ . '/includes/layout-top.php';
                 <div class="w-28 h-28 sm:w-full sm:h-36 bg-gray-100 flex items-center justify-center text-gray-300 flex-shrink-0"><i data-lucide="image" class="w-8 h-8"></i></div>
             <?php endif; ?>
             <div class="p-3 min-w-0 flex-1 flex flex-col justify-center sm:block">
-                <?php $isFirst = true; foreach ($conf['list_columns'] as $col): $val = $row[$col] ?? ''; if ($col === $imageField) continue; ?>
+                <?php $isFirst = true; foreach ($conf['list_columns'] as $col):
+                        $val = $row[$col] ?? '';
+                        if ($col === $imageField) continue;
+                        // তারিখ+সময় কাঁচা "2026-11-01 18:00:00" রূপে না দেখিয়ে পড়ার মতো করে
+                        if (($conf['fields'][$col]['type'] ?? '') === 'datetime') {
+                            $gTs = course_deadline_ts($val);
+                            $val = $gTs === null ? '' : '⏳ ' . course_deadline_display($gTs);
+                        }
+                ?>
                     <p class="<?= $isFirst ? 'text-sm font-bold text-gray-900' : 'text-xs text-gray-500' ?> truncate"><?= e((string) $val) ?: '—' ?></p>
                 <?php $isFirst = false; endforeach; ?>
                 <div class="flex flex-wrap gap-2 mt-2 text-sm">
@@ -357,6 +373,16 @@ require __DIR__ . '/includes/layout-top.php';
                         <td class="py-2.5 px-4">
                         <?php if ($f['type'] === 'checkbox'): ?>
                             <?= $val ? '<span class="text-green-600 font-semibold">হ্যাঁ</span>' : '<span class="text-gray-400">না</span>' ?>
+                        <?php elseif ($f['type'] === 'datetime'):
+                            // ⏳ সময় শেষ হয়ে গেলে লাল — course-batches.php-এর ব্যাচ তালিকার হুবহু একই চেহারা
+                            $dTs = course_deadline_ts($val);
+                            if ($dTs === null): ?>
+                                <span class="text-gray-400">সীমা নেই</span>
+                            <?php else: $dOver = $dTs <= time(); ?>
+                                <?php // 🔴 min-w-0 + break-words — মোবাইল কার্ড-লেআউটে `td` flex হয়ে যায়,
+                                      //    খোলা রাখলে এই এক-লাইনের লেখাটা ৩২০px পর্দা ছাপিয়ে যেত (মেপে ধরা) ?>
+                                <span class="text-xs min-w-0 break-words <?= $dOver ? 'text-red-600 font-semibold' : 'text-gray-600' ?>">⏳ <?= e(course_deadline_display($dTs)) ?><?= $dOver ? ' — সময় শেষ' : '' ?></span>
+                            <?php endif; ?>
                         <?php else: ?>
                             <?= e((string) $val) ?>
                         <?php endif; ?>

@@ -61,7 +61,12 @@ if ($regIds) {
 // ---------------- নোটিশ (সর্বশেষ ৩টা) ----------------
 $notices = [];
 try {
-    $notices = $db->query('SELECT title, content, notice_date FROM notices WHERE is_active = 1 ORDER BY notice_date DESC, id DESC LIMIT 3')->fetchAll();
+    // 🔴 আগে `LIMIT 3` ছিল — মেয়াদ-শেষগুলো PHP-তে ছাঁকা হয় বলে এখন একটু বেশি তুলে
+    //    ছেঁকে নিয়ে তারপর ৩টা নেওয়া হয় (নাহলে উপরের ৩টার মেয়াদ শেষ হলে ড্যাশবোর্ডে
+    //    একটাও নোটিশ দেখাত না)। `SELECT *` — কলামটা না থাকলেও (মাইগ্রেশনের আগে) চলে।
+    $notices = array_slice(notice_filter_live(
+        $db->query('SELECT * FROM notices WHERE is_active = 1 ORDER BY notice_date DESC, id DESC LIMIT 25')->fetchAll()
+    ), 0, 3);
 } catch (Throwable $e) {
     $notices = [];
 }
