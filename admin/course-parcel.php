@@ -570,9 +570,17 @@ require __DIR__ . '/includes/layout-top.php';
 
 // ---------------- কোর্স-ব্যাচ পিকার (hide_parcel বাদ) ----------------
 if (!$itemId) {
+    // 🔎 `act_cnt`/`done_cnt` শুধু "আর কত পার্সেল বাকি" দেখানোর জন্য (২০২৬-১০-২০)।
+    // 🔴 বাকির হিসাবে শুধু **সক্রিয়** শিক্ষার্থী, আর "না এই মাসে" (declined) কখনো
+    //    বাকি নয় — ম্যানেজ পাতার `$cpMonthStat`-এর হুবহু একই নিয়ম।
+    // ⚠️ `done_cnt` সব period মিলিয়ে গোনা হয়, তাই অ্যাডমিন পরে মোট পার্সেল-সংখ্যা **কমিয়ে**
+    //    দিলে সীমার বাইরের পুরনো চালানও গোনা হতে পারে — তাই `max(0, …)` দিয়ে ক্ল্যাম্প করা।
     $batches = $db->query(
         "SELECT r.item_id, r.item_title, r.batch, COUNT(DISTINCT r.id) c, cb.total_parcels,
-                SUM(CASE WHEN cbz.send_status = 'sent' THEN 1 ELSE 0 END) sent_cnt
+                COUNT(DISTINCT CASE WHEN r.courier_active = 1 THEN r.id END) act_cnt,
+                SUM(CASE WHEN cbz.send_status = 'sent' THEN 1 ELSE 0 END) sent_cnt,
+                SUM(CASE WHEN r.courier_active = 1 AND cbz.send_status IN ('sent', 'declined')
+                         THEN 1 ELSE 0 END) done_cnt
          FROM registrations r
          JOIN course_batches cb ON cb.id = r.item_id AND cb.hide_parcel = 0
          LEFT JOIN courier_batches cbz ON cbz.registration_id = r.id
@@ -586,19 +594,41 @@ if (!$itemId) {
         <?php if (!$batches): ?>
             <div class="bg-white rounded-2xl shadow empty-state"><div class="empty-ic"><i data-lucide="package" class="w-8 h-8"></i></div>পার্সেল যায় এমন কোনো confirmed কোর্স রেজিস্ট্রেশন নেই।</div>
         <?php else: ?>
+            <?php // 🔎 কোন ব্যাচে কত পার্সেল এখনো যায়নি — আগে ভেতরে ঢুকে প্রতিটা মাস
+                  //    ঘুরে দেখা ছাড়া বোঝার উপায় ছিল না (ইউজারের চাওয়া)।
+                  // 🔴 স্লট = সক্রিয় শিক্ষার্থী × মোট মাস; মোট মাস সেট না থাকলে হিসাব
+                  //    করার কিছু নেই, তাই তখন "—" দেখানো হয় (অনুমান করা হয় না)।
+                  $cpLeftAll = 0;
+                  foreach ($batches as $bRow) {
+                      $slots = (int) $bRow['total_parcels'] * (int) $bRow['act_cnt'];
+                      if ($slots > 0) { $cpLeftAll += max(0, $slots - (int) $bRow['done_cnt']); }
+                  } ?>
+            <?php if ($cpLeftAll > 0): ?>
+                <div class="mb-3 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
+                    📦 সব মিলিয়ে <b><?= (int) $cpLeftAll ?> টি পার্সেল</b> এখনো পাঠানো হয়নি — নিচের
+                    <b>"বাকি"</b> ঘরে কোন ব্যাচে কত বাকি দেখা যাচ্ছে। "ম্যানেজ করুন" চাপলে
+                    <b>প্রথম যে মাসে কাজ বাকি</b> সেটাই খুলবে।
+                </div>
+            <?php endif; ?>
             <div class="bg-white rounded-2xl shadow overflow-x-auto"><table class="w-full text-sm mcard">
                 <thead><tr class="text-left text-gray-500 border-b bg-gray-50">
                     <th class="py-3 px-4">কোর্স</th><th class="py-3 px-4">ব্যাচ</th><th class="py-3 px-4">শিক্ষার্থী</th>
-                    <th class="py-3 px-4">মোট মাস</th><th class="py-3 px-4">পাঠানো</th><th class="py-3 px-4">অ্যাকশন</th>
+                    <th class="py-3 px-4">মোট মাস</th><th class="py-3 px-4">পাঠানো</th><th class="py-3 px-4">বাকি</th><th class="py-3 px-4">অ্যাকশন</th>
                 </tr></thead>
                 <tbody>
-                <?php foreach ($batches as $b): ?>
+                <?php foreach ($batches as $b):
+                    $slots  = (int) $b['total_parcels'] * (int) $b['act_cnt'];
+                    $cpLeft = $slots > 0 ? max(0, $slots - (int) $b['done_cnt']) : -1;
+                ?>
                     <tr class="border-b last:border-0">
                         <td class="py-2.5 px-4 font-semibold text-gray-800"><?= e($b['item_title']) ?></td>
                         <td class="py-2.5 px-4"><span class="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold"><?= e($b['batch'] ?: '—') ?></span></td>
                         <td class="py-2.5 px-4"><?= (int) $b['c'] ?> জন</td>
                         <td class="py-2.5 px-4"><?= (int) $b['total_parcels'] ? (int) $b['total_parcels'] : '<span class="text-gray-300">সেট করা হয়নি</span>' ?></td>
                         <td class="py-2.5 px-4"><?= (int) $b['sent_cnt'] ? '<span class="text-green-700 font-semibold">' . (int) $b['sent_cnt'] . ' টি</span>' : '<span class="text-gray-300">—</span>' ?></td>
+                        <td class="py-2.5 px-4"><?php if ($cpLeft < 0): ?><span class="text-gray-300" title="মোট কয়বার পার্সেল যাবে সেটা সেট করা হয়নি">—</span>
+                            <?php elseif ($cpLeft === 0): ?><span class="text-green-700 font-semibold">✓ সব হয়ে গেছে</span>
+                            <?php else: ?><span class="px-2 py-0.5 rounded-lg bg-amber-100 text-amber-800 text-xs font-bold" title="<?= (int) $b['act_cnt'] ?> জন × <?= (int) $b['total_parcels'] ?> মাস = <?= (int) $slots ?> টি পার্সেলের মধ্যে <?= (int) $cpLeft ?> টি এখনো যায়নি">📦 <?= (int) $cpLeft ?> টি বাকি</span><?php endif; ?></td>
                         <td class="py-2.5 px-4"><a href="course-parcel.php?item_id=<?= (int) $b['item_id'] ?>" class="text-indigo-600 font-semibold inline-block py-1">ম্যানেজ করুন →</a></td>
                     </tr>
                 <?php endforeach; ?>
@@ -694,6 +724,43 @@ $cpWaiveReady = expense_waiver_ready($db);
 // 🧾 "এই পার্সেলে কী কী তুলব" ছকটা দেখানো যাবে? (মাইগ্রেশন না চললে চুপচাপ বাদ)
 $cpPartsReady = db_has_column($db, 'courier_batches', 'collect_parts');
 
+// 🔎🔎 কোন মাসে কার পার্সেল এখনো যায়নি — মাস-ট্যাবের ব্যাজ, কার্ডের চিপ আর
+//    ডিফল্ট মাস তিনটাই **এই একটাই হিসাব** পড়ে (তিন জায়গায় তিন নিয়ম রাখলে সংখ্যা মিলত না)।
+// 🔴 শুধু **সক্রিয়** শিক্ষার্থী গোনা হয় (নিষ্ক্রিয়দের পার্সেল এমনিতেও যাবে না), আর
+//    "না এই মাসে" (declined) কখনো "বাকি" নয় — অ্যাডমিন সিদ্ধান্ত নিয়েই ফেলেছেন।
+// 🔴 ব্যর্থ (failed) ও খসড়া (draft) পার্সেল **বাকি**-ই — ওগুলো এখনো যায়নি।
+$cpMonthStat = [];
+for ($i = 1; $i <= $months; $i++) {
+    $lbl = cp_month_label($i);
+    $cSent = $cNo = 0;
+    foreach ($activeRegs as $r) {
+        $ss = (string) ($byRegPeriod[(int) $r['id']][$lbl]['send_status'] ?? '');
+        if ($ss === 'sent') { $cSent++; } elseif ($ss === 'declined') { $cNo++; }
+    }
+    $cpMonthStat[$i] = ['sent' => $cSent, 'no' => $cNo,
+                        'pending' => max(0, count($activeRegs) - $cSent - $cNo)];
+}
+$cpFirstPending = 0;
+foreach ($cpMonthStat as $mi => $ms) { if ($ms['pending'] > 0) { $cpFirstPending = $mi; break; } }
+$cpLeftTotal = 0;
+foreach ($cpMonthStat as $ms) { $cpLeftTotal += $ms['pending']; }
+
+// 🔴 `?month=` না থাকলে **প্রথম যে মাসে পার্সেল বাকি** সেখানেই নামা হয় (ইউজারের চাওয়া —
+//    "ম্যানেজ গেলে পাঠানো বাকিটা সহজে খুঁজে পাওয়া যাবে")। ঠিকানায় মাস লেখা থাকলে সেটাই
+//    জেতে — ট্যাব ও সেভের redirect সবসময় মাস বয়ে নেয়, তাই কাজের মাঝপথে নিজে থেকে মাস
+//    বদলে যাওয়ার ভয় নেই।
+if (!isset($_GET['month']) && $cpFirstPending > 0) {
+    $selMonth = $cpFirstPending;
+    $selLabel = cp_month_label($selMonth);
+}
+
+// 🔖 এই মাসের অবস্থা + কার্ডের চিপ ডিফল্টে কোনটা
+$cpStat = $cpMonthStat[$selMonth] ?? ['sent' => 0, 'no' => 0, 'pending' => count($activeRegs)];
+// 🔴 আগে কিছু পাঠানো/না-করা থাকলেই চিপ দেখানো হয় ও ডিফল্টে "পাঠানো বাকি" — কিছুই
+//    করা না থাকলে সবাই বাকি, তখন চিপ শুধু ভিড় করত।
+$cpChips    = ($cpStat['sent'] + $cpStat['no']) > 0;
+$cpChipMode = ($cpChips && $cpStat['pending'] > 0) ? 'pending' : 'all';
+
 $periodHasExisting = false;
 if ($selLabel) { foreach ($activeRegs as $r) { if (isset($byRegPeriod[(int) $r['id']][$selLabel])) { $periodHasExisting = true; break; } } }
 
@@ -732,6 +799,19 @@ function cp_cell(?array $b): array
 .cp-tab.on{background:#fff;border-color:rgb(var(--c-primary));color:rgb(var(--c-primary));box-shadow:0 -1px 3px rgba(0,0,0,.05)}
 .cp-tab.off{background:#f3f4f6;color:#6b7280}
 .cp-tab.off:hover{background:#e5e7eb}
+/* 🔎 "পাঠানো বাকি" চোখে পড়ার ব্যবস্থা (২০২৬-১০-২০, ইউজার: "পাঠানো বাকি যেটা সেটা
+   সহজে খুজে পাওয়া যায় তেমন একটা ব্যবস্থা রাখো") — মাস-ট্যাবের ব্যাজ ও কার্ডের চিপ।
+   🔴 সাধারণ CSS-এ, তাই Tailwind রিবিল্ড লাগে না। */
+.cp-tab-due{display:inline-block;margin-left:.3rem;padding:0 .35rem;border-radius:9999px;background:#FDE68A;color:#92400E;font-size:.7rem;font-weight:800;vertical-align:middle}
+.cp-tab.on .cp-tab-due{background:#D97706;color:#fff}
+.cp-tab-ok{margin-left:.3rem;color:#15803D;font-weight:800}
+.cp-chips{display:flex;flex-wrap:wrap;gap:.4rem}
+.cp-chip{flex-shrink:0;padding:.35rem .75rem;border-radius:9999px;font-size:.8rem;font-weight:600;background:#f3f4f6;color:#4b5563;border:1px solid #e5e7eb;line-height:1.5}
+.cp-chip b{font-weight:800}
+.cp-chip:hover{background:#e5e7eb}
+.cp-chip-due{background:#FEF3C7;color:#92400E;border-color:#FDE68A}
+.cp-chip.on{background:rgb(var(--c-primary));color:#fff;border-color:rgb(var(--c-primary))}
+.cp-chip-due.on{background:#D97706;border-color:#D97706;color:#fff}
 .cp-toggle{display:inline-flex;width:26px;height:26px;border-radius:9999px;align-items:center;justify-content:center;transition:.15s}
 </style>
 
@@ -1018,29 +1098,53 @@ function cpPermZone(sel) {
     <?php endif; ?>
 
     <div class="flex gap-1 overflow-x-auto pb-0 mb-0 border-b border-gray-200">
-        <?php for ($i = 1; $i <= $months; $i++): ?>
-            <a href="<?= e(cp_url($itemId, $i)) ?>" class="cp-tab <?= $i === $selMonth ? 'on' : 'off' ?>">মাস <?= $i ?></a>
+        <?php // 🔴 ট্যাবেই "কত বাকি" লেখা থাকে — আগে প্রতিটা মাসে ঢুকে দেখতে হতো
+              //    কোন মাসের কাজ পড়ে আছে (ইউজারের চাওয়া)। সংখ্যা `$cpMonthStat` থেকেই। ?>
+        <?php for ($i = 1; $i <= $months; $i++): $ms = $cpMonthStat[$i] ?? null; ?>
+            <a href="<?= e(cp_url($itemId, $i)) ?>" class="cp-tab <?= $i === $selMonth ? 'on' : 'off' ?>">মাস <?= $i ?> <?php
+                if ($ms && $ms['pending'] > 0): ?><span class="cp-tab-due" title="<?= (int) $ms['pending'] ?> জনের পার্সেল এখনো যায়নি"><?= (int) $ms['pending'] ?> বাকি</span><?php
+                elseif ($ms && ($ms['sent'] + $ms['no']) > 0): ?><span class="cp-tab-ok" title="এই মাসে আর কারও পার্সেল বাকি নেই">✓</span><?php
+                endif; ?></a>
         <?php endfor; ?>
     </div>
 
     <?php if (!$activeRegs): ?>
         <div class="bg-white rounded-2xl shadow empty-state mt-3"><div class="empty-ic"><i data-lucide="user-x" class="w-8 h-8"></i></div>কোনো সক্রিয় শিক্ষার্থী নেই — উপরে থেকে সক্রিয় করলে এখানে আসবে।</div>
     <?php else: ?>
-        <?php // ══════ 🔎 এই মাসের কার্ডে খুঁজুন ══════
+        <?php // ══════ 🔖 এই মাসের কার্ড — অবস্থার চিপ + 🔎 খোঁজা ══════
               // 🔴 ফর্মের **বাইরে** — ভেতরে দিলে ইনপুটে Enter চাপলেই ব্রাউজার `roundForm`
               //    সাবমিট করে বসত, অর্থাৎ ভুল করে পুরো মাসের পার্সেল সেভ হয়ে যেত।
-              // 🔴 কার্ড লুকানো হয় `display:none` দিয়ে, `disabled` দিয়ে নয় — লুকানো কার্ডের
-              //    ঘরগুলোও সাবমিট হয়, তাই খোঁজা কখনো সেভ/পাঠানোর ফলাফল বদলায় না। ?>
-        <?php if (count($activeRegs) >= CP_SEARCH_MIN): ?>
-            <div class="mb-3">
-                <div class="list-search-wrap">
+              // 🔴🔴 কার্ড লুকানো হয় `display:none` দিয়ে, `disabled` দিয়ে নয় — লুকানো কার্ডের
+              //    ঘরগুলোও সাবমিট হয়, তাই চিপ/খোঁজা কখনো সেভ বা পাঠানোর ফলাফল বদলায় না।
+              // 🔴 চিপ ও সার্চ **একটাই দৃশ্যমানতার নিয়ম** মানে (নিচের `cardApply()`), আর
+              //    ইঙ্গিতের লাইনও একটাই — আলাদা রাখলে একটা আরেকটাকে ঢেকে দিত। ?>
+        <div class="mb-3">
+            <?php if ($cpChips): ?>
+                <div id="cpChips" class="cp-chips" data-mode="<?= e($cpChipMode) ?>">
+                    <?php if ($cpStat['pending']): ?>
+                        <button type="button" class="cp-chip cp-chip-due<?= $cpChipMode === 'pending' ? ' on' : '' ?>" data-mode="pending">📦 পাঠানো বাকি <b><?= (int) $cpStat['pending'] ?></b></button>
+                    <?php endif; ?>
+                    <?php if ($cpStat['sent']): ?>
+                        <button type="button" class="cp-chip" data-mode="sent">✓ পাঠানো <b><?= (int) $cpStat['sent'] ?></b></button>
+                    <?php endif; ?>
+                    <?php if ($cpStat['no']): ?>
+                        <button type="button" class="cp-chip" data-mode="no">⊘ না এই মাসে <b><?= (int) $cpStat['no'] ?></b></button>
+                    <?php endif; ?>
+                    <button type="button" class="cp-chip<?= $cpChipMode === 'all' ? ' on' : '' ?>" data-mode="all">সবাই <b><?= count($activeRegs) ?></b></button>
+                    <?php if (!$cpStat['pending']): ?>
+                        <span class="text-xs text-green-700 font-semibold self-center">✓ এই মাসে আর কারও পার্সেল বাকি নেই</span>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+            <?php if (count($activeRegs) >= CP_SEARCH_MIN): ?>
+                <div class="list-search-wrap<?= $cpChips ? ' mt-2' : '' ?>">
                     <i data-lucide="search" class="w-4 h-4"></i>
                     <input type="search" id="cpCardSearch" class="list-search" autocomplete="off"
                            aria-label="এই মাসের কার্ডে খুঁজুন" placeholder="এই মাসের কার্ডে খুঁজুন — নাম, মোবাইল, ফেসবুক, ঠিকানা...">
                 </div>
-                <p id="cpCardNote" class="text-xs text-gray-500 mt-1 hidden"></p>
-            </div>
-        <?php endif; ?>
+            <?php endif; ?>
+            <p id="cpCardNote" class="text-xs text-gray-500 mt-1 hidden"></p>
+        </div>
 
         <form method="post" id="roundForm" action="course-parcel.php">
             <?= csrf_field() ?>
@@ -1102,7 +1206,10 @@ function cpPermZone(sel) {
                 // সব কিস্তিই ⊘ বাদ দেওয়া থাকলেই "বাদ" বার্তা
                 $lSkip  = $lMonth && count(array_filter($lMonth, 'pay_is_skipped')) === count($lMonth);
             ?>
-                <div class="stu bg-white rounded-2xl shadow p-4 <?= $isNo ? 'opacity-60' : '' ?>" data-fee="<?= (int) $courseFee ?>" data-due="<?= (int) round($lDue) ?>" data-sent="<?= $isSent ? 1 : 0 ?>" data-waive0="<?= (int) round($exWaive) ?>"
+                <?php // 🔖 `data-st` = চিপের ছাঁকনির চাবি। 🔴 ব্যর্থ/খসড়া দুটোই "pending" —
+                      //    ওগুলো এখনো যায়নি, তাই "পাঠানো বাকি"-তেই থাকা উচিত ($cpMonthStat-এর
+                      //    হিসাবের সাথে হুবহু এক, নাহলে চিপের সংখ্যা আর কার্ডের সংখ্যা মিলত না)। ?>
+                <div class="stu bg-white rounded-2xl shadow p-4 <?= $isNo ? 'opacity-60' : '' ?>" data-fee="<?= (int) $courseFee ?>" data-due="<?= (int) round($lDue) ?>" data-sent="<?= $isSent ? 1 : 0 ?>" data-waive0="<?= (int) round($exWaive) ?>" data-st="<?= $isSent ? 'sent' : ($isNo ? 'no' : 'pending') ?>"
                      data-s="<?= e(cp_haystack($r)) ?>" data-d="<?= e(cp_haystack_digits($r)) ?>">
                     <input type="hidden" name="bd[<?= $rid ?>][present]" value="1">
                     <input type="hidden" name="bd[<?= $rid ?>][decision]" class="decision" value="<?= $isNo ? 'no' : 'go' ?>">
@@ -1592,7 +1699,64 @@ function cpPermZone(sel) {
         }
     });
 
-    wire('cpCardSearch', 'cpCardNote', Array.prototype.slice.call(document.querySelectorAll('.stu')), 'জন', null);
+    // ══════ 🔖 এই মাসের কার্ড — চিপ (অবস্থা) + খোঁজা, একটাই দৃশ্যমানতার নিয়ম ══════
+    // 🔴🔴 লুকানো হয় `display:none` দিয়ে (`disabled` নয়) — লুকানো কার্ডের ঘরগুলোও
+    //    সাবমিট হয়, তাই চিপ বা খোঁজা কখনো সেভ/পাঠানোর ফলাফল বদলায় না।
+    (function () {
+        var cards = Array.prototype.slice.call(document.querySelectorAll('.stu'));
+        if (!cards.length) { return; }
+        var wrap  = document.getElementById('cpChips'),
+            input = document.getElementById('cpCardSearch'),
+            note  = document.getElementById('cpCardNote'),
+            chips = wrap ? Array.prototype.slice.call(wrap.querySelectorAll('.cp-chip')) : [],
+            mode  = wrap ? (wrap.getAttribute('data-mode') || 'all') : 'all';
+        if (!wrap && !input) { return; }
+        var LBL = {pending: 'পাঠানো বাকি', sent: 'পাঠানো হয়ে গেছে যাদের', no: '"না এই মাসে" যাদের'};
+
+        function apply() {
+            var raw = input ? enDigits(input.value.trim()) : '',
+                q = raw.toLowerCase(),
+                qd = raw.replace(/[^0-9]+/g, ''),
+                shown = 0, hidByMode = 0;
+            cards.forEach(function (el) {
+                var okMode = mode === 'all' || (el.getAttribute('data-st') || 'pending') === mode,
+                    hit = okMode && matches(el, q, qd);
+                if (!okMode) { hidByMode++; }
+                el.style.display = hit ? '' : 'none';
+                if (hit) { shown++; }
+            });
+            chips.forEach(function (c) {
+                if (c.getAttribute('data-mode') === mode) { c.classList.add('on'); } else { c.classList.remove('on'); }
+            });
+            var msg = '';
+            if (q !== '') {
+                msg = shown
+                    ? ('🔎 ' + shown + ' জন মিলেছে' + (mode === 'all' ? '' : ' (শুধু ' + LBL[mode] + '-এর মধ্যে)')
+                       + ' — খোঁজা শুধু দেখার সুবিধার জন্য, সেভ / পাঠানোয় সবাই আগের মতোই থাকবে।')
+                    : '🔎 এই লেখার সাথে কেউ মেলেনি। নাম, মোবাইল নম্বর, ফেসবুক আইডি বা ঠিকানার অংশ দিয়ে চেষ্টা করুন।';
+            } else if (mode !== 'all') {
+                msg = '🔖 শুধু ' + LBL[mode] + ' দেখানো হচ্ছে — ' + shown + ' জন; ' + hidByMode
+                    + ' জন লুকানো আছে। লুকানো কার্ডের তথ্যও সেভ হয়, কিছুই হারায় না।'
+                    + ' পাঠানো কার্ড (টাকা মেলানোর ঘরসহ) দেখতে উপরের "✓ পাঠানো" বা "সবাই" চাপুন।';
+            }
+            if (note) {
+                note.textContent = msg;
+                if (msg === '') { note.classList.add('hidden'); } else { note.classList.remove('hidden'); }
+            }
+        }
+        chips.forEach(function (c) {
+            c.addEventListener('click', function () { mode = c.getAttribute('data-mode') || 'all'; apply(); });
+        });
+        if (input) {
+            // 🔴 Enter-এ কিছু সাবমিট হবে না (ফিল্টার সম্পূর্ণ ব্রাউজারে, রিলোড লাগে না)
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); }
+                if (e.key === 'Escape') { input.value = ''; apply(); }
+            });
+            input.addEventListener('input', apply);
+        }
+        apply();
+    })();
 })();
 </script>
 
