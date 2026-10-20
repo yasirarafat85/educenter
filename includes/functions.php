@@ -1224,6 +1224,81 @@ function normalize_bd_whatsapp(string $raw): string
     return '880' . $d;
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * 🙏 থ্যাংক-ইউ কার্ডের নিচের লেখা + "সরাসরি জানান" বোতাম  (২০২৬-১০-২০)
+ *
+ * আগে `register-thanks.php`-এ হার্ডকোড ছিল "📞 আমাদের টিম শীঘ্রই … যোগাযোগ করবে" —
+ * অ্যাডমিন বদলাতে পারতেন না, আর কথাটা বাস্তবের সাথে মিলত না (এখন অভিভাবক নিজেই
+ * TrxID দিয়ে যাচাই করিয়ে নিতে পারেন, কারো ফোনের অপেক্ষা লাগে না)।
+ *
+ * 🔴 কোর্স ও ওয়ার্কশিট/প্রোডাক্টে **আলাদা লেখা** — একই কার্ড তিন ধরনের অর্ডারেই
+ *    দেখায়, তাই "কোর্স ফি" লেখাটা প্রোডাক্ট কেনা কাউকে দেখালে ভুল হতো।
+ * 🔴 ডিফল্ট লেখায় **কোনো নির্দিষ্ট বোতামের নাম নেই** — পেমেন্ট নাম্বার সেট না
+ *    থাকলে/SMS-যাচাই বন্ধ থাকলে ঐ বোতামটা রেন্ডারই হয় না (`$payReady`), তখন
+ *    "নিচের 💳 বোতামে TrxID দিন" লেখাটা মিথ্যা হয়ে যেত। কোন পথে জানাবেন সেটা
+ *    নিচের অংশগুলো নিজেরাই বলে।
+ * 🔴 `get_setting(...) ?: ডিফল্ট` — তৃতীয় প্যারামিটারে ভরসা করা যায় না (একবার
+ *    খালি সেভ হলে ডিফল্ট আর ফিরত না, About পেজে এই ফাঁদে পড়া হয়েছিল)।
+ *    `settings` key-value, তাই **মাইগ্রেশন লাগে না**।
+ * ──────────────────────────────────────────────────────────────────────────── */
+function thanks_note_defaults(): array
+{
+    return [
+        'course' => 'শিশুর মেধা বিকাশে রেজিস্ট্রেশন করার জন্য ধন্যবাদ। 🙏 কোর্স ফি না দিয়ে থাকলে ফি পরিশোধ করে আমাদের জানিয়ে দিন — নিচে পেমেন্ট ও জানানোর সব ব্যবস্থা দেওয়া আছে।',
+        'order'  => 'শিশুর মেধা বিকাশে অর্ডার করার জন্য ধন্যবাদ। 🙏 টাকা না দিয়ে থাকলে পরিশোধ করে আমাদের জানিয়ে দিন — নিচে পেমেন্ট ও জানানোর সব ব্যবস্থা দেওয়া আছে।',
+    ];
+}
+
+function thanks_note_text(bool $isCourse): string
+{
+    $key = $isCourse ? 'course' : 'order';
+    $own = trim((string) get_setting('thanks_note_' . $key));
+    return $own !== '' ? $own : thanks_note_defaults()[$key];
+}
+
+/**
+ * 💬 WhatsApp চ্যাটের লিংক — নম্বর `contact_whatsapp` সেটিং থেকেই (ফুটারের ভাসমান
+ * বোতাম ও `pclaim_whatsapp_url()`-এর সাথে একই নম্বর)।
+ * 🔴 `normalize_bd_whatsapp()` ভুল/খালি নম্বরে খালি স্ট্রিং ফেরায় — তখন কলার
+ *    বোতামটাই রেন্ডার করে না (ভুল নম্বরে "isn't on WhatsApp" এরর দেখানোর চেয়ে ভালো)।
+ */
+function wa_chat_url(string $message = ''): string
+{
+    $wa = normalize_bd_whatsapp((string) get_setting('contact_whatsapp'));
+    if ($wa === '') {
+        return '';
+    }
+    return 'https://wa.me/' . $wa . ($message === '' ? '' : '?text=' . rawurlencode($message));
+}
+
+/**
+ * 📨 মেসেঞ্জার ইনবক্সের লিংক — অ্যাডমিন `contact_messenger` সেটিংয়ে নিজে বসান।
+ *
+ * 🔴 `facebook_page_url` থেকে নিজে থেকে `m.me/...` বানানো হয় **না** — পেজের ঠিকানা
+ *    `facebook.com/profile.php?id=…` রূপের হলে ঐ অনুমান ভাঙা লিংক দিত। অনুমান
+ *    করার চেয়ে অ্যাডমিনকে একবার লিংকটা বসাতে দেওয়াই নিরাপদ।
+ * 🔴 হোস্ট **`parse_url()` দিয়ে** যাচাই (`is_facebook_url()`-এর হুবহু নীতি) —
+ *    `strpos` দিয়ে করলে `https://evil.com/?m.me` পাস করে যেত।
+ */
+function messenger_chat_url(): string
+{
+    $raw = trim((string) get_setting('contact_messenger'));
+    if ($raw === '') {
+        return '';
+    }
+    $scheme = strtolower((string) parse_url($raw, PHP_URL_SCHEME));
+    $host   = strtolower((string) parse_url($raw, PHP_URL_HOST));
+    if (($scheme !== 'https' && $scheme !== 'http') || $host === '') {
+        return '';
+    }
+    foreach (['m.me', 'messenger.com', 'facebook.com', 'fb.com'] as $allowed) {
+        if ($host === $allowed || substr($host, -strlen('.' . $allowed)) === '.' . $allowed) {
+            return $raw;
+        }
+    }
+    return '';
+}
+
 // রেজিস্ট্রেশন/অর্ডার সফল হওয়ার পর দেখানো পেমেন্ট বক্স — সম্পূর্ণ অ্যাডমিন-নিয়ন্ত্রিত (admin/payment-methods.php,
 // payment_methods টেবিল)। $itemType+$itemId দিলে শুধু সেই আইটেমে প্রযোজ্য (scope_all=1 বা scope_items-এ থাকা)
 // পেমেন্ট নাম্বার/WhatsApp দেখায়। কিছু না মিললে খালি স্ট্রিং রিটার্ন করে (কোনো বক্স দেখায় না)।
