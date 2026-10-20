@@ -378,6 +378,23 @@ function pi_ago(?string $ts): string
     return intdiv($d, 86400) . ' দিন আগে';
 }
 
+/**
+ * ⏰ DB-র টাইমস্ট্যাম্প পড়ার মতো করে — "20 Oct 2026, 04:19:16 PM"
+ *
+ * ইউজারের চাওয়া: ২৪ ঘণ্টার `16:19:16` নয়, AM/PM সহ। 🔴 এটা শুধু **রূপ** বদলায়,
+ * সময় কখনো সরায় না — `date()` সার্ভারের নিজের টাইমজোনেই চলে, আর এই প্রজেক্টে
+ * `date_default_timezone_set()` কখনো ডাকা হয় না (নিয়মটা CLAUDE.md-এর "ভর্তির
+ * কাউন্টডাউন" ঘরে)। অবৈধ লেখা এলে যা ছিল তাই ফেরে (কিছু হারায় না)।
+ */
+function pi_time(?string $ts): string
+{
+    if (!$ts) {
+        return '—';
+    }
+    $t = strtotime($ts);
+    return $t === false ? $ts : date('d M Y, h:i:s A', $t);
+}
+
 require_once __DIR__ . '/includes/layout-top.php';
 ?>
 
@@ -432,13 +449,13 @@ require_once __DIR__ . '/includes/layout-top.php';
         </div>
     <?php elseif ($stale): ?>
         <div class="bg-red-50 border border-red-200 text-red-800 rounded-lg p-3 text-sm">
-            🔴 শেষ SMS এসেছে <b><?= e(pi_ago($lastSms)) ?></b> (<?= e($lastSms) ?>) —
+            🔴 শেষ SMS এসেছে <b><?= e(pi_ago($lastSms)) ?></b> (<?= e(pi_time($lastSms)) ?>) —
             <?= (int) PSMS_HEARTBEAT_HRS ?> ঘণ্টার বেশি চুপচাপ। ফোনটা চালু আছে কিনা, নেট আছে কিনা,
             আর ব্যাটারি-সেভার MacroDroid বন্ধ করে দিয়েছে কিনা দেখুন।
         </div>
     <?php else: ?>
         <div class="bg-green-50 border border-green-200 text-green-800 rounded-lg p-3 text-sm">
-            ✅ শেষ SMS এসেছে <b><?= e(pi_ago($lastSms)) ?></b> (<?= e($lastSms) ?>)।
+            ✅ শেষ SMS এসেছে <b><?= e(pi_ago($lastSms)) ?></b> (<?= e(pi_time($lastSms)) ?>)।
         </div>
     <?php endif; ?>
 </div>
@@ -562,7 +579,7 @@ require_once __DIR__ . '/includes/layout-top.php';
                 <td class="px-3 py-2"><?= e($s['sender_number'] ?: '—') ?></td>
                 <td class="px-3 py-2"><?= pi_sender_chip($s['sender'] ?? '') ?></td>
                 <td class="px-3 py-2 text-xs text-gray-600"><?= e($s['sent_at'] ?: '—') ?></td>
-                <td class="px-3 py-2 text-xs text-gray-600" title="<?= e($s['received_at']) ?>"><?= e(pi_ago($s['received_at'])) ?></td>
+                <td class="px-3 py-2 text-xs text-gray-600" title="<?= e(pi_time($s['received_at'])) ?>"><?= e(pi_ago($s['received_at'])) ?></td>
                 <td class="px-3 py-2">
                     <?php if (admin_can('orders', 'delete')): ?>
                     <form method="post" action="payment-inbox.php?action=delete" class="inline"
@@ -707,7 +724,7 @@ require_once __DIR__ . '/includes/layout-top.php';
                         <?php endif; ?>
                         <?php /* ⚠️ সময়টা ইচ্ছাকৃতভাবে এখানেই — আলাদা কলাম করলে ৭৬৮px-এ
                                  টেবিল ভিউপোর্ট ছাড়িয়ে যেত (মেপে দেখা) */ ?>
-                        <div class="text-xs text-gray-500 mt-0.5" title="<?= e((string) $c['created_at']) ?>"><?= e(pi_ago($c['created_at'])) ?></div>
+                        <div class="text-xs text-gray-500 mt-0.5" title="<?= e(pi_time((string) $c['created_at'])) ?>"><?= e(pi_ago($c['created_at'])) ?></div>
                     </div>
                 </td>
                 <td class="px-3 py-2">
