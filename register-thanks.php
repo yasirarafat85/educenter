@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/payment-claim.php';
+require_once __DIR__ . '/includes/registration-card.php';
 
 /* 🔴🔴 আগে এখানে `unset($_SESSION['registration_success'])` ছিল — পাতাটা একবারই
  *      খুলত। অভিভাবক পেমেন্ট করতে bKash অ্যাপে গিয়ে ফিরে এসে রিফ্রেশ দিলেই
@@ -15,65 +16,32 @@ if (!$success) {
 $regRef  = (int) ($success['ref'] ?? 0);
 $payUrl  = pay_link_url($regRef);
 
-$isCourse = $success['type'] === 'course';
-$pageTitle = 'ধন্যবাদ';
-$activePage = '';
+/* 🪪 কার্ডের সব তথ্য একটাই জায়গা থেকে (`includes/registration-card.php`) —
+ *    এই পাতা, `pay.php` ও `my-registration.php` তিনটাতেই হুবহু একই কার্ড।
+ * 🔴 রেজিস্ট্রেশনটা কোনো কারণে DB-তে না পেলে সেশনের তথ্য দিয়েই কার্ড আঁকা হয়
+ *    (পাতাটা কখনো ফাঁকা দেখাবে না) — আগের আচরণ হুবহু। */
+$card = reg_card_fetch(get_db(), $regRef) ?: [
+    'ref'        => $regRef,
+    'type'       => (string) ($success['type'] ?? ''),
+    'item_title' => (string) ($success['item_title'] ?? ''),
+    'batch'      => '',
+    'is_course'  => ($success['type'] ?? '') === 'course',
+    'schedule'   => '',
+];
 
-// পেমেন্ট সময়সূচি (কোর্স-ব্যাচে অ্যাডমিন-লেখা) — কনফার্মেশন কার্ডে দেখাবে (ডিসপ্লে-only)
-$paymentSchedule = '';
-if ($isCourse) {
-    try {
-        $ps = get_db()->prepare('SELECT cb.payment_schedule FROM registrations r JOIN course_batches cb ON cb.id = r.item_id WHERE r.id = :id');
-        $ps->execute(['id' => (int) $success['ref']]);
-        $paymentSchedule = trim((string) ($ps->fetchColumn() ?: ''));
-    } catch (Throwable $e) { $paymentSchedule = ''; }
-}
+$isCourse   = !empty($card['is_course']);
+$pageTitle  = 'ধন্যবাদ';
+$activePage = '';
 
 require __DIR__ . '/includes/site-header.php';
 ?>
 
 <div class="max-w-xl mx-auto">
-    <div id="confirmation-card" class="bg-white rounded-2xl shadow-lg p-8 sm:p-10 text-center overflow-hidden relative" style="border:2px solid rgb(var(--c-border));">
-        <!-- উপরে থিম-রঙের গ্রেডিয়েন্ট স্ট্রাইপ -->
-        <div class="absolute top-0 left-0 right-0 h-1.5" style="background:linear-gradient(90deg, rgb(var(--c-deep)), rgb(var(--c-primary)), rgb(var(--c-primary-2)));"></div>
-        <div class="w-20 h-20 mx-auto mb-5 rounded-full flex items-center justify-center" style="background:rgb(var(--c-tint));">
-            <svg viewBox="0 0 24 24" fill="none" stroke="rgb(var(--c-primary))" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        </div>
-        <h1 class="text-2xl sm:text-3xl font-black text-gray-900 mb-3">ধন্যবাদ, <?= $isCourse ? 'রেজিস্ট্রেশন' : 'অর্ডার' ?> সফল হয়েছে! 🎉</h1>
-        <p class="text-gray-500 mb-2">আপনার <?= $isCourse ? 'রেজিস্ট্রেশন' : 'অর্ডার' ?> সফলভাবে গ্রহণ করা হয়েছে</p>
-        <p class="text-lg font-black mb-6" style="color:rgb(var(--c-primary));"><?= e($success['item_title']) ?></p>
-        <div class="rounded-xl p-4 mb-6" style="background:rgb(var(--c-tint));border:1px solid rgb(var(--c-border));">
-            <p class="text-xs text-gray-500 uppercase tracking-wide">রেফারেন্স নম্বর</p>
-            <p class="text-2xl font-black text-gray-800">#<?= (int) $success['ref'] ?></p>
-        </div>
-        <?php if ($paymentSchedule !== ''): ?>
-        <div class="rounded-xl p-4 mb-6 text-left" style="background:rgb(var(--c-tint));border:1px solid rgb(var(--c-border));">
-            <p class="text-sm font-black mb-2 flex items-center gap-1.5" style="color:rgb(var(--c-deep));">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                পেমেন্ট সময়সূচি — কখন কত দিতে হবে
-            </p>
-            <?php foreach (preg_split('/\r\n|\r|\n/', $paymentSchedule) as $line): $line = trim($line); if ($line === '') continue;
-                $pos = mb_strrpos($line, ':');
-                $lbl = $pos !== false ? trim(mb_substr($line, 0, $pos)) : $line;
-                $amt = $pos !== false ? trim(mb_substr($line, $pos + 1)) : '';
-            ?>
-                <div class="flex items-center justify-between gap-3 py-1.5" style="border-bottom:0.5px solid rgba(0,0,0,0.06);">
-                    <span class="text-sm text-gray-700"><?= e($lbl) ?></span>
-                    <?php if ($amt !== ''): ?><span class="text-sm font-black text-gray-900 whitespace-nowrap"><?= e($amt) ?></span><?php endif; ?>
-                </div>
-            <?php endforeach; ?>
-        </div>
-        <?php endif; ?>
-        <?php /* 🙏 লেখাটা অ্যাডমিন-এডিটযোগ্য (সেটিংস → "রেজিস্ট্রেশনের পরের কার্ড"),
-                 কোর্স ও অর্ডারে আলাদা — বিস্তারিত `thanks_note_text()`-এর ঘরে। */ ?>
-        <p class="text-gray-600 text-sm leading-relaxed"><?= e(thanks_note_text($isCourse)) ?></p>
-    </div>
+    <?= reg_card_html($card) ?>
 
     <div class="flex flex-col sm:flex-row gap-3 justify-center mt-6">
         <a href="./" class="text-white px-8 py-3 rounded-xl font-bold text-center shadow-lg" style="background:linear-gradient(135deg, rgb(var(--c-primary-2)), rgb(var(--c-primary)));">হোমে ফিরে যান</a>
-        <button type="button" id="download-confirmation-btn" class="px-8 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 shadow-lg" style="background:rgb(var(--c-tint));color:rgb(var(--c-deep));border:2px solid rgb(var(--c-primary));">
-            <i data-lucide="download" class="w-5 h-5"></i> <span>ডাউনলোড করুন</span>
-        </button>
+        <?= reg_card_download_btn() ?>
     </div>
 
     <?php
@@ -155,42 +123,15 @@ require __DIR__ . '/includes/site-header.php';
     <?php endif; ?>
 </div>
 
-<script src="assets/js/html2canvas.min.js?v=<?= @filemtime(__DIR__ . '/assets/js/html2canvas.min.js') ?: '1' ?>"></script>
-<script>
-(function () {
-    var btn = document.getElementById('download-confirmation-btn');
-    if (!btn) return;
+<?php
+    /* 🔗 স্থায়ী লিংক — অভিভাবক এটা রেখে দিলে পরে যেকোনো দিন কার্ড নামাতে ও
+     *    পেমেন্ট জানাতে পারবেন (লিংকে HMAC চাবি আছে, অনুমান করা যায় না)।
+     * 🔴 ব্লকটা ইচ্ছাকৃতভাবে পেমেন্ট ও WhatsApp-এর **পরে** — আগে বসালে
+     *    "এখনই পেমেন্ট করুন" ঢাকা পড়ত। */
+?>
+<?= reg_card_save_link_html($payUrl) ?>
 
-    btn.addEventListener('click', function () {
-        var card = document.getElementById('confirmation-card');
-        var label = btn.querySelector('span');
-        var originalLabel = label ? label.textContent : '';
-
-        btn.disabled = true;
-        if (label) label.textContent = 'অপেক্ষা করুন...';
-
-        html2canvas(card, { backgroundColor: '#ffffff', scale: 2 }).then(function (canvas) {
-            var link = document.createElement('a');
-            link.download = 'registration-confirmation-<?= (int) $success['ref'] ?>.jpg';
-            link.href = canvas.toDataURL('image/jpeg', 0.92);
-            link.click();
-
-            // ডাউনলোড লগ করা — best-effort, ব্যর্থ হলেও ডাউনলোড আটকাবে না
-            fetch('log-download.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'registration_id=<?= (int) $success['ref'] ?>&csrf_token=<?= urlencode(csrf_token()) ?>'
-            }).catch(function () {});
-
-            btn.disabled = false;
-            if (label) label.textContent = originalLabel;
-        }).catch(function () {
-            btn.disabled = false;
-            if (label) label.textContent = originalLabel;
-            alert('দুঃখিত, ছবি তৈরি করা যায়নি। আবার চেষ্টা করুন।');
-        });
-    });
-})();
-</script>
+<?= reg_card_scripts($regRef) ?>
+<?= reg_card_save_link_scripts() ?>
 
 <?php require __DIR__ . '/includes/site-footer.php'; ?>

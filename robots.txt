@@ -21,5 +21,6 @@ Disallow: /pay-status.php
 Disallow: /account
 Disallow: /account-*
 Disallow: /register-thanks.php
+Disallow: /my-registration
 
 Sitemap: https://shishurmedhabikash.com/sitemap.php

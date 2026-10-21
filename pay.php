@@ -15,6 +15,7 @@
 
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/payment-claim.php';
+require_once __DIR__ . '/includes/registration-card.php';
 
 $db    = get_db();
 $regId = (int) ($_GET['r'] ?? 0);
@@ -49,6 +50,12 @@ $waUrl = pclaim_whatsapp_url([
     'phone' => (string) $reg['phone'],
     'trxid' => $result['trxid'] ?? '',
 ]);
+
+/* 🪪 রেজিস্ট্রেশন কার্ড — এই লিংকটা **স্থায়ী**, তাই অভিভাবক পরে যেকোনো দিন
+ *    এখানে এসে কার্ডটা আবার নামাতে পারেন (২০২৬-১০-২১)।
+ * 🔴 চাবি আগেই যাচাই হয়ে গেছে (`pay_link_valid()`), তাই এখানে কার্ড দেখানো
+ *    নিরাপদ — আইডি অনুমান করে কেউ অন্যের কার্ড দেখতে পারবে না। */
+$card = reg_card_fetch($db, $regId);
 
 $pageTitle       = 'পেমেন্ট';
 $pageDescription = 'রেজিস্ট্রেশনের পেমেন্ট সম্পন্ন করুন ও TrxID দিয়ে যাচাই করে নিন।';
@@ -107,6 +114,25 @@ require __DIR__ . '/includes/payment-ui.php';
         <?php endif; ?>
     </div>
 
+    <?php if ($card): ?>
+    <?php /* 🔴 ভাঁজ-করা (`<details>`) ইচ্ছাকৃত — এই পাতার আসল কাজ পেমেন্ট জানানো,
+             কার্ডটা খুলে রাখলে উপরের সারাংশের সাথে রেফারেন্স/নাম দুইবার দেখাত।
+             ⚠️ বোতামটা দেখতেই ভাঁজ খুলতে হয়, তাই html2canvas সবসময় দৃশ্যমান
+             কার্ডই পায় (লুকানো এলিমেন্টের ছবি ঠিকমতো ওঠে না)। */ ?>
+    <details class="mt-5">
+        <summary class="cursor-pointer rounded-2xl px-5 py-4 text-sm font-bold text-center"
+                 style="background:rgb(var(--c-tint));border:1px solid rgb(var(--c-border));color:rgb(var(--c-deep));user-select:none;">
+            📄 আপনার রেজিস্ট্রেশন কার্ড দেখুন / আবার ডাউনলোড করুন
+        </summary>
+        <div class="mt-4">
+            <?= reg_card_html($card) ?>
+            <div class="flex justify-center mt-4">
+                <?= reg_card_download_btn('কার্ড ডাউনলোড করুন') ?>
+            </div>
+        </div>
+    </details>
+    <?php endif; ?>
+
     <p class="text-center mt-5">
         <a href="./" class="text-sm text-gray-500 hover:underline">পরে দিতে চাই — হোমপেজে ফিরে যান</a>
     </p>
@@ -116,5 +142,6 @@ require __DIR__ . '/includes/payment-ui.php';
 </div>
 
 <?= pay_scripts_html() ?>
+<?php if ($card): ?><?= reg_card_scripts($regId) ?><?php endif; ?>
 
 <?php require __DIR__ . '/includes/site-footer.php'; ?>
