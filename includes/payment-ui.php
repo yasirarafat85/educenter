@@ -48,10 +48,13 @@ function pay_result_box(?array $result, array $msgs, string $waUrl, int $claimId
         if (($msgs['extra'] ?? '') !== '') {
             $h .= '<p class="pay-res-x">' . e((string) $msgs['extra']) . '</p>';
         }
-        // 💬 "মিলছে না? সরাসরি জানান" — ইউজারের স্পষ্ট চাওয়া
-        if ($waUrl !== '') {
-            $h .= '<a href="' . e($waUrl) . '" target="_blank" rel="noopener" class="pay-wa">💬 WhatsApp-এ সরাসরি জানান</a>';
-        }
+        /* 💬 "মিলছে না? সরাসরি জানান" — ইউজারের স্পষ্ট চাওয়া।
+         * 📱 সাথে "কোন নম্বর থেকে পাঠিয়েছেন?" ঐচ্ছিক ঘর — অভিভাবকের WhatsApp নম্বর
+         *    আর টাকা পাঠানোর নম্বর প্রায়ই আলাদা (`wa_notify_block_html()` দেখুন)।
+         * 🔴 ব্লকটা `<form id="payForm">`-এর **বাইরে** রেন্ডার হয় (pay.php/payment.php
+         *    দুটোতেই ফলাফলের বাক্স ফর্মের আগে) — ভেতরে পড়লে ঘরে Enter চাপলেই
+         *    পেমেন্টের ফর্ম সাবমিট হয়ে যেত। */
+        $h .= wa_notify_block_html($waUrl, 'pay-wa-link', '💬 WhatsApp-এ সরাসরি জানান');
     }
     $h .= '</div>';
     return $h;

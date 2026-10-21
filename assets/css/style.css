@@ -1013,6 +1013,20 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
   background:#128c7e;color:#fff;font-weight:700;font-size:14px;text-decoration:none;min-height:44px}
 .pay-wa:hover{background:#0f7a6d}
 
+/* 📱 "কোন নম্বর থেকে টাকা পাঠিয়েছেন?" — WhatsApp বার্তায় নম্বর বসানোর ঐচ্ছিক ঘর
+   🔴 সাধারণ CSS-এ (Tailwind রিবিল্ড লাগে না), কারণ একই ঘর দুই রকম পাতায় বসে:
+      Tailwind-চালিত `register-thanks.php` আর `.pay-*` চালিত `pay`/`payment`।
+   🔴 রঙগুলো স্পষ্ট করে দেওয়া — `.pay-res`-এর ভেতরে বসলে ওখানকার `color` উত্তরাধিকারে
+      এসে লেখা লাল/সবুজ হয়ে যেত। */
+.wa-send{margin:0 0 12px;text-align:left}
+.pay-res .wa-send{margin-top:12px}  /* ফলাফলের লেখার সাথে লেগে না থাকে */
+.wa-send-l{display:block;font-size:13px;font-weight:700;color:#374151;margin-bottom:6px}
+.wa-send-l span{font-weight:600;color:#9ca3af}
+.wa-send-i{display:block;width:100%;min-width:0;padding:11px 14px;border:1px solid #d1d5db;
+  border-radius:12px;font-size:16px;background:#fff;color:#111827} /* 🔴 ১৬px — iOS ফোকাসে জুম ঠেকাতে */
+.wa-send-i:focus{outline:none;border-color:rgb(var(--c-primary));box-shadow:0 0 0 3px rgb(var(--c-primary) / .15)}
+.wa-send-h{margin:7px 0 0;font-size:12px;color:#6b7280;line-height:1.75}
+
 @media (max-width:380px){
   .pay-num-v{font-size:19px}
   .pay-chan{font-size:14px;padding:12px 8px}

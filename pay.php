@@ -99,9 +99,9 @@ require __DIR__ . '/includes/payment-ui.php';
         <?php if (!$ready || !$methods): ?>
             <div class="p-6 text-center text-gray-600">
                 <p>অনলাইনে পেমেন্ট যাচাই এখনো চালু হয়নি।</p>
-                <?php if ($waUrl !== ''): ?>
-                    <a href="<?= e($waUrl) ?>" target="_blank" rel="noopener" class="pay-wa mt-4">💬 WhatsApp-এ জানান</a>
-                <?php endif; ?>
+                <?php /* 📱 এই শাখায় WhatsApp-ই একমাত্র পথ, তাই "কোন নম্বর থেকে
+                         পাঠিয়েছেন?" ঘরটা এখানে সবচেয়ে দরকারি */ ?>
+                <?= wa_notify_block_html($waUrl, 'pay-wa-off', '💬 WhatsApp-এ জানান', 'pay-wa mt-4') ?>
             </div>
         <?php else: ?>
             <form method="post" action="pay-submit.php" class="p-5 sm:p-6" id="payForm">

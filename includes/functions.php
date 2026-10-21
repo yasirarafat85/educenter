@@ -1299,6 +1299,145 @@ function messenger_chat_url(): string
     return '';
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * 💬📱 "কোন নম্বর থেকে টাকা পাঠিয়েছেন?" — WhatsApp-এর বার্তায় নম্বরটা বসানো
+ *      (২০২৬-১০-২১, ইউজারের চাওয়া)
+ *
+ * সমস্যা: অভিভাবক যে WhatsApp থেকে জানান আর যে bKash/নগদ/ব্যাংক অ্যাকাউন্ট থেকে
+ * টাকা পাঠান — দুটো প্রায়ই আলাদা (বাবার bKash, দোকানের নম্বর, আত্মীয়ের অ্যাকাউন্ট)।
+ * আগের বার্তায় শুধু রেজিস্ট্রেশনের নম্বরটা যেত, তাই অ্যাডমিন SMS-এর তালিকায়
+ * "কোন টাকাটা এঁর" সেটা মেলাতেই পারতেন না।
+ *
+ * 🔴🔴 **স্ক্রিনশট আগে থেকে জুড়ে দেওয়া অসম্ভব** — `wa.me/?text=` শুধু **লেখা** নেয়
+ *      (এটা WhatsApp-এর সীমা, আমাদের কোডের নয়)। তাই ইঙ্গিতে স্পষ্ট করে বলা হয়
+ *      WhatsApp খোলার পর 📎 দিয়ে ছবিটা যোগ করতে। **বার্তায় "স্ক্রিনশট পাঠালাম"
+ *      জাতীয় কিছু লিখবেন না** — মিথ্যা হয়ে যাবে।
+ *
+ * 🔴 ঘরটা **ঐচ্ছিক ও সম্পূর্ণ ব্রাউজারে** — কিছুই সংরক্ষণ হয় না, তাই **মাইগ্রেশন
+ *    লাগে না** (`payment_claims`-এ এই নামে ঘর নেই, বানানোও হয়নি; আসল পাঠানো
+ *    নম্বরটা অ্যাডমিন SMS থেকেই দেখেন — `payment_sms.sender_number`)।
+ * 🔴 JS না চললেও বোতাম আগের মতোই কাজ করে — মূল বার্তা `href`-এ আগে থেকেই আছে,
+ *    JS শুধু একটা লাইন **যোগ** করে (প্রগ্রেসিভ এনহ্যান্সমেন্ট)।
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** বার্তায় যে লেখাটা বসে — 🔴 একটাই জায়গা, নাহলে দুই পাতায় দুই রকম হয়ে যেত */
+function wa_sender_prefix(): string
+{
+    return 'যে নম্বর/অ্যাকাউন্ট থেকে টাকা পাঠিয়েছি: ';
+}
+
+/**
+ * WhatsApp `<a>`-তে বসানোর অ্যাট্রিবিউট। কলার `href`-এ যে URL দিচ্ছে **ঠিক সেটাই**
+ * এখানেও পাস করে — নম্বর ও মূল বার্তা দুটোই ওখান থেকে তোলা হয়, তাই লিংক আর
+ * JS-এর বার্তা আলাদা হয়ে যাওয়ার উপায় নেই।
+ *
+ * 🔴 মূল বার্তাটা **percent-encoded রূপেই** রাখা হয় (`data-wa-base`) — কাঁচা লেখায়
+ *    newline থাকে, অ্যাট্রিবিউটে নিউলাইন রাখার ঝুঁকি নেওয়ার দরকার নেই।
+ * 🔴 নম্বর না পাওয়া গেলে খালি স্ট্রিং — তখন কলার ঘরটাই রেন্ডার করে না।
+ */
+function wa_sender_attrs(string $anchorId, string $waUrl): string
+{
+    if ($anchorId === '' || $waUrl === '') {
+        return '';
+    }
+    $num = preg_replace('/[^0-9]/', '', (string) parse_url($waUrl, PHP_URL_PATH));
+    if ($num === '') {
+        return '';
+    }
+    $qs = [];
+    parse_str((string) parse_url($waUrl, PHP_URL_QUERY), $qs);
+
+    return ' id="' . e($anchorId) . '"'
+        . ' data-wa-num="' . e($num) . '"'
+        . ' data-wa-base="' . e(rawurlencode((string) ($qs['text'] ?? ''))) . '"';
+}
+
+/** ঐচ্ছিক ঘরটার মার্কআপ — স্টাইল `.wa-send*` **সাধারণ CSS-এ** (Tailwind রিবিল্ড লাগে না) */
+function wa_sender_box_html(string $anchorId): string
+{
+    if ($anchorId === '') {
+        return '';
+    }
+    $id = $anchorId . '-num';
+
+    return '<div class="wa-send">'
+        . '<label class="wa-send-l" for="' . e($id) . '">কোন নম্বর থেকে টাকা পাঠিয়েছেন? <span>(ঐচ্ছিক)</span></label>'
+        . '<input type="text" id="' . e($id) . '" class="wa-send-i" inputmode="numeric" maxlength="40"'
+        . ' autocomplete="off" placeholder="01XXXXXXXXX"'
+        . ' data-wa-sender="' . e($anchorId) . '" data-wa-prefix="' . e(wa_sender_prefix()) . '">'
+        . '<p class="wa-send-h">লিখে দিলে নিচের বোতামে চাপলেই নম্বরটা বার্তার সাথে চলে যাবে —'
+        . ' আপনার WhatsApp নম্বর আলাদা হলেও আমরা টাকাটা মিলিয়ে নিতে পারব।'
+        . ' 📎 স্ক্রিনশট দিতে চাইলে WhatsApp খোলার পর সেখান থেকে ছবিটা যোগ করে পাঠান।</p>'
+        . '</div>';
+}
+
+/**
+ * 💬 পুরো "WhatsApp-এ জানান" ব্লক একসাথে — ঐচ্ছিক নম্বরের ঘর + বোতাম + JS।
+ *
+ * 🔴 তিন জায়গা এটাই ডাকে — `pay_result_box()` আর `pay.php`/`payment.php`-এর
+ *    "যাচাই এখনো চালু হয়নি" শাখা (ঐ শাখায় WhatsApp-ই একমাত্র পথ, তাই নম্বরের
+ *    ঘরটা ওখানে সবচেয়ে বেশি দরকার)। আলাদা করে লিখলে কোথাও ঘরটা বসানো ভুলে
+ *    যাওয়ার ঝুঁকি থাকত।
+ * 🔴 নম্বর/বার্তা তোলা না গেলে ঘর ও JS দুটোই বাদ যায়, বোতামটা আগের মতোই থাকে।
+ */
+function wa_notify_block_html(string $waUrl, string $anchorId, string $label, string $linkClass = 'pay-wa'): string
+{
+    if ($waUrl === '') {
+        return '';
+    }
+    $attrs = wa_sender_attrs($anchorId, $waUrl);
+
+    $h  = ($attrs !== '') ? wa_sender_box_html($anchorId) : '';
+    $h .= '<a href="' . e($waUrl) . '"' . $attrs . ' target="_blank" rel="noopener"'
+        . ' class="' . e($linkClass) . '">' . e($label) . '</a>';
+    if ($attrs !== '') {
+        $h .= wa_sender_scripts();
+    }
+    return $h;
+}
+
+/**
+ * 🔴 এক পাতায় একবারই — static গার্ড (দুই জায়গা থেকে ডাকা হয়)।
+ * 🔴 স্ক্রিপ্টটা ইচ্ছাকৃতভাবে `site-footer.php`-এর বড় ব্লকের **বাইরে** — ওখানে কিছু
+ *    ভাঙলে আইকন/মেনু/গ্যালারি সব একসাথে মরে (`eduIcons()` নিয়ম)।
+ */
+function wa_sender_scripts(): string
+{
+    static $done = false;
+    if ($done) {
+        return '';
+    }
+    $done = true;
+
+    return <<<'HTML'
+<script>
+(function () {
+  function clean(v) {
+    /* বাংলা অঙ্কে লিখলেও চলবে (চার্কোড ধরে, কোনো বাংলা লিটারেল ছাড়াই) */
+    v = String(v || '').replace(/[০-৯]/g, function (d) {
+      return String(d.charCodeAt(0) - 0x09E6);
+    });
+    return v.replace(/\s+/g, ' ').trim().slice(0, 40);
+  }
+  function sync(inp) {
+    var a = document.getElementById(inp.getAttribute('data-wa-sender') || '');
+    if (!a) { return; }
+    var num  = a.getAttribute('data-wa-num') || '';
+    var base = a.getAttribute('data-wa-base') || '';
+    var v    = clean(inp.value);
+    /* 🔴 base আগে থেকেই percent-encoded — শুধু শেষে একটা লাইন যোগ হয় */
+    a.href = 'https://wa.me/' + num + '?text=' + base
+      + (v ? '%0A' + encodeURIComponent((inp.getAttribute('data-wa-prefix') || '') + v) : '');
+  }
+  document.addEventListener('input', function (e) {
+    var t = e.target;
+    if (t && t.getAttribute && t.getAttribute('data-wa-sender')) { sync(t); }
+  });
+})();
+</script>
+HTML;
+}
+
 // রেজিস্ট্রেশন/অর্ডার সফল হওয়ার পর দেখানো পেমেন্ট বক্স — সম্পূর্ণ অ্যাডমিন-নিয়ন্ত্রিত (admin/payment-methods.php,
 // payment_methods টেবিল)। $itemType+$itemId দিলে শুধু সেই আইটেমে প্রযোজ্য (scope_all=1 বা scope_items-এ থাকা)
 // পেমেন্ট নাম্বার/WhatsApp দেখায়। কিছু না মিললে খালি স্ট্রিং রিটার্ন করে (কোনো বক্স দেখায় না)।
