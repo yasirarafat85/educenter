@@ -124,8 +124,16 @@ function reg_card_html(array $c): string
  * ⬇️ ডাউনলোড বোতাম — কার্ডের **বাইরে** বসাতে হবে।
  * ⚠️ `reg_card_scripts()`-ও একই পাতায় দিতে হবে, নাহলে বোতামটা কিছুই করবে না।
  */
-function reg_card_download_btn(string $label = 'ডাউনলোড করুন'): string
+function reg_card_download_btn(string $label = 'ডাউনলোড করুন', string $class = ''): string
 {
+    /* 🔴 `id` ও ভেতরের `<span>` দুটোই `reg_card_scripts()`-এর JS ধরে রাখে
+     *    (span-এ "অপেক্ষা করুন..." লেখা হয়) — কখনো সরাবেন না।
+     * $class দিলে নিজের স্টাইল, নাহলে আগের চেহারা হুবহু। */
+    if ($class !== '') {
+        return '<button type="button" id="download-confirmation-btn" class="' . e($class) . '">'
+            . '<i data-lucide="download"></i> <span>' . e($label) . '</span></button>';
+    }
+
     return '
         <button type="button" id="download-confirmation-btn" class="px-8 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 shadow-lg" style="background:rgb(var(--c-tint));color:rgb(var(--c-deep));border:2px solid rgb(var(--c-primary));">
             <i data-lucide="download" class="w-5 h-5"></i> <span>' . e($label) . '</span>
@@ -195,29 +203,56 @@ HTML;
  *    পাতা খোলা যায় না — এজন্যই এটা অভিভাবককে দেওয়া নিরাপদ।
  * 🔴 চাবি সেট না থাকলে (`pay_link_url()` খালি) পুরো ব্লকটাই রেন্ডার হয় না।
  */
-function reg_card_save_link_html(string $relUrl): string
+function reg_card_save_link_url(string $relUrl): string
 {
     if (trim($relUrl) === '') {
         return '';
     }
     $base = defined('SITE_URL') ? rtrim(SITE_URL, '/') : '';
-    $full = $base . '/' . ltrim($relUrl, '/');
 
-    return '
-    <div class="max-w-xl mx-auto mt-5">
-        <div class="rounded-2xl p-5 sm:p-6" style="background:rgb(var(--c-tint));border:1px solid rgb(var(--c-border));">
-            <p class="text-gray-700 text-sm font-bold text-center mb-1">🔗 এই লিংকটা সেভ করে রাখুন</p>
-            <p class="text-gray-500 text-xs text-center mb-3">পরে যেকোনো সময় এই লিংকে ঢুকে কার্ডটা আবার নামাতে পারবেন, পেমেন্টও জানাতে পারবেন।</p>
-            <div class="flex flex-col sm:flex-row gap-2">
-                <input type="text" readonly value="' . e($full) . '" onclick="this.select()"
-                       class="flex-1 min-w-0 rounded-xl px-3 py-2.5 text-sm text-gray-700 bg-white"
-                       style="border:1px solid rgb(var(--c-border));font-size:16px;">
-                <button type="button" data-save-link="' . e($full) . '"
-                        class="px-5 py-2.5 rounded-xl font-bold text-white whitespace-nowrap shadow"
-                        style="background:linear-gradient(135deg, rgb(var(--c-primary-2)), rgb(var(--c-primary)));">কপি করুন</button>
-            </div>
-        </div>
-    </div>';
+    return $base . '/' . ltrim($relUrl, '/');
+}
+
+/**
+ * 🔗 "লিংক কপি করুন" বোতাম — কাজের প্যানেলের গ্রিডে বসে।
+ *
+ * 🔴 `data-save-link` অ্যাট্রিবিউটটাই `reg_card_save_link_scripts()`-এর ধরার জায়গা
+ *    (ঐ স্ক্রিপ্ট `querySelector('[data-save-link]')` করে) — নাম বদলাবেন না।
+ */
+function reg_card_save_link_btn(string $relUrl, string $class = ''): string
+{
+    $full = reg_card_save_link_url($relUrl);
+    if ($full === '') {
+        return '';
+    }
+    $cls = $class !== '' ? $class : 'px-5 py-2.5 rounded-xl font-bold text-white shadow';
+
+    return '<button type="button" data-save-link="' . e($full) . '" class="' . e($cls) . '">'
+        . '🔗 লিংক কপি করুন</button>';
+}
+
+/**
+ * 🔗 স্থায়ী লিংকটা **ভাঁজ করা** `<details>`-এ — অভিভাবক এটা রেখে দিলে পরে যেকোনো দিন
+ *    কার্ড নামাতে ও পেমেন্ট জানাতে পারবেন (লিংকে HMAC চাবি আছে, অনুমান করা যায় না)।
+ *
+ * 🔴 আগে এটা আলাদা একটা বড় তিন-লাইনের বাক্স ছিল (~২০০px) — পাতাটা নিচে নিচে নেমে
+ *    যাওয়ার অন্যতম কারণ। এখন কপি করা হয় উপরের বোতাম দিয়ে, আর কাঁচা লিংকটা শুধু
+ *    দরকারে খোলা হয়।
+ * 🔴 ঘরটা ইচ্ছাকৃতভাবে DOM-এ থাকেই (collapsed) — কপি কোনো কারণে ব্যর্থ হলে JS
+ *    `details.open = true` করে দেয়, তখন হাতে কপি করা যায়। **ফলব্যাকটা সরাবেন না।**
+ * 🔴 চাবি সেট না থাকলে (`pay_link_url()` খালি) পুরো ব্লকটাই রেন্ডার হয় না।
+ */
+function reg_card_save_link_html(string $relUrl): string
+{
+    $full = reg_card_save_link_url($relUrl);
+    if ($full === '') {
+        return '';
+    }
+
+    return '<details class="rtx-link">'
+        . '<summary>🔗 স্থায়ী লিংকটা দেখুন / হাতে কপি করুন</summary>'
+        . '<input type="text" class="rtx-url" readonly value="' . e($full) . '" onclick="this.select()">'
+        . '</details>';
 }
 
 /** উপরের কপি বোতামের JS — 🔴 ফুটারের বড় স্ক্রিপ্টের বাইরে আলাদা ব্লকে */
@@ -243,7 +278,13 @@ function reg_card_save_link_scripts(): string
             ta.value = txt; ta.style.position = 'fixed'; ta.style.left = '-9999px';
             document.body.appendChild(ta); ta.select(); document.execCommand('copy');
             document.body.removeChild(ta); done();
-        } catch (err) { /* কিছু না — লিংকটা ঘরেই দেখা যাচ্ছে, হাতে কপি করা যাবে */ }
+        } catch (err) { reveal(); }
+    }
+    // 🔴 কপি করা না গেলে ভাঁজ করা লিংকটা খুলে দেওয়া হয় — তখন হাতে কপি করা যায়
+    function reveal() {
+        var d = document.querySelector('details.rtx-link');
+        if (d) { d.open = true; }
+        btn.textContent = 'নিচের লিংকটা কপি করুন';
     }
 })();
 </script>

@@ -1132,3 +1132,52 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
     .nt-new  { font-size: .68rem; padding: .25rem .5rem; }
     .nt-body { font-size: .95rem; line-height: 1.8; }
 }
+
+/* 🎛️🎛️ রেজিস্ট্রেশনের পরের কাজগুলো — একটাই প্যানেলে, বোতাম আকারে (২০২৬-১০-২২)
+ * ইউজারের চাওয়া: "এত নিচে নিচে যেতে না দিয়ে বাটন আকারে বিষয় গুলো সাজাতে পারলে ভালো হয়"।
+ * 🔴 সবই সাধারণ CSS — Tailwind রিবিল্ড লাগে না। */
+.rtx{margin-top:20px;padding:16px;border-radius:16px;
+  background:rgb(var(--c-tint));border:1px solid rgb(var(--c-border))}
+.rtx-h{margin:0 0 12px;font-size:15px;font-weight:800;color:rgb(var(--c-deep));text-align:center}
+.rtx-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.rtx-grid-1{grid-template-columns:minmax(0,1fr)}
+/* 🔴 হরফ ১৩px ও প্যাডিং সরু — ৩৬০px পর্দায় দুই কলামে "WhatsApp-এ জানান" যেন
+ *    দুই লাইনে না ভাঙে (মেপে দেখা); ৬৪০px+ এ আবার ১৪px হয়ে যায়। */
+.rtx-b{display:flex;align-items:center;justify-content:center;gap:5px;min-width:0;
+  padding:13px 6px;border-radius:12px;font-weight:800;font-size:13px;line-height:1.5;
+  text-align:center;text-decoration:none;color:#fff;border:0;cursor:pointer;
+  box-shadow:0 4px 10px rgb(0 0 0 / .08);word-break:break-word}
+.rtx-b svg{width:15px;height:15px;flex:0 0 auto}
+.rtx-b-pay{width:100%;font-size:16px;padding:15px 16px;
+  background:linear-gradient(135deg,rgb(var(--c-primary-2)),rgb(var(--c-primary)))}
+.rtx-b-wa{background:linear-gradient(135deg,#25D366 0%,#128C7E 100%)}
+.rtx-b-msg{background:linear-gradient(135deg,#00B2FF 0%,#006AFF 100%)}
+/* আউটলাইন বোতাম (কার্ড নামানো · লিংক কপি) — গৌণ কাজ, তাই রঙিন নয় */
+.rtx-b-out{background:#fff;color:rgb(var(--c-deep));box-shadow:none;
+  border:2px solid rgb(var(--c-primary))}
+.rtx-hint{margin:8px 0 0;font-size:12px;line-height:1.7;color:#6b7280;text-align:center}
+.rtx-lead{margin:0 0 10px;font-size:13px;line-height:1.7;color:#6b7280;text-align:center}
+.rtx-lead b{color:#374151;font-weight:800}
+.rtx-sep{margin:14px 0 10px;border:0;border-top:1px dashed rgb(var(--c-border))}
+.rtx-home{display:block;margin:12px 0 0;padding:9px;border-radius:10px;text-align:center;
+  font-size:13px;font-weight:700;color:#6b7280;text-decoration:none}
+/* 🔗 স্থায়ী লিংক — ভাঁজ করা, তাই জায়গা খায় না; কপি ব্যর্থ হলে JS নিজে খুলে দেয় */
+.rtx-link{margin-top:10px}
+.rtx-link>summary{cursor:pointer;list-style:none;padding:8px 10px;border-radius:10px;
+  font-size:12px;font-weight:700;color:rgb(var(--c-deep));background:rgb(255 255 255 / .65);
+  text-align:center}
+.rtx-link>summary::-webkit-details-marker{display:none}
+.rtx-link>summary::after{content:" ▾";color:#9ca3af}
+.rtx-link[open]>summary::after{content:" ▴"}
+.rtx-url{display:block;width:100%;min-width:0;margin-top:9px;padding:10px 12px;
+  border-radius:10px;font-size:16px;background:#fff;color:#374151;
+  border:1px solid rgb(var(--c-border))}
+@media (min-width:640px){.rtx{padding:20px}.rtx-b{font-size:14px;padding:13px 14px;gap:8px}.rtx-b svg{width:18px;height:18px}}
+/* 🔴 ৩৯০px-এর নিচে দুই কলামের ঘর ~১৪৩px হয়ে যায় আর "WhatsApp-এ জানান" দুই
+ *    লাইনে ভাঙে (৩৬০px অ্যান্ড্রয়েডে মেপে দেখা) — তখন এক কলামই পরিষ্কার।
+ *    সীমাটা বদলালে প্রতিটা বোতামের উচ্চতা আবার মেপে দেখুন (এক লাইন ≈ ৪৬px)। */
+@media (max-width:389px){.rtx-grid{grid-template-columns:minmax(0,1fr)}}
+@media (hover:hover){
+  .rtx-home:hover{color:rgb(var(--c-deep));background:rgb(255 255 255 / .7)}
+  .rtx-link>summary:hover{background:#fff}
+}

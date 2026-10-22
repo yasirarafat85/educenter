@@ -1551,9 +1551,11 @@ function wa_sender_box_html(string $anchorId): string
         . '<input type="text" id="' . e($id) . '" class="wa-send-i" inputmode="numeric" maxlength="40"'
         . ' autocomplete="off" placeholder="01XXXXXXXXX"'
         . ' data-wa-sender="' . e($anchorId) . '" data-wa-prefix="' . e(wa_sender_prefix()) . '">'
-        . '<p class="wa-send-h">লিখে দিলে নিচের বোতামে চাপলেই নম্বরটা বার্তার সাথে চলে যাবে —'
-        . ' আপনার WhatsApp নম্বর আলাদা হলেও আমরা টাকাটা মিলিয়ে নিতে পারব।'
-        . ' 📎 স্ক্রিনশট দিতে চাইলে WhatsApp খোলার পর সেখান থেকে ছবিটা যোগ করে পাঠান।</p>'
+        /* 🔴 ইঙ্গিতটা ইচ্ছাকৃতভাবে ছোট — আগে ৩ বাক্যে ৪ লাইন হতো, পাতা নিচে নামত।
+         * 🔴 স্ক্রিনশটের কথাটা বাদ দেবেন না — `wa.me/?text=` শুধু **লেখা** নেয়, ছবি
+         *    আগে থেকে জুড়ে দেওয়া অসম্ভব; তাই এখানে বলে দেওয়াই একমাত্র উপায়। */
+        . '<p class="wa-send-h">WhatsApp নম্বর আলাদা হলেও টাকাটা মিলিয়ে নিতে পারব।'
+        . ' 📎 স্ক্রিনশট দিতে চাইলে WhatsApp-এ যোগ করুন।</p>'
         . '</div>';
 }
 
