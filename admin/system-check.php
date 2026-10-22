@@ -18,6 +18,7 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/nav.php';
 require_once __DIR__ . '/includes/schema-check.php';
+require_once __DIR__ . '/includes/php-check.php';
 admin_require_login();
 
 $db        = get_db();
@@ -86,15 +87,78 @@ $unknown = array_values(array_filter($files, fn($f) => $f['total'] === 0));
 $dbName = '';
 try { $dbName = (string) $db->query('SELECT DATABASE()')->fetchColumn(); } catch (Throwable $e) { $dbName = ''; }
 
+// ── 🔒 PHP ভার্সনের নিরাপত্তা (২০২৬-১০-২২) ───────────────────────────────────
+// 🔴 `PHP_VERSION` এখানে পড়া হচ্ছে **একটা ওয়েব রিকোয়েস্টের ভেতর থেকে**, তাই এটা
+//    ঠিক ঐ PHP যেটা সাইটের পাতাগুলো পরিবেশন করে। cPanel-এ কমান্ড-লাইনের PHP
+//    (`php -v`) আলাদা হতে পারে — এবারের অ্যাডভাইজরিগুলোতেও সেটাই বলা আছে,
+//    আর ২০২৬-১০-২২-এ এই ফাঁদেই আমার নোটে ভুল ভার্সন লেখা ছিল।
+// 🔴 ইঞ্জিন বিশুদ্ধ (php-check.php) — ini/ভার্সন এখান থেকে তুলে পাস করা হয়।
+$phpStat = php_security_status(PHP_VERSION);
+$upStat  = php_upload_progress_status(ini_get('session.upload_progress.enabled'));
+$phpSapi = php_sapi_name();
+
 require __DIR__ . '/includes/layout-top.php';
 ?>
 
 <div class="mb-6">
     <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">🩺 সিস্টেম চেক</h1>
     <p class="text-sm text-gray-500 mt-1">
-        নতুন ফিচারের SQL আপনি phpMyAdmin-এ চালান। কোনটা এখনো চালানো হয়নি — এই পাতা সেটাই দেখায়।
+        PHP ভার্সনটা নিরাপদ কিনা, আর নতুন ফিচারের কোন SQL এখনো phpMyAdmin-এ চালানো হয়নি —
+        দুটোই এখানে এক নজরে।
         <span class="font-semibold text-gray-700">এই পাতা নিজে কিছুই বদলায় না।</span>
     </p>
+</div>
+
+<?php
+// 🔴 কার্ডটা `$dirReady` শাখার **বাইরে/আগে** — `database/` ফোল্ডার না থাকলেও
+//    (পুরনো ডিপ্লয়) PHP-র অবস্থাটা দেখা যেতেই হবে, ওটা SQL-এর উপর নির্ভর করে না।
+$phpTone = [
+    // 🔴 'eol'-ও লাল: "ঝুঁকিতে" দাবি করা হচ্ছে না (লেখাটা সৎ), কিন্তু করণীয়
+    //    কাজটা একই — শাখা সরানো; অ্যাম্বার দিলে কাজটা ফেলে রাখা হতো।
+    'ok'      => ['bg-green-50', 'border-green-200', 'text-green-800', '✅'],
+    'old'     => ['bg-red-50',   'border-red-200',   'text-red-800',   '🔴'],
+    'eol'     => ['bg-red-50',   'border-red-200',   'text-red-800',   '🔴'],
+    'unknown' => ['bg-amber-50', 'border-amber-200', 'text-amber-800', '⚠️'],
+][$phpStat['state']];
+?>
+<div class="<?= $phpTone[0] ?> border <?= $phpTone[1] ?> rounded-2xl p-5 mb-6">
+    <p class="<?= $phpTone[2] ?> font-bold text-lg break-all">
+        <?= $phpTone[3] ?> <?= e($phpStat['label']) ?>
+    </p>
+    <p class="text-sm <?= $phpTone[2] ?> mt-1"><?= e($phpStat['detail']) ?></p>
+
+    <div class="text-xs text-gray-600 mt-3 space-y-1">
+        <div>
+            🧩 সাইটের পাতাগুলো চলছে <b class="break-all"><?= e(PHP_VERSION) ?></b>
+            (হ্যান্ডলার <code><?= e($phpSapi) ?></code>)
+        </div>
+        <?php if ($phpStat['fixed'] !== ''): ?>
+            <div>🩹 এই শাখার প্যাচ করা ভার্সন <b><?= e($phpStat['fixed']) ?></b></div>
+        <?php endif; ?>
+        <div>
+            <?= $upStat['ok'] ? '🛡️' : '🔓' ?> <b><?= e($upStat['label']) ?></b> — <?= e($upStat['detail']) ?>
+        </div>
+    </div>
+
+    <?php if ($phpStat['state'] !== 'ok'): ?>
+        <?php /* 🔴 এখান থেকে কিছু বদলানো যায় না — PHP প্যাকেজ হোস্ট আপডেট করে,
+                  cPanel-এর MultiPHP Manager শুধু "কোন ডোমেইন কোন শাখায় চলবে"
+                  ঠিক করে। তাই করণীয়টা লেখা আছে, কোনো বোতাম নেই। */ ?>
+        <div class="text-sm <?= $phpTone[2] ?> mt-3">
+            <p class="font-semibold mb-1">কী করবেন:</p>
+            <ol class="space-y-1" style="padding-inline-start:1.3rem; list-style:decimal;">
+                <li>cPanel → <b>MultiPHP Manager</b> → ডোমেইনের পাশে টিক →
+                    <b>PHP <?= e(php_recommended_branch()) ?></b> বেছে <b>Apply</b></li>
+                <li>ড্রপডাউনে সংখ্যাটা <b><?= e(php_fixed_versions()[php_recommended_branch()]) ?></b>-এর
+                    চেয়ে কম দেখালে হোস্ট এখনো প্যাচ করেনি — তাদের টিকিট দিন
+                    (<code>CVE-2026-109618</code> / <code>CVE-2026-109619</code>)</li>
+                <li>সরানোর পর এই পাতাটা রিফ্রেশ করুন — উপরের লাইনটা সবুজ হলে কাজ শেষ</li>
+            </ol>
+            <p class="text-xs mt-2">
+                🔴 এটা আমাদের কোডের বাগ নয় — PHP সফটওয়্যারের নিজের ভেতরের, তাই কোড দিয়ে ঠিক করা যায় না।
+            </p>
+        </div>
+    <?php endif; ?>
 </div>
 
 <?php if (!$dirReady): ?>

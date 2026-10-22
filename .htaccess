@@ -3,6 +3,16 @@
 # THE_REQUEST-ভিত্তিক %1 এ সাবডিরেক্টরি প্রিফিক্স সহ পুরো পাথ থাকে, তাই redirect নিরাপদ।
 # admin/ ফোল্ডার ও ফাংশনাল endpoint (-submit / ajax-* / log-download / sitemap / sms-in / pay-status) ইচ্ছাকৃতভাবে বাদ।
 
+# 🔒 `.user.ini` বাইরে থেকে পড়া বন্ধ (২০২৬-১০-২২)
+# ফাইলটা PHP-র নিজের সেটিংস (PHP2Shell-এর ঢাল) — গোপন কিছু নেই, কিন্তু সার্ভারের
+# কনফিগারেশন বাইরে দেখানোর দরকারও নেই। Apache ডিফল্টে শুধু `.ht*` আটকায়।
+# 🔴 `Options -Indexes` ইচ্ছাকৃতভাবে এখানে নেই (কিছু হোস্টে `AllowOverride Options`
+#    বন্ধ থাকলে ঐ এক লাইনেই পুরো সাইট 500 দেয়) — `<Files>` সব জায়গায় নিরাপদ,
+#    uploads/.htaccess-এ এই একই প্যাটার্ন আগে থেকেই চলছে।
+<Files ".user.ini">
+    Require all denied
+</Files>
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
