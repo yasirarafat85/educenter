@@ -114,6 +114,13 @@ require __DIR__ . '/includes/payment-ui.php';
         <?php endif; ?>
     </div>
 
+    <?php
+        /* 📋 "রেজিস্ট্রেশনের পর করণীয়" — পেমেন্টের ফর্মের ঠিক পরে (শুধু কোর্সে)।
+         * 🔴 `$card` না পেলেও যেন চলে, তাই টাইপটা `$reg` থেকেও দেখা হয়। */
+        $arsCourse = $card ? !empty($card['is_course']) : (($reg['type'] ?? '') === 'course');
+    ?>
+    <?= after_reg_steps_html($arsCourse) ?>
+
     <?php if ($card): ?>
     <?php /* 🔴 ভাঁজ-করা (`<details>`) ইচ্ছাকৃত — এই পাতার আসল কাজ পেমেন্ট জানানো,
              কার্ডটা খুলে রাখলে উপরের সারাংশের সাথে রেফারেন্স/নাম দুইবার দেখাত।

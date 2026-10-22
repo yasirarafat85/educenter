@@ -1027,6 +1027,21 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
 .wa-send-i:focus{outline:none;border-color:rgb(var(--c-primary));box-shadow:0 0 0 3px rgb(var(--c-primary) / .15)}
 .wa-send-h{margin:7px 0 0;font-size:12px;color:#6b7280;line-height:1.75}
 
+/* 📋 "রেজিস্ট্রেশনের পর করণীয়" — ধাপের বাক্স (register-thanks + pay)
+   🔴 সাধারণ CSS-এ, তাই Tailwind রিবিল্ড লাগে না; রঙ থিম-ভ্যারিয়েবল থেকে,
+      তাই অ্যাডমিন সাইট-থিম বদলালে এটাও বদলায়। */
+.ars{margin-top:20px;padding:18px 18px 16px;border-radius:16px;
+  background:rgb(var(--c-tint));border:1px solid rgb(var(--c-border))}
+.ars-h{margin:0 0 12px;font-size:15px;font-weight:800;color:rgb(var(--c-deep));text-align:center}
+.ars-list{display:flex;flex-direction:column;gap:10px}
+.ars-row{display:flex;align-items:flex-start;gap:10px}
+.ars-n{flex:0 0 auto;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:13px;font-weight:800;color:#fff;line-height:1;
+  background:linear-gradient(135deg,rgb(var(--c-primary-2)),rgb(var(--c-primary)))}
+.ars-t{min-width:0;flex:1 1 auto;font-size:14px;line-height:1.8;color:#374151;word-break:break-word}
+.ars-warn{margin:14px 0 0;padding:11px 13px;border-radius:12px;font-size:13px;line-height:1.8;
+  font-weight:700;color:#92400e;background:#fffbeb;border:1px solid #fde68a}
+
 @media (max-width:380px){
   .pay-num-v{font-size:19px}
   .pay-chan{font-size:14px;padding:12px 8px}
