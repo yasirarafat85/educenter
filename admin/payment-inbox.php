@@ -659,6 +659,13 @@ require_once __DIR__ . '/includes/layout-top.php';
                             $phDiff  = $smsPh !== '' && $clPh !== '' && $smsPh !== $clPh;
                             $amtDiff = (float) ($c['amount'] ?? 0) > 0.009
                                        && abs((float) $c['amount'] - (float) ($mSms['amount'] ?? 0)) > 0.5;
+                            /* 🔴🔴 "কেন নিজে থেকে যাচাই হয়নি" — উত্তরটা **ইঞ্জিন থেকেই**
+                             *    (`pclaim_evaluate()`-এর `block`), এখানে অনুমান করে নয়।
+                             *    আগে এখানে হাতে লেখা ছিল "দুটো নম্বর আলাদা, তাই নিজে থেকে
+                             *    যাচাই হয়নি" — ২০২৬-১০-০৭-এ নম্বরের গরমিল আটকানো বন্ধ হওয়ার
+                             *    পর ঐ লেখাটা **মিথ্যা** হয়ে গিয়েছিল, আর অ্যাডমিন ওটা পড়ে
+                             *    ভাবতেন রেজিস্ট্রেশন ও বিকাশের নম্বর এক হতেই হবে। */
+                            $why = pclaim_evaluate($c, $mSms)['block'];
                         ?>
                             <div class="mt-1 text-xs <?= $linked ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200' ?> border rounded p-2" style="max-width:300px">
                                 <div class="<?= $linked ? 'text-green-800' : 'text-amber-800' ?> font-bold">
@@ -666,14 +673,21 @@ require_once __DIR__ . '/includes/layout-top.php';
                                 </div>
                                 <div class="text-gray-800 mt-0.5">
                                     টাকা এসেছে <b><?= e(pi_money($mSms['amount'])) ?></b>
-                                    <?php if ($amtDiff): ?><span class="text-red-700">(অভিভাবক লিখেছেন <?= e(pi_money($c['amount'])) ?>)</span><?php endif; ?>
+                                    <?php /* ℹ️ অঙ্কের গরমিল যাচাই আটকায় না — টাকার আসল অঙ্ক সবসময় SMS-এরটাই */ ?>
+                                    <?php if ($amtDiff): ?><span class="text-gray-500">(অভিভাবক লিখেছেন <?= e(pi_money($c['amount'])) ?> — এটা যাচাই আটকায় না)</span><?php endif; ?>
                                 </div>
                                 <div class="text-gray-800">
                                     যে নম্বর থেকে: <b><?= e((string) ($mSms['sender_number'] ?: '—')) ?></b>
                                     <?php if ($phDiff): ?>
-                                        <div class="text-red-700">🔴 রেজিস্ট্রেশনের নম্বর <?= e((string) $c['phone']) ?> — দুটো আলাদা, তাই নিজে থেকে যাচাই হয়নি</div>
+                                        <div class="text-gray-500">ℹ️ রেজিস্ট্রেশনের নম্বর <?= e((string) $c['phone']) ?> — অন্য নম্বর থেকে এসেছে, <b>এটা যাচাই আটকায় না</b></div>
                                     <?php endif; ?>
                                 </div>
+                                <?php /* 🔴 আসল কারণ — শুধু তখনই, যখন সত্যিই আটকেছে */ ?>
+                                <?php if (!$linked && $why): ?>
+                                    <div class="text-red-700 font-bold mt-1">🔴 নিজে থেকে যাচাই হয়নি: <?= e(implode(' · ', $why)) ?></div>
+                                <?php elseif (!$linked): ?>
+                                    <div class="text-gray-600 mt-1">⏳ কোনো শর্তে আটকায়নি — এখনো জোড়া লাগানো হয়নি।</div>
+                                <?php endif; ?>
                                 <?php if (!$linked && admin_can('orders', 'edit')): ?>
                                 <?php /* 🔴 sms_id সহ পাঠানো হয় — নাহলে অনুমোদনের পরেও বার্তাটা
                                          "দাবি হয়নি এমন টাকা" তালিকায় পড়ে থাকত (এক টাকা দুইবার গোনার ঝুঁকি) */ ?>
