@@ -1271,29 +1271,128 @@ function wa_chat_url(string $message = ''): string
     return 'https://wa.me/' . $wa . ($message === '' ? '' : '?text=' . rawurlencode($message));
 }
 
-/**
- * 📨 মেসেঞ্জার ইনবক্সের লিংক — অ্যাডমিন `contact_messenger` সেটিংয়ে নিজে বসান।
+/* ────────────────────────────────────────────────────────────────────────────
+ * 📨 মেসেঞ্জার ইনবক্সের লিংক  (২০২৬-১০-২২ এ সহজ করা)
  *
- * 🔴 `facebook_page_url` থেকে নিজে থেকে `m.me/...` বানানো হয় **না** — পেজের ঠিকানা
- *    `facebook.com/profile.php?id=…` রূপের হলে ঐ অনুমান ভাঙা লিংক দিত। অনুমান
- *    করার চেয়ে অ্যাডমিনকে একবার লিংকটা বসাতে দেওয়াই নিরাপদ।
- * 🔴 হোস্ট **`parse_url()` দিয়ে** যাচাই (`is_facebook_url()`-এর হুবহু নীতি) —
+ * আগে অ্যাডমিনকে পুরো `https://m.me/...` লিংকটা নিজে খুঁজে বসাতে হতো, আর
+ * **কোথাও কিছু না বসালে বোতামটা আসতই না** — ইউজার জানতেনই না কী লাগবে।
+ * এখন তিন পথ, উপর থেকে নিচে:
+ *   ১. `contact_messenger`-এ পুরো লিংক (আগের মতোই)
+ *   ২. `contact_messenger`-এ **শুধু পেজের নাম** ("kids3535")
+ *   ৩. খালি থাকলে **ফেসবুক পেজের লিংক থেকে নিজে থেকেই** — কিন্তু শুধু তখনই
+ *      যখন ঠিকানাটা পরিষ্কার `facebook.com/<নাম>` রূপের।
+ *
+ * 🔴🔴 আগের নিয়ম ছিল "কখনো অনুমান করা হয় না" — কারণ `facebook.com/profile.php?id=…`
+ *      বা `/share/17vk…/` রূপের ঠিকানা থেকে বানানো লিংক ভেঙে যেত। সেই ঝুঁকিটা
+ *      এখনো আছে, তাই `fb_page_username()` **শুধু একটাই পাথ-সেগমেন্ট** মানে, আর
+ *      `.php` · সংরক্ষিত শব্দ (share/profile/groups/pages/people…) · নিছক সংখ্যা —
+ *      সবই বাদ দেয়। অর্থাৎ অনুমান করা হয় **একমাত্র সেই রূপে যেটা নিশ্চিতভাবে কাজ করে**।
+ * 🔴 হোস্ট সবসময় **`parse_url()` দিয়ে** যাচাই (`is_facebook_url()`-এর হুবহু নীতি) —
  *    `strpos` দিয়ে করলে `https://evil.com/?m.me` পাস করে যেত।
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** ফেসবুকের পাথে যেসব শব্দ কখনো পেজের নাম নয় */
+function fb_reserved_paths(): array
+{
+    return ['profile', 'share', 'pages', 'page', 'people', 'groups', 'group', 'watch',
+            'events', 'event', 'marketplace', 'login', 'permalink', 'photo', 'photos',
+            'videos', 'video', 'reel', 'reels', 'story', 'stories', 'posts', 'post',
+            'media', 'home', 'gaming', 'messages', 'settings', 'help', 'about',
+            'privacy', 'terms', 'search', 'notes', 'live'];
+}
+
+/** পেজের নাম হিসেবে গ্রহণযোগ্য? (ফেসবুকের নিজের নিয়ম — অক্ষর, সংখ্যা ও বিন্দু) */
+function messenger_username_valid(string $name): bool
+{
+    $name = trim($name);
+    if (!preg_match('/^[A-Za-z0-9.]{5,50}$/', $name)) {
+        return false;
+    }
+    if (ctype_digit($name)) {
+        return false;          // 🔴 নিছক আইডি — ওটা দিয়ে m.me নির্ভরযোগ্য নয়
+    }
+    if (strpos($name, '..') !== false) {
+        return false;
+    }
+    return !in_array(strtolower($name), fb_reserved_paths(), true);
+}
+
+/**
+ * ফেসবুক পেজের ঠিকানা থেকে পেজের নাম — **শুধু পরিষ্কার রূপে**, নাহলে খালি।
+ * `facebook.com/kids3535` → `kids3535`;  `/profile.php?id=…` · `/share/17vk…/` → ''
  */
+function fb_page_username(string $url): string
+{
+    $url = trim($url);
+    if ($url === '') {
+        return '';
+    }
+    if (strpos($url, '://') === false) {
+        $url = 'https://' . ltrim($url, '/');
+    }
+    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+    if ($host === '') {
+        return '';
+    }
+    $okHost = false;
+    foreach (['facebook.com', 'fb.com'] as $h) {
+        if ($host === $h || substr($host, -strlen('.' . $h)) === '.' . $h) {
+            $okHost = true;
+            break;
+        }
+    }
+    if (!$okHost) {
+        return '';
+    }
+    $path = trim((string) parse_url($url, PHP_URL_PATH), '/');
+    // 🔴 একটাই সেগমেন্ট হতে হবে — `/share/17vk…/` বা `/people/x/123` কখনো নয়
+    if ($path === '' || strpos($path, '/') !== false || stripos($path, '.php') !== false) {
+        return '';
+    }
+    $path = rawurldecode($path);
+
+    return messenger_username_valid($path) ? $path : '';
+}
+
+/** মেসেঞ্জারের ইনবক্স লিংক — খালি হলে বোতামটাই রেন্ডার হয় না */
 function messenger_chat_url(): string
 {
     $raw = trim((string) get_setting('contact_messenger'));
-    if ($raw === '') {
+
+    if ($raw !== '') {
+        // ২. শুধু পেজের নাম লেখা হয়েছে (কোনো স্ল্যাশ/কোলন নেই)
+        if (strpos($raw, '/') === false && strpos($raw, ':') === false) {
+            return messenger_username_valid($raw) ? 'https://m.me/' . $raw : '';
+        }
+        // ১. পুরো লিংক — স্কিম না লিখলেও চলে
+        $try    = (strpos($raw, '://') === false) ? 'https://' . ltrim($raw, '/') : $raw;
+        $scheme = strtolower((string) parse_url($try, PHP_URL_SCHEME));
+        $host   = strtolower((string) parse_url($try, PHP_URL_HOST));
+        if (($scheme !== 'https' && $scheme !== 'http') || $host === '') {
+            return '';
+        }
+        foreach (['m.me', 'messenger.com', 'facebook.com', 'fb.com'] as $allowed) {
+            if ($host === $allowed || substr($host, -strlen('.' . $allowed)) === '.' . $allowed) {
+                return $try;
+            }
+        }
         return '';
     }
-    $scheme = strtolower((string) parse_url($raw, PHP_URL_SCHEME));
-    $host   = strtolower((string) parse_url($raw, PHP_URL_HOST));
-    if (($scheme !== 'https' && $scheme !== 'http') || $host === '') {
-        return '';
-    }
-    foreach (['m.me', 'messenger.com', 'facebook.com', 'fb.com'] as $allowed) {
-        if ($host === $allowed || substr($host, -strlen('.' . $allowed)) === '.' . $allowed) {
-            return $raw;
+
+    // ৩. কিছু বসানো না থাকলে ফেসবুক পেজের ঠিকানা থেকে
+    return messenger_auto_url();
+}
+
+/**
+ * ফেসবুকের দুটো সেটিং দেখে নিজে থেকে বানানো লিংক (না পারলে খালি)।
+ * 🔴 অ্যাডমিন সেটিংস পাতাতেও এটাই দেখানো হয় — "এখন কোনটা কাজ করছে" বোঝাতে।
+ */
+function messenger_auto_url(): string
+{
+    foreach (['facebook_page_url', 'social_facebook'] as $key) {
+        $name = fb_page_username((string) get_setting($key));
+        if ($name !== '') {
+            return 'https://m.me/' . $name;
         }
     }
     return '';
