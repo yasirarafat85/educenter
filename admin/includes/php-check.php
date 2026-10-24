@@ -128,13 +128,26 @@ function php_security_status(string $version): array
 }
 
 /** `.user.ini` / INI Editor-এর সুরক্ষাটা সত্যিই বসেছে কিনা + কী করতে হবে। */
-function php_upload_progress_status($raw): array
+function php_upload_progress_status($raw, bool $phpPatched = false): array
 {
     if (!php_ini_on($raw)) {
         return [
             'ok'     => true,
             'label'  => 'session.upload_progress বন্ধ',
             'detail' => 'CVE-2026-109619-এর প্রমাণিত পথটা বন্ধ আছে। (এটা সম্পূর্ণ সমাধান নয় — আসল কাজ PHP আপডেট।)',
+        ];
+    }
+
+    // 🔴 PHP নিজেই প্যাচড হলে এই ঢালটা আর দরকার নেই — ওটা ছিল শুধু আপডেটের
+    //    *আগের* অস্থায়ী ব্যবস্থা; বাগটা এখন ইঞ্জিনেই সারানো, তাই upload_progress
+    //    চালু থাকলেও আর কাজে লাগানো যায় না। তখন সতর্কতা নয়, নিছক তথ্য (ok = true)।
+    if ($phpPatched) {
+        return [
+            'ok'     => true,
+            'label'  => 'session.upload_progress চালু — আর দরকার নেই',
+            'detail' => 'PHP এখন প্যাচড ভার্সনে, তাই এটা চালু থাকলেও কোনো ঝুঁকি নেই — '
+                . 'বাগটা ইঞ্জিনেই সারানো হয়েছে। এটা ছিল শুধু আপডেটের আগের অস্থায়ী ঢাল, '
+                . 'এখন বন্ধ করার দরকার নেই।',
         ];
     }
 

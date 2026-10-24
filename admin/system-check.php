@@ -94,7 +94,7 @@ try { $dbName = (string) $db->query('SELECT DATABASE()')->fetchColumn(); } catch
 //    আর ২০২৬-১০-২২-এ এই ফাঁদেই আমার নোটে ভুল ভার্সন লেখা ছিল।
 // 🔴 ইঞ্জিন বিশুদ্ধ (php-check.php) — ini/ভার্সন এখান থেকে তুলে পাস করা হয়।
 $phpStat = php_security_status(PHP_VERSION);
-$upStat  = php_upload_progress_status(ini_get('session.upload_progress.enabled'));
+$upStat  = php_upload_progress_status(ini_get('session.upload_progress.enabled'), $phpStat['state'] === 'ok');
 $phpSapi = php_sapi_name();
 
 require __DIR__ . '/includes/layout-top.php';
