@@ -1081,6 +1081,37 @@ Brute-force protection (login_attempts, ৫/১৫মিন), CSRF সব ফর
 - **👁 অভিভাবক-ভিউ প্রিভিউ মোড (২০২৬-০৯-২৪)**: `admin/users.php` → "👁 যেমন দেখাচ্ছে" (POST, নতুন ট্যাব) → `admin/account-preview.php` (`users` সেকশনে ম্যাপ) সেশনে `account_preview_user_id` বসিয়ে `../account`-এ পাঠায় — **আসল পাবলিক পেজটাই** রেন্ডার হয় (আলাদা কপি বানানো হয়নি ইচ্ছাকৃতভাবে: কপি বানালে সময়ের সাথে আসলটার থেকে আলাদা হয়ে যেত, আর ঠিক যে ভুল ধরতে চাওয়া হচ্ছে সেটাই লুকাত)। **🔴 এটা impersonation নয়** — `$_SESSION['user_id']` কখনো বসে না, `user_logged_in()` মিথ্যাই থাকে; `user_current()`-এর শুরুতে প্রিভিউ-শাখা। **🔴 সব লেখা বন্ধ**: `user_preview_block()` বসানো আছে `account-request-submit.php` ও `account-password.php`-এর POST-এ; `account-logout.php` প্রিভিউ হলে শুধু প্রিভিউ থামায়। **🔴 `user_preview_active()` = preview-কী **এবং** `$_SESSION['admin_id']` দুটোই থাকতে হবে** (অ্যাডমিন লগআউট/টাইমআউট = প্রিভিউ শেষ); প্রিভিউ চলাকালে `user_try_remember_login()` কিছু করে না। ব্যানার `user_preview_banner()` (account.php + account-password.php-এ)। ⚠️ POST বলে কেন্দ্রীয় গার্ড `users`-এ **edit** cap চায় — view-only মডারেটর প্রিভিউ করতে পারবেন না (ইচ্ছাকৃত)।
 - **নিয়ম**: নতুন অ্যাডমিন পেজ বানালে (ক) `admin_require_login()` ডাকুন (গার্ড অটো), (খ) মডারেটরকে দিতে চাইলে `admin_page_sections()`-এ ম্যাপ + `admin_permission_sections()`-এ (দরকারে) সেকশন + সাইডবারে `admin_can()` গার্ড; সেন্সিটিভ হলে `admin_super_only_pages()`-এ; নতুন ডিলিট-action হলে `admin_delete_actions()`-এ। **লগইন পেজ একটাই** — মডারেটর নিজের ইউজারনেম/পাসওয়ার্ডে সেখানেই ঢোকে (আলাদা credential = আলাদা লগইন)।
 
+### 🧩 স্টাফ-কাজ — সেকশন×cap-এর উপরে পাতলা স্তর (২০২৬-১০-২৫)
+
+সমস্যা: `orders:edit` দিলে registrations.php-এর ~১০টা হ্যান্ডলার একসাথে খোলে (কনফার্ম · টাকা ·
+সরানো · ডিলিট …)। কখনো একজন স্টাফকে **শুধু একটা কাজ** দিতে হয়। তাই কয়েকটা নামকরা **স্টাফ-কাজ**
+(`admin_staff_tasks()`, `permissions.php`) — প্রতিটা শুধু একটা নির্দিষ্ট **(পেজ, POST-অ্যাকশন)** খোলে।
+
+- **স্টোরেজ**: permissions JSON-এ `{"task:order-confirm":["do"], "task:group-add":["do"]}`।
+  `admin_normalize_permissions()` ও team.php-এর `team_clean_perms()` দুটোই `task:*` কী **পাস-থ্রু** করে
+  (`['do']`)। team.php-তে অ্যাম্বার চেকবক্স (`perms[task:<key>][]=do`)।
+- **হেল্পার** (`permissions.php`): `admin_task_granted($key)` · `admin_task_allows($script,$action)`
+  (কেন্দ্রীয় গার্ড এটাই দেখে) · `admin_task_opens_page($script)` (পেজ খোলার view অনুমতি)।
+- 🔴🔴 **নিরাপত্তা দুই স্তরে**: (১) কেন্দ্রীয় গার্ড (`auth.php`) — এডিট/ডিলিট cap না থাকলেও granted কাজ
+  ঠিক ঐ (পেজ, অ্যাকশন) খুললে ছাড়; **অন্য সব অ্যাকশন আগের মতোই আটকা** (fail-safe)। (২) **আসল সীমা
+  সংশ্লিষ্ট হ্যান্ডলারে** — গার্ড শুধু দরজা খোলে, নিয়ম হ্যান্ডলার যাচাই করে। **নতুন স্টাফ-কাজ বানালে
+  দুটোই লাগবে — allow-তালিকা + হ্যান্ডলার-গার্ড।**
+- **`order-confirm`** → `registrations.php` `update-status`। হ্যান্ডলার-গার্ড: `!super && !admin_can('orders','edit')`
+  হলে **শুধু `status==='confirmed'` ও `$reg['status']==='pending'`** (বাসি/জাল POST-ও আটকায়)।
+- **`group-add`** → `registrations.php` `quick-group` **ও** `course-parcel.php` `action=group`।
+  🔴 **একমুখী**: `$val===0 && !admin_is_super()` → টিক তোলা আটকানো (**সব মডারেটর**, শুধু মূল অ্যাডমিন তুলতে পারেন)।
+  টিক বসালে **কে/কখন** লেখে `reg_group_stamp()` (শেয়ার্ড **`admin/includes/courier-notes.php`**-এ, দুই পেজই ডাকে;
+  `db_has_column()` গার্ড — মাইগ্রেশনের আগে চুপচাপ বাদ)। কলাম: `fb_group_by`/`fb_group_at`/`msgr_group_by`/`msgr_group_at`
+  (`migrate-moderator-group-track.sql`)। **কে দিল তা এমনিতেও কার্যকলাপ লগে আছে** — এই কলাম শুধু সারিতে দেখানোর জন্য।
+- **UI (`registrations.php`)** — render ফাংশনে `$GLOBALS['reg_full_edit']`/`reg_confirm_only`/`reg_can_group`/`reg_can_untick`
+  (পাতার শুরুতে বসানো, `global $typeLabels`-এর মতোই নীতি): `reg_status_cell()` কনফার্ম-অনলি হলে
+  "✓ কনফার্ম" বোতাম/পিল; `reg_group_cell()` একমুখী + "✓ <নাম>"; `reg_pay_cell()`/`reg_pay_panel()`
+  full-edit না হলে **কিছুই রেন্ডার করে না** (টাকা সংবেদনশীল)। 🔴 শুধু-task মডারেটর (orders:view নেই) `?action=view/edit`
+  খুললে তালিকায় redirect — তারা তালিকা থেকেই কাজ করেন। **কলাম-সংখ্যা/colspan কিছুই বদলায়নি** (ঘর খালি হয়, গঠন অটুট)।
+- 🔴 **একমুখী গ্রুপ-টিক সব non-super-এ প্রযোজ্য** (full-edit মডারেটরও তুলতে পারে না) — ইচ্ছাকৃত, "শুধু মূল অ্যাডমিন ফেরাতে পারেন"।
+- **মাইগ্রেশন ও Tailwind রিবিল্ড লাগে না** (`leading-7`/`hover:bg-green-600` কম্পাইলড CSS-এ নেই বলে inline/বাদ)।
+  যাচাই `t/moderator.php` (১৬, আসল MariaDB + আসল লগইন) + course-parcel একমুখী + রেন্ডার-গেটিং + ওভারফ্লো ০।
+
 ## 🔒 PHP ভার্সন ও নিরাপত্তা (২০২৬-১০-২২-এ সংশোধিত)
 
 লোকাল XAMPP: PHP 8.2.12। **ইউজারের লাইভ হোস্টিংয়ে ওয়েব পাতাগুলো চলে `ea-php81` (PHP 8.1)** — cPanel → MultiPHP Manager-এ ইউজার নিজে দেখে জানিয়েছেন।

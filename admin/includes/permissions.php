@@ -122,6 +122,81 @@ function admin_capabilities(): array
     return ['view' => 'দেখা', 'edit' => 'যোগ / এডিট', 'delete' => 'ডিলিট'];
 }
 
+// ─────────────────────────────────────────────────────────────
+// 🧩 স্টাফ-কাজ (সেকশন×cap-এর উপরে পাতলা স্তর, ২০২৬-১০-২৫)
+//
+// সমস্যা: "অর্ডার — এডিট" দিলে registrations.php-এর ~১০টা হ্যান্ডলার একসাথে খোলে
+// (কনফার্ম · টাকা · সরানো · ডিলিট …)। কখনো কখনো একজন স্টাফকে **শুধু একটা কাজ**
+// দিতে হয় — যেমন শুধু পেন্ডিং→কনফার্ম, বা শুধু গ্রুপে যোগ টিক।
+//
+// এখানে প্রতিটা কাজ শুধু একটা নির্দিষ্ট (পেজ, POST-অ্যাকশন) খোলে — আর কিছু নয়।
+// 🔴 নিরাপদ দিকটা নিজে থেকেই আসে: কাজটা না দিলে কেন্দ্রীয় গার্ড ঐ অ্যাকশন আটকায়;
+//    আসল সীমা (যেমন "শুধু confirmed, শুধু pending থেকে") সংশ্লিষ্ট হ্যান্ডলারে যাচাই হয়।
+// ─────────────────────────────────────────────────────────────
+function admin_staff_tasks(): array
+{
+    return [
+        'order-confirm' => [
+            'label' => 'শুধু পেন্ডিং অর্ডার কনফার্ম করা',
+            'hint'  => 'অর্ডার তালিকায় পেন্ডিং অর্ডারে "✓ কনফার্ম" — অন্য স্ট্যাটাস, টাকা, সরানো বা ডিলিট নয়।',
+            'allow' => [['registrations.php', 'update-status']],
+        ],
+        'group-add' => [
+            'label' => 'গ্রুপে যোগ হলে টিক দেওয়া (তোলা যায় না)',
+            'hint'  => 'ফেসবুক/মেসেঞ্জার গ্রুপে যোগ হলে ✓ — একবার দিলে স্টাফ আর তুলতে পারবে না, শুধু মূল অ্যাডমিন পারবেন।',
+            'allow' => [['registrations.php', 'quick-group'], ['course-parcel.php', 'group']],
+        ],
+    ];
+}
+
+// এই স্টাফ-কাজটা মডারেটরকে দেওয়া আছে কিনা (super সবসময় পায়)
+function admin_task_granted(string $key): bool
+{
+    if (admin_is_super()) {
+        return true;
+    }
+    $perms = $_SESSION['admin_permissions'] ?? [];
+    return in_array('do', $perms['task:' . $key] ?? [], true);
+}
+
+// granted কোনো কাজ ঠিক এই (পেজ, POST-অ্যাকশন) খোলে কিনা — কেন্দ্রীয় গার্ড এটাই দেখে
+function admin_task_allows(string $script, string $action): bool
+{
+    if (admin_is_super()) {
+        return true;
+    }
+    foreach (admin_staff_tasks() as $key => $t) {
+        if (!admin_task_granted($key)) {
+            continue;
+        }
+        foreach ($t['allow'] as $pair) {
+            if (($pair[0] ?? '') === $script && ($pair[1] ?? '') === $action) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// granted কোনো কাজ এই পেজে কিছু করতে দেয় কিনা — তাহলে পেজটা খোলার (view) অনুমতিও দরকার
+function admin_task_opens_page(string $script): bool
+{
+    if (admin_is_super()) {
+        return true;
+    }
+    foreach (admin_staff_tasks() as $key => $t) {
+        if (!admin_task_granted($key)) {
+            continue;
+        }
+        foreach ($t['allow'] as $pair) {
+            if (($pair[0] ?? '') === $script) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 // POST-এ যেসব action-মার্কার (GET বা POST) মানে "ডিলিট" — বাকি সব "এডিট" ধরা হয়।
 // (২০২৬-০৯-১৪ অডিটে পাওয়া — প্রতিটা ডিলিট-পথ এই তালিকায়; কোনো নীরব ডিলিট নেই)
 function admin_delete_actions(): array
@@ -147,6 +222,13 @@ function admin_normalize_permissions($raw): array
         return $out;
     }
     foreach ($raw as $sec => $caps) {
+        // 🧩 স্টাফ-কাজ (task:*) — view/edit/delete নয়, একটাই বুলিয়ান 'do'
+        if (strncmp((string) $sec, 'task:', 5) === 0) {
+            if (in_array('do', (array) $caps, true)) {
+                $out[$sec] = ['do'];
+            }
+            continue;
+        }
         $c = array_values(array_intersect(['view', 'edit', 'delete'], (array) $caps));
         if ($c) {
             if (!in_array('view', $c, true)) {
@@ -196,6 +278,11 @@ function admin_can_action(string $script, string $cap): bool
     }
     if (in_array($script, admin_super_only_pages(), true)) {
         return false;
+    }
+    // 🧩 granted স্টাফ-কাজ এই পেজে কিছু করতে দিলে, পেজটা খোলার (view) অনুমতিও থাকে।
+    // লেখা (edit/delete) আলাদা করে কেন্দ্রীয় গার্ডে admin_task_allows() দিয়ে যাচাই হয়।
+    if ($cap === 'view' && admin_task_opens_page($script)) {
+        return true;
     }
     // manage.php entity-নির্ভর: ?entity=courses → content:courses সেকশন
     if ($script === 'manage.php') {

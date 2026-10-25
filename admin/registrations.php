@@ -13,6 +13,21 @@ $db = get_db();
 $pageTitle = 'রেজিস্ট্রেশন/অর্ডার';
 $action = $_GET['action'] ?? 'list';
 
+// 🧩 মডারেটরের ক্ষমতা-ফ্ল্যাগ (স্টাফ-কাজ, ২০২৬-১০-২৫) — render ফাংশনে $GLOBALS দিয়ে পড়া হয়
+$modFullEdit    = admin_can('orders', 'edit');                            // পুরো অর্ডার-এডিট (super হলেও true)
+$GLOBALS['reg_full_edit']    = $modFullEdit;
+$GLOBALS['reg_confirm_only'] = !$modFullEdit && admin_task_granted('order-confirm'); // শুধু পেন্ডিং→কনফার্ম
+$GLOBALS['reg_can_group']    = $modFullEdit || admin_task_granted('group-add');      // গ্রুপ টিক দিতে পারে
+$GLOBALS['reg_can_untick']   = admin_is_super();                          // 🔴 গ্রুপ টিক তোলা শুধু মূল অ্যাডমিন
+
+// 🧩 শুধু স্টাফ-কাজ দিয়ে ঢোকা মডারেটরের (orders:view নেই) বিস্তারিত/এডিট পাতা দরকার নেই —
+//    তারা তালিকা থেকেই "✓ কনফার্ম" ও গ্রুপ-টিক করেন; তাই তালিকায় ফেরত।
+if (($action === 'view' || $action === 'edit')
+    && !admin_is_super() && !admin_can('orders', 'view')) {
+    set_flash('success', 'তালিকা থেকেই "✓ কনফার্ম" ও গ্রুপ-টিক করুন।');
+    redirect('registrations.php');
+}
+
 $statusLabels = [
     'pending'   => ['পেন্ডিং', 'bg-yellow-100 text-yellow-800'],
     'confirmed' => ['কনফার্ম', 'bg-blue-100 text-blue-800'],
@@ -91,6 +106,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'update-status') {
         $reg = $stmt->fetch();
 
         if ($reg) {
+            // 🔴 স্টাফ-কাজ "শুধু কনফার্ম": super নয় ও পুরো অর্ডার-এডিট নেই এমন মডারেটর
+            //    শুধু পেন্ডিং→confirmed করতে পারবে (বাসি/জাল POST-ও এখানেই আটকায়)।
+            if (!admin_is_super() && !admin_can('orders', 'edit')
+                && ($status !== 'confirmed' || ($reg['status'] ?? '') !== 'pending')) {
+                set_flash('error', 'আপনি শুধু পেন্ডিং অর্ডার কনফার্ম করতে পারবেন।');
+                redirect(reg_anchor_url($returnUrl, $id));
+            }
             $db->prepare('UPDATE registrations SET status = :s WHERE id = :id')->execute(['s' => $status, 'id' => $id]);
 
             /* 📒 কনফার্ম (বা shipped/delivered) করলে খাতা **নিজে থেকেই** বসে যায় — জমা ০।
@@ -182,7 +204,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'quick-group') {
     $column = ($_POST['field'] ?? '') === 'messenger' ? 'messenger_group_added' : 'fb_group_added';
     $value = (int) ($_POST['value'] ?? 0) ? 1 : 0;
 
+    // 🔴 একমুখী: মডারেটর (super নয়) গ্রুপের টিক তুলতে পারবে না — শুধু দিতে পারবে।
+    //    ভুল হলে একমাত্র মূল অ্যাডমিন ফিরিয়ে আনতে পারবেন।
+    if ($value === 0 && !admin_is_super()) {
+        set_flash('error', 'গ্রুপের টিক তোলার অনুমতি নেই — ভুল হলে মূল অ্যাডমিনকে জানান।');
+        redirect(reg_anchor_url($returnUrl, $id));
+    }
+
     $db->prepare("UPDATE registrations SET $column = :v WHERE id = :id")->execute(['v' => $value, 'id' => $id]);
+    reg_group_stamp($db, $id, $column, $value);   // কে/কখন টিক দিল
 
     $label = $column === 'messenger_group_added' ? 'মেসেঞ্জার' : 'ফেসবুক';
     set_flash('success', $value ? ($label . ' গ্রুপে যোগ — টিক দেওয়া হলো।') : ($label . ' গ্রুপের টিক তুলে নেওয়া হলো।'));
@@ -1103,6 +1133,25 @@ $hasActiveFilters = !empty($activeFilters);
 function reg_status_cell(array $row, array $statusLabels, string $currentListUrl): void
 {
     $s = $statusLabels[$row['status']] ?? ['?', 'bg-gray-100'];
+
+    // 🧩 "শুধু কনফার্ম" মডারেটর: পুরো ড্রপডাউন নয় — পেন্ডিং হলে "✓ কনফার্ম" বোতাম, নাহলে রঙিন পিল।
+    if (!empty($GLOBALS['reg_confirm_only'])) {
+        if (($row['status'] ?? '') === 'pending') {
+            ?>
+            <form method="post" action="registrations.php?action=update-status"
+                  onsubmit="return confirmSubmit(this, 'এই অর্ডারটি কনফার্ম করবেন?', 'কনফার্ম?')">
+                <?= csrf_field() ?>
+                <input type="hidden" name="id" value="<?= (int) $row['id'] ?>">
+                <input type="hidden" name="status" value="confirmed">
+                <input type="hidden" name="return_url" value="<?= e($currentListUrl) ?>">
+                <button type="submit" class="px-3 py-1.5 rounded-full text-xs font-bold bg-green-500 text-white whitespace-nowrap">✓ কনফার্ম</button>
+            </form>
+            <?php
+        } else {
+            echo '<span class="inline-block px-3 py-1.5 rounded-full text-xs font-semibold ' . e($s[1]) . '">' . e($s[0]) . '</span>';
+        }
+        return;
+    }
     ?>
     <form method="post" action="registrations.php?action=update-status">
         <?= csrf_field() ?>
@@ -1350,28 +1399,46 @@ function reg_group_cell(array $row, string $currentListUrl): void
         echo '<span class="text-gray-300 text-xs">—</span>';   // গ্রুপ শুধু কোর্সে প্রযোজ্য
         return;
     }
+    // 🧩 গ্রুপ-অনুমতি: দিতে পারে (reg_can_group) / তুলতে পারে (reg_can_untick = শুধু super)
+    $canGroup  = !isset($GLOBALS['reg_can_group'])  || !empty($GLOBALS['reg_can_group']);
+    $canUntick = !isset($GLOBALS['reg_can_untick']) || !empty($GLOBALS['reg_can_untick']);
     $toggles = [
-        ['field' => 'fb',        'label' => 'ফেসবুক',    'short' => 'F', 'column' => 'fb_group_added'],
-        ['field' => 'messenger', 'label' => 'মেসেঞ্জার', 'short' => 'M', 'column' => 'messenger_group_added'],
+        ['field' => 'fb',        'label' => 'ফেসবুক',    'short' => 'F', 'column' => 'fb_group_added',        'by' => 'fb_group_by'],
+        ['field' => 'messenger', 'label' => 'মেসেঞ্জার', 'short' => 'M', 'column' => 'messenger_group_added', 'by' => 'msgr_group_by'],
     ];
-    echo '<div class="flex gap-1">';
+    echo '<div class="flex gap-1 items-center">';
     foreach ($toggles as $t) {
-        $on = !empty($row[$t['column']]);
+        $on    = !empty($row[$t['column']]);
+        $title = $t['label'] . ' গ্রুপে যোগ হয়েছে?' . ($on ? ' (টিক দেওয়া আছে)' : '');
+        // স্ট্যাটিক (ফর্ম নয়): টিক আছে অথচ তোলার অনুমতি নেই, অথবা টিক নেই অথচ দেওয়ার অনুমতি নেই
+        if (($on && !$canUntick) || (!$on && !$canGroup)) {
+            $cls  = $on ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400 border border-gray-200';
+            $lock = ($on && !$canUntick) ? ' — তোলা যাবে না' : '';
+            echo '<span title="' . e($title . $lock) . '" style="line-height:1.75rem" class="w-7 h-7 inline-block text-center rounded-full text-xs font-bold ' . $cls . '">' . e($t['short']) . '</span>';
+            continue;
+        }
         $onsubmit = $on
             ? "return confirmSubmit(this, '" . $t['label'] . " গ্রুপের টিক তুলে ফেলবেন? এই শিক্ষার্থী গ্রুপে নেই বলে চিহ্নিত হবে।', 'টিক তুলবেন?')"
             : 'return true';
         ?>
         <form method="post" action="registrations.php?action=quick-group" class="inline" onsubmit="<?= e($onsubmit) ?>;">
             <?= csrf_field() ?>
-            <input type="hidden" name="id" value="<?= $row['id'] ?>">
+            <input type="hidden" name="id" value="<?= (int) $row['id'] ?>">
             <input type="hidden" name="field" value="<?= e($t['field']) ?>">
             <input type="hidden" name="value" value="<?= $on ? 0 : 1 ?>">
             <input type="hidden" name="return_url" value="<?= e($currentListUrl) ?>">
-            <button type="submit" title="<?= e($t['label']) ?> গ্রুপে যোগ হয়েছে?<?= $on ? ' (টিক দেওয়া আছে)' : '' ?>" class="w-7 h-7 rounded-full text-xs font-bold <?= $on ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400 border border-gray-200' ?>"><?= e($t['short']) ?></button>
+            <button type="submit" title="<?= e($title) ?>" class="w-7 h-7 rounded-full text-xs font-bold <?= $on ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400 border border-gray-200' ?>"><?= e($t['short']) ?></button>
         </form>
         <?php
     }
     echo '</div>';
+    // 🧩 কে টিক দিল (মাইগ্রেশনের পরে) — ছোট করে প্রথম যেটা পাওয়া যায়
+    foreach ($toggles as $t) {
+        if (!empty($row[$t['column']]) && (string) ($row[$t['by']] ?? '') !== '') {
+            echo '<div class="text-[10px] text-gray-400 mt-0.5 whitespace-nowrap" title="গ্রুপে যোগ করেছেন">✓ ' . e((string) $row[$t['by']]) . '</div>';
+            break;
+        }
+    }
 }
 
 // ── 💰 টাকার অবস্থা (তালিকার সরু কলাম) — ক্লিকে নিচের খাতা-প্যানেল খোলে/বন্ধ হয়।
@@ -1379,6 +1446,11 @@ function reg_group_cell(array $row, string $currentListUrl): void
 // চওড়া ঘর যোগ করলে ডেস্কটপেও টেবিল কেটে যাচ্ছিল (২০২৬-০৯-২২, ইউজারের স্ক্রিনশট)।
 function reg_pay_cell(array $row, array $summary): void
 {
+    // 🧩 টাকার হিসাব সংবেদনশীল — শুধু পুরো অর্ডার-এডিট থাকলে দেখায়
+    if (empty($GLOBALS['reg_full_edit'])) {
+        echo '<span class="text-gray-300 text-xs">—</span>';
+        return;
+    }
     ?>
     <button type="button" class="text-left whitespace-nowrap" onclick="togglePayPanel(<?= (int) $row['id'] ?>)" title="টাকার খাতা খুলুন/বন্ধ করুন">
         <?= pay_status_chip($summary) ?><span class="text-[10px] text-indigo-600 font-semibold"> ▾</span>
@@ -1391,6 +1463,10 @@ function reg_pay_cell(array $row, array $summary): void
 // GET-এ কখনো লেখা নয়); সেভ চাপলে তবেই সারিগুলো তৈরি হয়।
 function reg_pay_panel(PDO $db, array $row, array $ledger, string $returnUrl, int $colspan): void
 {
+    // 🧩 খাতার প্যানেল শুধু পুরো অর্ডার-এডিট থাকলে (টাকা সংবেদনশীল)
+    if (empty($GLOBALS['reg_full_edit'])) {
+        return;
+    }
     $rid     = (int) $row['id'];
     $isNew   = !$ledger;
     $rows    = $isNew ? pay_build_plan($db, $row) : $ledger;

@@ -398,6 +398,10 @@ CREATE TABLE registrations (
     delivery_zone VARCHAR(10) NOT NULL DEFAULT '',   -- স্থায়ী ডেলিভারি এলাকা (dhaka/near/outside) — কোর্স পার্সেলে একবার সেট, সব মাসে প্রযোজ্য; মাস-ভিত্তিক ব্যতিক্রম courier_batches.delivery_zone-এ
     fb_group_added TINYINT(1) NOT NULL DEFAULT 0, -- Facebook গ্রুপে যোগ হয়েছে? (কোর্স ট্র্যাকিং)
     messenger_group_added TINYINT(1) NOT NULL DEFAULT 0, -- Messenger গ্রুপে যোগ হয়েছে? (কোর্স ট্র্যাকিং)
+    fb_group_by VARCHAR(50) NOT NULL DEFAULT '',   -- ফেসবুক গ্রুপ টিক কে দিয়েছে (মডারেটর ট্র্যাকিং)
+    fb_group_at DATETIME NULL,                     -- ফেসবুক গ্রুপ টিক কখন
+    msgr_group_by VARCHAR(50) NOT NULL DEFAULT '', -- মেসেঞ্জার গ্রুপ টিক কে দিয়েছে
+    msgr_group_at DATETIME NULL,                   -- মেসেঞ্জার গ্রুপ টিক কখন
     income_approved TINYINT(1) NOT NULL DEFAULT 0, -- এই অর্ডার থেকে আয় হিসেবে অনুমোদন করা হয়েছে কিনা (income টেবিলে ডুপ্লিকেট এন্ট্রি ঠেকাতে)
     income_amount DECIMAL(10,2) NULL,               -- অনুমোদনের সময় যে পরিমাণ আয় ধরা হয়েছিল
     due_amount DECIMAL(10,2) NOT NULL DEFAULT 0,   -- এখনো কত টাকা বাকি (তালিকা থেকে অ্যাডমিন লেখেন; 🔴 আয়ের হিসাব ছোঁয় না — শুধু স্মরণ/ট্র্যাকিং)

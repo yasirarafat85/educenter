@@ -23,6 +23,12 @@ function team_clean_perms(array $sections): string
             $out[$key] = $caps;
         }
     }
+    // 🧩 স্টাফ-কাজ (task:*) — একটাই বুলিয়ান 'do'
+    foreach (array_keys(admin_staff_tasks()) as $tk) {
+        if (in_array('do', (array) ($raw['task:' . $tk] ?? []), true)) {
+            $out['task:' . $tk] = ['do'];
+        }
+    }
     return json_encode($out, JSON_UNESCAPED_UNICODE);
 }
 
@@ -144,11 +150,29 @@ $renderCapGrid = function (array $currentMap) use ($sections, $renderCapRow): st
         $h .= '</div>';
         return $h;
     };
+    // 🧩 স্টাফ-কাজ — সেকশন-অনুমতি ছাড়াই একটামাত্র নির্দিষ্ট কাজ (কনফার্ম / গ্রুপ-টিক)
+    $taskHtml = '';
+    $tasks = admin_staff_tasks();
+    if ($tasks) {
+        $taskHtml = '<p class="text-xs font-bold text-gray-400 mt-3 mb-1" style="letter-spacing:.05em;text-transform:uppercase">নির্দিষ্ট স্টাফ-কাজ</p>';
+        $taskHtml .= '<div class="grid grid-cols-1 gap-2">';
+        foreach ($tasks as $tk => $t) {
+            $ck = in_array('do', $currentMap['task:' . $tk] ?? [], true) ? 'checked' : '';
+            $taskHtml .= '<label class="p-3 rounded-xl border border-amber-200 bg-amber-50 flex items-start gap-2 cursor-pointer">'
+                . '<input type="checkbox" class="mt-0.5" name="perms[task:' . e($tk) . '][]" value="do" ' . $ck . '>'
+                . '<span class="min-w-0"><span class="block text-sm font-semibold text-gray-800">' . e($t['label']) . '</span>'
+                . '<span class="block text-xs text-gray-500">' . e($t['hint'] ?? '') . '</span></span>'
+                . '</label>';
+        }
+        $taskHtml .= '</div>';
+        $taskHtml .= '<p class="text-xs text-gray-500 mt-1">এই কাজগুলোর জন্য উপরে "অর্ডার — দেখা" আলাদা করে টিক দিতে হবে না, নিজে থেকেই তালিকা খুলবে।</p>';
+    }
     return '<div class="perm-grid space-y-1">'
         . '<div class="flex flex-wrap gap-2 mb-2">'
         . '<button type="button" class="perm-all text-xs font-bold text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg">✓ সম্পূর্ণ অ্যাক্সেস দিন</button>'
         . '<button type="button" class="perm-none text-xs font-bold text-gray-600 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg">সব বাদ</button>'
         . '</div>'
+        . $taskHtml
         . $section('কনটেন্ট (প্রতিটা আলাদা)', $content)
         . $section('অন্যান্য অংশ', $others)
         . '</div>';

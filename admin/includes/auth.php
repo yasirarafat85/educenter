@@ -128,7 +128,9 @@ function admin_require_login(): void
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $act = $_POST['action'] ?? ($_GET['action'] ?? '');
         $cap = in_array($act, admin_delete_actions(), true) ? 'delete' : 'edit';
-        if (!admin_can_action($script, $cap)) {
+        // 🧩 স্টাফ-কাজ ঠিক এই (পেজ, অ্যাকশন) খুললে এডিট/ডিলিট cap না থাকলেও ছাড় —
+        //    আসল সীমা (যেমন "শুধু confirmed, pending থেকে") সংশ্লিষ্ট হ্যান্ডলারে যাচাই হয়।
+        if (!admin_can_action($script, $cap) && !admin_task_allows($script, $act)) {
             set_flash('error', $cap === 'delete' ? 'দুঃখিত, এখানে ডিলিট করার অনুমতি নেই।' : 'দুঃখিত, এখানে পরিবর্তন করার অনুমতি নেই।');
             $ref = $_SERVER['HTTP_REFERER'] ?? '';
             $host = $_SERVER['HTTP_HOST'] ?? '';

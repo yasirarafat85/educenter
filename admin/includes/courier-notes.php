@@ -133,3 +133,34 @@ function render_note_chips(array $notes, string $deleteFormAction = '', int $reg
         echo '</span>';
     }
 }
+
+// 🧩 গ্রুপ টিক কে/কখন দিল — সারিতে দেখানোর জন্য (registrations.php ও course-parcel.php
+// দুটোই ডাকে বলে এখানে শেয়ার্ড)। 🔴 কলামের নাম কোডে লেখা ধ্রুবক, কখনো POST থেকে নয়।
+// মাইগ্রেশন (migrate-moderator-group-track.sql) না চললে db_has_column গার্ডে চুপচাপ বাদ।
+if (!function_exists('reg_group_stamp')) {
+    function reg_group_stamp(PDO $db, int $id, string $addedCol, int $value): void
+    {
+        $map = [
+            'fb_group_added'        => ['fb_group_by', 'fb_group_at'],
+            'messenger_group_added' => ['msgr_group_by', 'msgr_group_at'],
+        ];
+        if (!isset($map[$addedCol]) || $id <= 0) {
+            return;
+        }
+        [$byCol, $atCol] = $map[$addedCol];
+        if (!db_has_column($db, 'registrations', $byCol)) {
+            return;
+        }
+        try {
+            if ($value) {
+                $db->prepare("UPDATE registrations SET $byCol = :u, $atCol = NOW() WHERE id = :id")
+                   ->execute(['u' => mb_substr((string) ($_SESSION['admin_username'] ?? ''), 0, 50), 'id' => $id]);
+            } else {
+                $db->prepare("UPDATE registrations SET $byCol = '', $atCol = NULL WHERE id = :id")
+                   ->execute(['id' => $id]);
+            }
+        } catch (PDOException $e) {
+            /* চুপচাপ */
+        }
+    }
+}

@@ -212,7 +212,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'group') {
         $field = ($_POST['field'] ?? '') === 'messenger' ? 'messenger_group_added' : 'fb_group_added';
         $val = (int) ($_POST['value'] ?? 0) ? 1 : 0;
+        // 🔴 একমুখী: মডারেটর (super নয়) গ্রুপের টিক তুলতে পারবে না — শুধু মূল অ্যাডমিন পারবেন।
+        if ($val === 0 && !admin_is_super()) {
+            set_flash('error', 'গ্রুপের টিক তোলার অনুমতি নেই — ভুল হলে মূল অ্যাডমিনকে জানান।');
+            redirect(cp_url($itemId, $month));
+        }
         $db->prepare("UPDATE registrations SET $field = :v WHERE id = :id")->execute(['v' => $val, 'id' => $regId]);
+        reg_group_stamp($db, $regId, $field, $val);   // কে/কখন টিক দিল
         redirect(cp_url($itemId, $month));
 
     } elseif ($action === 'zone') {
