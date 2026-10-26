@@ -31,14 +31,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── আপলোড ──
     if ($action === 'upload') {
-        $phoneRaw = trim((string) ($_POST['phone'] ?? ''));
-        $phone    = bd_phone_canonical($phoneRaw);
-        $student  = trim((string) ($_POST['student_name'] ?? ''));
-        $title    = trim((string) ($_POST['title'] ?? ''));
-        $batchId  = (int) ($_POST['item_batch'] ?? 0);
+        $title   = trim((string) ($_POST['title'] ?? ''));
+        $batchId = (int) ($_POST['item_batch'] ?? 0);
+        $pick    = (int) ($_POST['student_pick'] ?? 0);
+
+        // 🔴 শিক্ষার্থী বেছে নিলে মোবাইল/নাম/কোর্স-ব্যাচ সব রেজিস্ট্রেশন থেকে — POST-এর নাম/নম্বরে
+        //    কখনো ভরসা নয় (move-course হ্যান্ডলারের একই নিয়ম)। বেছে না নিলে হাতে দেওয়া ফলব্যাক
+        //    (তালিকায় নেই এমন পুরনো শিক্ষার্থীর জন্য)।
+        $phone = '';
+        $student = '';
+        $snap = fin_resolve_batch($db, $batchId);
+        if ($pick > 0) {
+            try {
+                $st = $db->prepare(
+                    "SELECT phone, customer_name, item_id FROM registrations
+                      WHERE id = :id AND type = 'course' AND status <> 'cancelled'"
+                );
+                $st->execute(['id' => $pick]);
+                $reg = $st->fetch();
+            } catch (Throwable $e) { $reg = null; }
+            if ($reg) {
+                $phone   = bd_phone_canonical((string) $reg['phone']);
+                $student = trim((string) $reg['customer_name']);
+                $snap    = fin_resolve_batch($db, (int) $reg['item_id']); // বর্তমান কোর্স/ব্যাচ নাম
+            }
+        } else {
+            $phone   = bd_phone_canonical(trim((string) ($_POST['phone'] ?? '')));
+            $student = trim((string) ($_POST['student_name'] ?? ''));
+        }
 
         $err = '';
-        if (strlen($phone) !== 11 || $phone[0] !== '0') { $err = 'মোবাইল নম্বরটি সঠিক নয় (01XXXXXXXXX দিন)।'; }
+        if (strlen($phone) !== 11 || $phone[0] !== '0') { $err = 'শিক্ষার্থী বেছে নিন, অথবা সঠিক মোবাইল নম্বর দিন (01XXXXXXXXX)।'; }
         elseif ($student === '')                        { $err = 'শিক্ষার্থীর নাম দিন।'; }
         elseif ($title === '')                          { $err = 'রিপোর্টের নাম দিন (যেমন "বার্ষিক রিপোর্ট কার্ড")।'; }
 
@@ -60,9 +83,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             set_flash('error', $err);
             redirect('reports.php');
         }
-
-        // কোর্স/ব্যাচ স্ন্যাপশট — DB থেকে যাচাই (POST-এর নামে ভরসা নয়), ঐচ্ছিক
-        $snap = fin_resolve_batch($db, $batchId);
 
         // ফাইল সেভ — র‍্যান্ডম নাম (মূল নাম guess করা যাবে না)
         $dir  = report_upload_dir();
@@ -126,6 +146,27 @@ if ($ready) {
     } catch (Throwable $e) { $rows = []; }
 }
 
+// ব্যাচ-অনুযায়ী শিক্ষার্থীর তালিকা (ফর্মের ধাপ ২ dropdown — AJAX নেই, তাই আগেই রেন্ডার করা JSON)
+// 🔴 item_id = course_batches.id (type='course'), তাই ব্যাচ-পিকারের value ধরেই গ্রুপ করা যায়।
+$batchStudents = [];
+if ($ready && $canEdit) {
+    try {
+        $srs = $db->query(
+            "SELECT id, item_id, customer_name, phone FROM registrations
+              WHERE type = 'course' AND item_id IS NOT NULL AND status <> 'cancelled'
+              ORDER BY customer_name ASC, id ASC"
+        )->fetchAll();
+        foreach ($srs as $s) {
+            $bid = (int) $s['item_id'];
+            $batchStudents[$bid][] = [
+                (int) $s['id'],
+                (string) ($s['customer_name'] !== '' ? $s['customer_name'] : 'নামহীন'),
+                bd_phone_canonical((string) $s['phone']),
+            ];
+        }
+    } catch (Throwable $e) { $batchStudents = []; }
+}
+
 require __DIR__ . '/includes/layout-top.php';
 ?>
 
@@ -139,44 +180,59 @@ require __DIR__ . '/includes/layout-top.php';
 
 <div class="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-5 text-sm text-blue-800 flex items-start gap-2">
     <i data-lucide="info" class="w-5 h-5 shrink-0 mt-0.5"></i>
-    <div>অভিভাবক যে <strong>মোবাইল নম্বরে লগইন করেন</strong> (= রেজিস্ট্রেশনের নম্বর) ঠিক সেই নম্বরেই রিপোর্ট আপলোড করুন —
-    তবেই তিনি নিজের অ্যাকাউন্টে রিপোর্টটি দেখতে পাবেন। PDF সরাসরি লিংক দিয়ে কেউ খুলতে পারবে না; শুধু ঐ অভিভাবক লগইন করে দেখবেন।</div>
+    <div>কোর্স/ব্যাচ বেছে নিলে ঐ ব্যাচের <strong>শিক্ষার্থীর তালিকা</strong> দেখাবে — নাম বেছে নিলে তার
+    রেজিস্ট্রেশনের <strong>মোবাইল নম্বরটিই</strong> (অভিভাবক যেটায় লগইন করেন) অটো ব্যবহার হবে, আলাদা করে লিখতে হবে না।
+    অভিভাবক নিজের অ্যাকাউন্টে লগইন করে শুধু নিজের রিপোর্টটি দেখবেন — PDF সরাসরি লিংক দিয়ে কেউ খুলতে পারবে না।</div>
 </div>
 
 <?php if ($canEdit && $ready): ?>
-<form method="post" enctype="multipart/form-data" class="bg-white rounded-2xl shadow p-5 mb-6" onsubmit="return repValidate(this)">
+<form method="post" enctype="multipart/form-data" class="bg-white rounded-2xl shadow p-5 mb-6 space-y-4" onsubmit="return repValidate(this)">
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="upload">
-    <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2"><i data-lucide="upload" class="w-5 h-5 text-indigo-500"></i> নতুন রিপোর্ট আপলোড</h3>
+    <h3 class="font-bold text-gray-800 flex items-center gap-2"><i data-lucide="upload" class="w-5 h-5 text-indigo-500"></i> নতুন রিপোর্ট আপলোড</h3>
 
-    <div class="grid sm:grid-cols-2 gap-4">
-        <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">মোবাইল নম্বর * <span class="text-gray-400 font-normal">(অভিভাবক যেটায় লগইন করেন)</span></label>
-            <input type="text" name="phone" inputmode="numeric" placeholder="01XXXXXXXXX" class="w-full border rounded-lg px-3 py-2 text-sm" style="min-width:0">
-        </div>
-        <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">শিক্ষার্থীর নাম *</label>
-            <input type="text" name="student_name" placeholder="শিশুর পুরো নাম" class="w-full border rounded-lg px-3 py-2 text-sm" style="min-width:0">
-        </div>
-        <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">রিপোর্টের নাম *</label>
-            <input type="text" name="title" placeholder="যেমন: বার্ষিক রিপোর্ট কার্ড" class="w-full border rounded-lg px-3 py-2 text-sm" style="min-width:0">
-        </div>
-        <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">কোর্স / ব্যাচ <span class="text-gray-400 font-normal">(ঐচ্ছিক)</span></label>
-            <select name="item_batch" data-picker class="w-full border rounded-lg px-3 py-2 text-sm">
-                <option value="0">— কোর্স/ব্যাচ (ঐচ্ছিক) —</option>
-                <?= fin_batch_select_options(0, $db) ?>
-            </select>
-        </div>
+    <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">কোর্স / ব্যাচ *</label>
+        <select name="item_batch" id="repBatchSelect" data-picker class="w-full border rounded-lg px-3 py-2 text-sm">
+            <option value="0">— কোর্স / ব্যাচ বেছে নিন —</option>
+            <?= fin_batch_select_options(0, $db) ?>
+        </select>
     </div>
 
-    <div class="mt-4">
+    <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">ধাপ ৩ — শিক্ষার্থী *</label>
+        <select name="student_pick" id="repStudent" class="w-full border rounded-lg px-3 py-2 text-sm" disabled>
+            <option value="0">— আগে কোর্স/ব্যাচ বেছে নিন —</option>
+        </select>
+        <p id="repStudentInfo" class="text-xs text-gray-500 mt-1"></p>
+    </div>
+
+    <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">রিপোর্টের নাম *</label>
+        <input type="text" name="title" placeholder="যেমন: বার্ষিক রিপোর্ট কার্ড" class="w-full border rounded-lg px-3 py-2 text-sm" style="min-width:0">
+    </div>
+
+    <div>
         <label class="block text-xs font-semibold text-gray-600 mb-1">PDF ফাইল * <span class="text-gray-400 font-normal">(শুধু PDF, সর্বোচ্চ <?= REPORT_MAX_MB ?> MB)</span></label>
         <input type="file" name="pdf" accept="application/pdf,.pdf" class="w-full border rounded-lg px-3 py-2 text-sm bg-gray-50">
     </div>
 
-    <div class="mt-4">
+    <details class="rep-manual border-t pt-3">
+        <summary class="text-xs font-semibold text-indigo-600 cursor-pointer">তালিকায় নেই? হাতে মোবাইল ও নাম দিন (পুরনো শিক্ষার্থী)</summary>
+        <div class="grid sm:grid-cols-2 gap-4 mt-3">
+            <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">মোবাইল নম্বর <span class="text-gray-400 font-normal">(অভিভাবক যেটায় লগইন করেন)</span></label>
+                <input type="text" name="phone" inputmode="numeric" placeholder="01XXXXXXXXX" class="w-full border rounded-lg px-3 py-2 text-sm" style="min-width:0">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">শিক্ষার্থীর নাম</label>
+                <input type="text" name="student_name" placeholder="শিশুর পুরো নাম" class="w-full border rounded-lg px-3 py-2 text-sm" style="min-width:0">
+            </div>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">⚠️ অভিভাবক যে নম্বরে লগইন করেন ঠিক সেই নম্বর দিন, নাহলে তিনি রিপোর্টটি দেখতে পাবেন না।</p>
+    </details>
+
+    <div>
         <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2.5 rounded-xl text-sm inline-flex items-center gap-2">
             <i data-lucide="upload" class="w-4 h-4"></i> আপলোড করুন
         </button>
@@ -242,10 +298,61 @@ require __DIR__ . '/includes/layout-top.php';
 </div>
 
 <script>
+// ধাপ ১ (ব্যাচ) বদলালে ধাপ ২ (শিক্ষার্থী) dropdown ভরে — AJAX নেই, সার্ভারে আগেই রেন্ডার করা JSON
+(function () {
+    var BS = <?= json_encode($batchStudents, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    var bsel = document.getElementById('repBatchSelect');
+    var ssel = document.getElementById('repStudent');
+    var info = document.getElementById('repStudentInfo');
+    if (!bsel || !ssel) { return; }
+
+    function opt(v, t) { var o = document.createElement('option'); o.value = v; o.textContent = t; return o; }
+    function setInfo(t) { if (info) { info.textContent = t || ''; } }
+
+    function fill() {
+        var bid = parseInt(bsel.value || '0', 10) || 0;
+        var list = (BS[bid] || []);
+        ssel.innerHTML = '';
+        setInfo('');
+        if (!bid) {
+            ssel.disabled = true;
+            ssel.appendChild(opt('0', '— আগে কোর্স/ব্যাচ বেছে নিন —'));
+            return;
+        }
+        if (!list.length) {
+            ssel.disabled = true;
+            ssel.appendChild(opt('0', '— এই ব্যাচে কোনো শিক্ষার্থী নেই —'));
+            setInfo('এই ব্যাচে রেজিস্ট্রেশন পাওয়া যায়নি — নিচে "তালিকায় নেই?" খুলে হাতে মোবাইল ও নাম দিন।');
+            return;
+        }
+        ssel.disabled = false;
+        ssel.appendChild(opt('0', '— শিক্ষার্থী বেছে নিন (' + list.length + ' জন) —'));
+        list.forEach(function (s) {
+            var o = opt(String(s[0]), s[1] + ' — ' + s[2]);
+            o.setAttribute('data-phone', s[2]);
+            ssel.appendChild(o);
+        });
+    }
+
+    bsel.addEventListener('change', fill);
+    ssel.addEventListener('change', function () {
+        var o = ssel.options[ssel.selectedIndex];
+        var ph = o ? o.getAttribute('data-phone') : '';
+        setInfo(ph ? ('📱 এই নম্বরে লগইন করে দেখবেন: ' + ph) : '');
+    });
+    fill();
+})();
+
 function repValidate(f) {
-    var ph = (f.phone.value || '').replace(/[^0-9]/g, '');
-    if (ph.length < 10) { alert('সঠিক মোবাইল নম্বর দিন।'); return false; }
-    if (!(f.student_name.value || '').trim()) { alert('শিক্ষার্থীর নাম দিন।'); return false; }
+    var pick = f.student_pick ? (parseInt(f.student_pick.value || '0', 10) || 0) : 0;
+    if (pick <= 0) {
+        var ph = (f.phone && f.phone.value || '').replace(/[^0-9]/g, '');
+        var nm = (f.student_name && f.student_name.value || '').trim();
+        if (ph.length < 10 || !nm) {
+            alert('তালিকা থেকে শিক্ষার্থী বেছে নিন, অথবা নিচের "তালিকায় নেই?" খুলে মোবাইল ও নাম দিন।');
+            return false;
+        }
+    }
     if (!(f.title.value || '').trim()) { alert('রিপোর্টের নাম দিন।'); return false; }
     if (!f.pdf.files || !f.pdf.files.length) { alert('PDF ফাইল বাছাই করুন।'); return false; }
     return true;
