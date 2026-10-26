@@ -152,7 +152,7 @@ $batchStudents = [];
 if ($ready && $canEdit) {
     try {
         $srs = $db->query(
-            "SELECT id, item_id, customer_name, phone FROM registrations
+            "SELECT id, item_id, customer_name, phone, facebook_id FROM registrations
               WHERE type = 'course' AND item_id IS NOT NULL AND status <> 'cancelled'
               ORDER BY customer_name ASC, id ASC"
         )->fetchAll();
@@ -162,6 +162,7 @@ if ($ready && $canEdit) {
                 (int) $s['id'],
                 (string) ($s['customer_name'] !== '' ? $s['customer_name'] : 'নামহীন'),
                 bd_phone_canonical((string) $s['phone']),
+                trim((string) ($s['facebook_id'] ?? '')), // মায়ের ফেসবুক আইডি নাম (খালি হতে পারে)
             ];
         }
     } catch (Throwable $e) { $batchStudents = []; }
@@ -328,7 +329,11 @@ require __DIR__ . '/includes/layout-top.php';
         ssel.disabled = false;
         ssel.appendChild(opt('0', '— শিক্ষার্থী বেছে নিন (' + list.length + ' জন) —'));
         list.forEach(function (s) {
-            var o = opt(String(s[0]), s[1] + ' — ' + s[2]);
+            // শিশুর নাম — মায়ের ফেসবুক আইডি নাম (থাকলে) — মোবাইল
+            var label = s[1];
+            if (s[3]) { label += ' — ' + s[3]; }
+            label += ' — ' + s[2];
+            var o = opt(String(s[0]), label);
             o.setAttribute('data-phone', s[2]);
             ssel.appendChild(o);
         });
