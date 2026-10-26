@@ -129,5 +129,6 @@ function sc_file_notes(): array
         'migrate-payment-methods.sql'            => 'থ্যাংক-ইউ পাতার বিকাশ/নগদ নাম্বার',
         'migrate-notice-expiry.sql'              => 'নোটিশে সময় দিয়ে রাখলে সেটা নিজে থেকেই সাইট থেকে সরে যাওয়া',
         'migrate-moderator-group-track.sql'      => 'মডারেটর গ্রুপ-টিক দিলে কে/কখন দিল সারিতে দেখানো',
+        'migrate-student-reports.sql'            => 'শিক্ষার্থীর রিপোর্ট কার্ড / ফলাফল — অ্যাডমিন PDF আপলোড, অভিভাবক লগইন করে দেখা',
     ];
 }

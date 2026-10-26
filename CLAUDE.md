@@ -1112,6 +1112,22 @@ Brute-force protection (login_attempts, ৫/১৫মিন), CSRF সব ফর
 - **মাইগ্রেশন ও Tailwind রিবিল্ড লাগে না** (`leading-7`/`hover:bg-green-600` কম্পাইলড CSS-এ নেই বলে inline/বাদ)।
   যাচাই `t/moderator.php` (১৬, আসল MariaDB + আসল লগইন) + course-parcel একমুখী + রেন্ডার-গেটিং + ওভারফ্লো ০।
 
+## 📄 শিক্ষার্থীর রিপোর্ট কার্ড / ফলাফল (`student_reports`, ২০২৬-১০-২৬)
+
+ইউজারের আলাদা একটা Google Apps Script প্রজেক্ট (PDF রিপোর্ট বিতরণ) ছিল — চাওয়া: সাইটেই, **লগইন করে** রিপোর্ট দেখা। সাইটে অভিভাবক-লগইন আগে থেকেই আছে বলে GAS-এর পুরোটা না এনে শুধু **রিপোর্ট কার্ড** অংশটা বানানো হলো; বাকি সব (লগইন/ভর্তি/কোর্স-ব্যাচ/অ্যাডমিন) আগের সিস্টেমই।
+
+- **🔑 মোবাইল = পরিচয়-চাবি, canonical রূপে**: `report_fetch_for_phone()` ও আপলোড দুটোই `bd_phone_canonical()` (`01XXXXXXXXX`) দিয়ে সেভ ও মেলায় — তাই plain `WHERE phone = :p` চলে (REGEXP_REPLACE লাগে না, index কাজে লাগে, MySQL ও SQLite দুটোতেই চলে)। **নিয়ম: অভিভাবক যে নম্বরে লগইন করেন সেই নম্বরেই আপলোড করতে হবে**, নাহলে তিনি দেখবেন না (registrations থেকে বেছে নিলে নিজে থেকেই ঠিক থাকে)।
+- **হেল্পার `includes/functions.php`** (`db_has_column()`-এর পরে): `report_reports_ready()` (`db_has_table` গার্ড) · `report_upload_dir()` (mkdir + **deny-all .htaccess** + index.html, হুবহু `db_backup_dir()`-এর প্যাটার্ন) · `report_fetch_for_phone()` (নতুন আগে, try/catch) · `report_pdf_abs_path()` (file_path → ডিস্কের absolute পাথ, **realpath দিয়ে uploads/reports/-এর ভেতরে কিনা যাচাই — path-traversal গার্ড**, বাইরে হলে খালি)।
+- **🔒 প্রাইভেসি (দুই স্তর):** (১) PDF `uploads/reports/`-এ **deny-all .htaccess** — সরাসরি URL দিয়ে খোলা যায় না; (২) **গেটেড `report-view.php`** readfile করার আগে **সেশনের ফোন = রিপোর্টের ফোন** মিলিয়ে নেয়। 🔴 অন্যের id দিলে **৪০৪** (অস্তিত্ব ফাঁস হয় না — `my-registration.php`-এর একই নীতি), লগআউটে `account-login`-এ redirect। অ্যাডমিন লগইন (`$_SESSION['admin_id']`) থাকলে যেকোনোটা প্রিভিউ করতে পারেন। **GAS-এর চেয়ে নিরাপদ** — ওখানে যে কেউ মোবাইল দিয়ে টেনে আনতে পারত।
+- **অ্যাডমিন `admin/reports.php`** (RBAC সেকশন `reports`): PDF আপলোড (**MIME `application/pdf` + ≤১০MB গার্ড**, র‍্যান্ডম নাম `rep-<date>-<hex>.pdf`), কোর্স/ব্যাচ পিকার **finance-link.php-এর `fin_batch_select_options()`/`fin_resolve_batch()` রিইউজ** (স্ন্যাপশট DB থেকে যাচাই, ঐচ্ছিক), তালিকা + ডিলিট। 🔴 **ডিলিটে `archive_entity()` + DELETE, ফাইল রাখা হয়** (রিস্টোরে দরকার)। 🔴 আপলোড DB-তে না বসলে ফাইলও `unlink` (অনাথ ফাইল এড়াতে)।
+- **অভিভাবক `account.php`**: নতুন "📄 রিপোর্ট / ফলাফল" সেকশন ("আমার অন্যান্য অর্ডার"-এর পরে), `report-view.php?id=X` লিংক। 🔴 সবসময় সেশনের ফোন ধরে (`report_fetch_for_phone`) — URL থেকে কখনো নয়।
+- **RBAC**: `admin_permission_sections()`-এ `reports`, `admin_page_sections()`-এ `'reports.php' => ['reports']`। আপলোড = `reports:edit` (অ্যাকশন `upload`, delete-সেটে নেই), ডিলিট = `reports:delete` (অ্যাকশন `delete`)। মডারেটরকে দেওয়া যায়; view-only মডারেটর আপলোড-ফর্ম দেখেন না **ও** কেন্দ্রীয় গার্ড POST আটকায়।
+- **ওয়্যারিং**: `nav.php` (🔎 মাঝেমধ্যে গ্রুপ), `.htaccess` (`report-view` strip-exclusion), `robots.txt` (Disallow), `schema-check.php` (`sc_file_notes`), `page-help.php`, `guide.php`।
+- 🔴 **টাকা/আয়/খাতা কিছুই ছোঁয় না** — সম্পূর্ণ আলাদা টেবিল (`legacy_students`-এর মতো নীতি)।
+- **Tailwind রিবিল্ড লাগে না** (ব্যবহৃত সব ক্লাস কম্পাইলড CSS-এ আছে)। **মাইগ্রেশন লাগে** (`migrate-student-reports.sql`) — না চালালে `report_reports_ready()` false, ফিচার চুপচাপ বাদ, সাইট আগের মতো চলে।
+- **যাচাই (আসল MariaDB + Playwright)**: প্রাইভেসি (অন্য প্যারেন্ট ৪০৪ · লগআউটে redirect · অ্যাডমিন প্রিভিউ ২০০) · আসল আপলোড POST (PDO → বাংলা HEX `E0A6…` সঠিক, ফাইল সেভ, deny-all তৈরি) · `report_pdf_abs_path()` traversal গার্ড · মডারেটর RBAC তিন অবস্থা · system-check (টেবিল ড্রপ করলে "🗃️ টেবিল student_reports" বাকি-তালিকায়) · ৩২০/৩৯০/৭৬৮px ওভারফ্লো ০ · মোবাইল স্ক্রিনশট।
+- ⏭️ **ভবিষ্যতের ধার (v1-এ ইচ্ছাকৃত বাদ)**: বাবার মোবাইল দিয়েও মেলানো · registrations থেকে শিক্ষার্থী সার্চ করে অটো-ফিল · এক ব্যাচের সবার রিপোর্ট বাল্ক আপলোড · পুরনো Google Drive রিপোর্ট সাইটে সরানো (ইউজার Drive-এই রাখতে বলেছেন)।
+
 ## 🔒 PHP ভার্সন ও নিরাপত্তা (২০২৬-১০-২২-এ সংশোধিত)
 
 লোকাল XAMPP: PHP 8.2.12। **ইউজারের লাইভ হোস্টিংয়ে ওয়েব পাতাগুলো চলে `ea-php81` (PHP 8.1)** — cPanel → MultiPHP Manager-এ ইউজার নিজে দেখে জানিয়েছেন।

@@ -79,6 +79,10 @@ try {
     $legacy = $ls->fetchAll();
 } catch (Throwable $e) { $legacy = []; }
 
+// ---------------- রিপোর্ট কার্ড / ফলাফল — এই ফোন মিলিয়ে (মাইগ্রেশনের আগে চুপচাপ খালি) ----------------
+// 🔴 প্রাইভেসি: শুধু সেশনের ফোন ধরে; report_fetch_for_phone() canonical ফোনে plain-equality করে।
+$myReports = report_fetch_for_phone($db, $phone);
+
 // ---------------- নিজের পাঠানো অনুরোধ/মন্তব্য (সর্বশেষ ৫টা) ----------------
 $myRequests = [];
 try {
@@ -263,6 +267,32 @@ require __DIR__ . '/includes/site-header.php';
                     <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
+            </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- রিপোর্ট কার্ড / ফলাফল -->
+    <?php if ($myReports): ?>
+    <div class="bg-white rounded-2xl shadow p-5">
+        <h2 class="font-bold text-gray-900 mb-4 flex items-center gap-2"><i data-lucide="file-text" class="w-5 h-5 text-rose-500"></i> রিপোর্ট / ফলাফল</h2>
+        <div class="flex flex-col gap-3">
+            <?php foreach ($myReports as $rep): ?>
+            <div class="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <p class="font-bold text-gray-900 break-words"><?= e($rep['title'] ?: 'রিপোর্ট') ?></p>
+                    <p class="text-gray-500 text-xs mt-0.5">
+                        <?php if ($rep['student_name']): ?><?= e($rep['student_name']) ?><?php endif; ?>
+                        <?php if ($rep['item_title']): ?> · <?= e($rep['item_title']) ?><?php endif; ?>
+                        <?php if ($rep['batch']): ?> · <?= e($rep['batch']) ?><?php endif; ?>
+                        · <?= e(date('d M Y', strtotime((string) $rep['created_at']))) ?>
+                    </p>
+                </div>
+                <a href="report-view.php?id=<?= (int) $rep['id'] ?>" target="_blank" rel="noopener"
+                   class="text-xs font-bold px-3 py-2 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 flex-shrink-0 inline-flex items-center gap-1">
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i> দেখুন / নামান
+                </a>
             </div>
             <?php endforeach; ?>
         </div>

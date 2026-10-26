@@ -22,5 +22,6 @@ Disallow: /account
 Disallow: /account-*
 Disallow: /register-thanks.php
 Disallow: /my-registration
+Disallow: /report-view.php
 
 Sitemap: https://shishurmedhabikash.com/sitemap.php

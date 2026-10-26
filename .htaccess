@@ -26,7 +26,7 @@
     RewriteCond %{THE_REQUEST} \s/+([^\s?]+?)\.php[\s?] [NC]
     RewriteCond %{REQUEST_URI} !(^|/)admin/ [NC]
     RewriteCond %{REQUEST_URI} !-submit\.php$ [NC]
-    RewriteCond %{REQUEST_URI} !/(ajax-[^/]+|log-download|sitemap|sms-in|pay-submit|pay-status)\.php$ [NC]
+    RewriteCond %{REQUEST_URI} !/(ajax-[^/]+|log-download|sitemap|sms-in|pay-submit|pay-status|report-view)\.php$ [NC]
     RewriteRule ^ /%1 [R=301,L,NE]
 
     # extensionless URL → আসল .php ফাইল (থাকলে) — অভ্যন্তরীণ rewrite, query string সহ (QSA)

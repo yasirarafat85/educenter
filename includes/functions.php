@@ -779,6 +779,66 @@ function db_has_column(?PDO $db, string $table, string $column): bool
     }
 }
 
+// ─── শিক্ষার্থীর রিপোর্ট কার্ড / ফলাফল (2026-10-26) ───────────────────────────
+// অ্যাডমিন PDF রিপোর্ট আপলোড করেন, অভিভাবক লগইন করে নিজের মোবাইলেরটা দেখেন।
+// 🔑 মোবাইল canonical রূপে (`01XXXXXXXXX`) সেভ ও মেলানো হয় — তাই plain equality
+//    চলে (REGEXP_REPLACE লাগে না, index কাজে লাগে, MySQL ও SQLite দুটোতেই চলে)।
+
+// student_reports টেবিল আছে কিনা (মাইগ্রেশনের আগে চুপচাপ বাদ দেওয়ার গার্ড)
+function report_reports_ready(?PDO $db = null): bool
+{
+    return db_has_table($db, 'student_reports');
+}
+
+// PDF রাখার ফোল্ডার — db_backup_dir()-এর হুবহু প্যাটার্ন: mkdir + deny-all .htaccess
+// (সরাসরি URL দিয়ে খোলা যাবে না — রিপোর্ট কার্ডে শিশুর নাম/ফল থাকে, প্রাইভেট) + index.html।
+function report_upload_dir(): string
+{
+    $dir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'reports';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+        @chmod($dir, 0755);
+    }
+    $ht = $dir . DIRECTORY_SEPARATOR . '.htaccess';
+    if (!is_file($ht)) {
+        @file_put_contents($ht, "Require all denied\nDeny from all\n");
+    }
+    if (!is_file($dir . DIRECTORY_SEPARATOR . 'index.html')) {
+        @file_put_contents($dir . DIRECTORY_SEPARATOR . 'index.html', '');
+    }
+    return $dir;
+}
+
+// এক অভিভাবকের (ফোন ধরে) সব রিপোর্ট — নতুন আগে। মাইগ্রেশনের আগে/ব্যর্থ হলে [] (পেজ ভাঙে না)।
+function report_fetch_for_phone(?PDO $db, string $phone): array
+{
+    $canon = bd_phone_canonical($phone);
+    if ($canon === '') { return []; }
+    try {
+        $db = $db ?: get_db();
+        $stmt = $db->prepare(
+            'SELECT id, student_name, title, item_title, batch, file_name, created_at
+             FROM student_reports WHERE phone = :p ORDER BY created_at DESC, id DESC'
+        );
+        $stmt->execute(['p' => $canon]);
+        return $stmt->fetchAll() ?: [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+// সেভ করা file_path (`uploads/reports/xxx.pdf`) → ডিস্কের absolute পাথ, কিন্তু realpath
+// দিয়ে যাচাই করে সেটা সত্যিই uploads/reports/-এর ভেতরে কিনা (path-traversal গার্ড)।
+// বাইরে/অস্তিত্বহীন হলে খালি স্ট্রিং।
+function report_pdf_abs_path(string $filePath): string
+{
+    $base = realpath(report_upload_dir());
+    $abs  = realpath(dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace(['\\', '..'], ['/', ''], $filePath));
+    if ($base === false || $abs === false) { return ''; }
+    if (strncmp($abs, $base . DIRECTORY_SEPARATOR, strlen($base) + 1) !== 0) { return ''; }
+    return is_file($abs) ? $abs : '';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ✂️ কার্ড/তালিকায় দেখানোর জন্য বিবরণের সংক্ষিপ্ত রূপ (২০২৬-০৯-২৭)
 //

@@ -155,6 +155,9 @@ function admin_nav_groups(): array
         $sometimes[] = ['key' => 'course-interests', 'href' => 'course-interests.php', 'file' => 'course-interests.php', 'icon' => 'heart-handshake',   'label' => 'আগ্রহ তালিকা'];
         $sometimes[] = ['key' => 'legacy-students',  'href' => 'legacy-students.php',  'file' => 'legacy-students.php',  'icon' => 'user-round-search', 'label' => 'পুরাতন শিক্ষার্থী'];
     }
+    if (admin_can('reports')) {
+        $sometimes[] = ['key' => 'reports', 'href' => 'reports.php', 'file' => 'reports.php', 'icon' => 'file-text', 'label' => 'রিপোর্ট / ফলাফল'];
+    }
     if (admin_can('users')) {
         $sometimes[] = ['key' => 'users',         'href' => 'users.php',         'file' => 'users.php',         'icon' => 'users',          'label' => 'অভিভাবক অ্যাকাউন্ট'];
         $sometimes[] = ['key' => 'user-requests', 'href' => 'user-requests.php', 'file' => 'user-requests.php', 'icon' => 'message-square', 'label' => 'অনুরোধ / মন্তব্য'];

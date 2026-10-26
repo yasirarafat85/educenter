@@ -976,4 +976,21 @@ ALTER TABLE `payment_sms`
     ADD CONSTRAINT `fk_psms_claim` FOREIGN KEY (`claim_id`)
         REFERENCES `payment_claims` (`id`) ON DELETE SET NULL;
 
+-- শিক্ষার্থীর রিপোর্ট কার্ড / ফলাফল (2026-10-26) — বিস্তারিত migrate-student-reports.sql-এ
+CREATE TABLE IF NOT EXISTS student_reports (
+    id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    phone        VARCHAR(20)  NOT NULL DEFAULT '',
+    student_name VARCHAR(150) NOT NULL DEFAULT '',
+    title        VARCHAR(200) NOT NULL DEFAULT '',
+    item_id      INT UNSIGNED NULL,
+    item_title   VARCHAR(200) NOT NULL DEFAULT '',
+    batch        VARCHAR(160) NOT NULL DEFAULT '',
+    file_path    VARCHAR(255) NOT NULL DEFAULT '',
+    file_name    VARCHAR(255) NOT NULL DEFAULT '',
+    uploaded_by  VARCHAR(50)  NOT NULL DEFAULT '',
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_rep_phone (phone),
+    INDEX idx_rep_item (item_id, batch)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;
