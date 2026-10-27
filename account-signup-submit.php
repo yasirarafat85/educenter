@@ -36,10 +36,23 @@ $confirm = (string) ($_POST['password_confirm'] ?? '');
 if (!is_valid_bd_phone($phone)) {
     signup_fail('সঠিক মোবাইল নাম্বার দিন (যেমন: 017xxxxxxxx)।');
 }
-// আসল কাস্টমার যাচাই — এই ফোনে অন্তত একটা রেজিস্ট্রেশন থাকতে হবে
+// আসল কাস্টমার যাচাই — এই ফোনে অন্তত একটা রেজিস্ট্রেশন থাকতে হবে।
 $stmt = $db->prepare('SELECT COUNT(*) c FROM registrations WHERE phone = :p');
 $stmt->execute(['p' => $phone]);
-if ((int) $stmt->fetch()['c'] === 0) {
+$found = (int) $stmt->fetch()['c'] > 0;
+// 🔴 পুরাতন শিক্ষার্থী (legacy_students — Excel/CSV দিয়ে আনা) registrations-এ থাকে না,
+//    তাই না পেলে ঐ তালিকাও মিলিয়ে দেখি — নাহলে তাঁরা "রেজিস্ট্রেশন পাওয়া যায়নি" এরর পেতেন।
+//    account.php/ajax-lookup-registration.php-এর হুবহু শেষ-১০-ডিজিট প্যাটার্ন (ফরম্যাট ভিন্ন হলেও মেলে),
+//    try/catch-এ — টেবিল না থাকলে চুপচাপ বাদ, আগের মতোই শুধু registrations যাচাই হয়।
+if (!$found) {
+    try {
+        $lg = $db->prepare("SELECT COUNT(*) c FROM legacy_students
+                             WHERE RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) = :k");
+        $lg->execute(['k' => phone_last10($phone)]);
+        $found = (int) $lg->fetch()['c'] > 0;
+    } catch (Throwable $e) { /* legacy_students টেবিল নেই — এড়িয়ে যাই */ }
+}
+if (!$found) {
     signup_fail('এই নাম্বারে কোনো রেজিস্ট্রেশন পাওয়া যায়নি। কোর্সে রেজিস্ট্রেশনের সময় দেওয়া নাম্বারটি দিন।');
 }
 // ইতিমধ্যে অ্যাকাউন্ট আছে কিনা
