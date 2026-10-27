@@ -1,7 +1,8 @@
 <?php
 // পুরাতন শিক্ষার্থী — পুরনো Excel/CSV ডেটার রেফারেন্স তালিকা (২০২৬-০৮-১৭)।
 // ⚠️ registrations থেকে সম্পূর্ণ আলাদা টেবিল (legacy_students) — আয়/কুরিয়ার সিস্টেম এটা ছোঁয় না।
-// ব্যবহার: (১) CSV আপলোড → কলাম ম্যাপ → ইমপোর্ট, (২) মোট/কোর্স-অনুযায়ী গণনা, (৩) নাম/ফোন সার্চ।
+// ব্যবহার: (১) CSV আপলোড → কলাম ম্যাপ → ইমপোর্ট, (২) মোট/কোর্স-অনুযায়ী গণনা, (৩) নাম/ফোন/কোর্স/ব্যাচ সার্চ+ফিল্টার,
+//          (৪) CSV এক্সপোর্ট, (৫) একই কোর্স+ব্যাচে ডুপ্লিকেট খুঁজে বের করা (২০২৬-১০-২৭)।
 // অভিভাবক ফোন দিয়ে লগইন/রেজিস্ট্রেশন করলে account.php + ajax-lookup এই টেবিলও মিলিয়ে পুরনো তথ্য দেখায়।
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
@@ -52,6 +53,80 @@ function ls_guess_field(string $header): string
     return '';
 }
 
+/**
+ * 🔁 ডুপ্লিকেট-চাবি — একই কোর্স + একই ব্যাচে একই শিক্ষার্থী।
+ * 🔴 কোর্স ও ব্যাচ চাবির অংশ, তাই একই শিক্ষার্থী ঐ কোর্সের **অন্য ব্যাচে** বা **আলাদা কোর্সে**
+ *    থাকলে আলাদা চাবি হয় — ডুপ্লিকেট হিসেবে দেখানো হয় না (ইউজারের স্পষ্ট শর্ত)।
+ * পরিচয় = ফোনের শেষ ১০ অঙ্ক (থাকলে), নাহলে ছোট-হাতের নাম (একাধিক স্পেস এক করে)।
+ */
+function ls_dupe_key(array $r): string
+{
+    $course = trim((string) ($r['course_title'] ?? ''));
+    $batch  = trim((string) ($r['batch'] ?? ''));
+    $phone  = phone_last10((string) ($r['phone'] ?? ''));
+    if ($phone !== '') {
+        $id = 'p:' . $phone;
+    } else {
+        $id = 'n:' . mb_strtolower((string) preg_replace('/\s+/u', ' ', trim((string) ($r['customer_name'] ?? ''))));
+    }
+    return $course . '||' . $batch . '||' . $id;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * CSV লেখার নিরাপদ হেল্পার — registrations.php-এর reg_csv_* প্যাটার্নের হুবহু কপি
+ * (শেয়ার্ড ফাইলে নেই, আর registrations.php require করলে তার হ্যান্ডলার/সাইড-ইফেক্ট চলে যেত)।
+ * ════════════════════════════════════════════════════════════════════════ */
+
+/** 🔴 ভাঙা বাইট ছেঁকে ফেলা — Excel-এ কলাম এলোমেলো হওয়া ঠেকায় (আধখানা বাংলা অক্ষর কমা খেয়ে ফেলত) */
+function ls_csv_utf8(string $v): string
+{
+    if ($v === '' || mb_check_encoding($v, 'UTF-8')) { return $v; }
+    $old = mb_substitute_character();
+    mb_substitute_character('none'); // 🔴 'none' — নাহলে '?' বসে
+    $fixed = (string) mb_convert_encoding($v, 'UTF-8', 'UTF-8');
+    mb_substitute_character($old);
+    return $fixed;
+}
+
+/** 🔒 CSV ইনজেকশন গার্ড — `=`/`+`/`-`/`@`/ট্যাব দিয়ে শুরু হওয়া ঘরের আগে `'` */
+function ls_csv_safe(?string $v): string
+{
+    $v = trim(str_replace(["\r\n", "\r", "\n"], ' ', (string) $v));
+    if ($v !== '' && strpbrk($v[0], "=+-@\t") !== false) { $v = "'" . $v; }
+    return $v;
+}
+
+/** 📞 ফোন — Excel-এ শুরুর ০ বাঁচাতে `="01711..."`; শুধু অঙ্ক/+ রাখা হয় */
+function ls_csv_phone(?string $v): string
+{
+    $d = preg_replace('~[^0-9+]~', '', en_digits((string) $v));
+    return $d === '' ? '' : '="' . $d . '"';
+}
+
+/** এক সারি লেখা — `fputcsv()` নয় (ফোনের `="..."` রূপ কাঁচা যেতে হবে), RFC 4180 + CRLF */
+function ls_csv_put($fh, array $values): void
+{
+    $out = [];
+    foreach ($values as $v) {
+        $v = ls_csv_utf8((string) $v);
+        if (preg_match('~^="[0-9+]*"$~', $v)) {
+            $out[] = $v;
+        } elseif (strpbrk($v, ",\"\r\n") !== false) {
+            $out[] = '"' . str_replace('"', '""', $v) . '"';
+        } else {
+            $out[] = $v;
+        }
+    }
+    fwrite($fh, implode(',', $out) . "\r\n");
+}
+
+/** ফিল্টার বয়ে নেওয়া URL — reg_url()-এর হালকা সংস্করণ */
+function ls_url(array $overrides, array $active): string
+{
+    $qs = array_filter(array_merge($active, $overrides), fn($v) => $v !== '' && $v !== null);
+    return 'legacy-students.php' . ($qs ? ('?' . http_build_query($qs)) : '');
+}
+
 // ---------------- POST হ্যান্ডলার ----------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify()) { set_flash('error', 'ফর্ম টোকেন মিলছে না।'); redirect('legacy-students.php'); }
@@ -94,10 +169,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $imp = $_SESSION['legacy_import'] ?? null;
         if (!$imp) { set_flash('error', 'আপলোড করা ডেটা পাওয়া যায়নি — আবার আপলোড করুন।'); redirect('legacy-students.php'); }
         $map = $_POST['map'] ?? []; // [sysField => csv column index | '']
-        // অন্তত নাম বা ফোন ম্যাপ করা থাকতে হবে
+        // 🔴 কোর্স ও ব্যাচ — টাইপ করা মান (সব সারির জন্য); খালি হলে ম্যাপ করা কলাম ব্যবহার হবে।
+        $courseOverride = trim((string) ($_POST['course_override'] ?? ''));
+        $batchOverride  = trim((string) ($_POST['batch_override'] ?? ''));
+        $courseMapped = ($map['course_title'] ?? '') !== '';
+        $batchMapped  = ($map['batch'] ?? '') !== '';
+
+        // ভুল হলে map পাতায় ফেরার সময় যেন টাইপ করা মান ও ম্যাপ হারিয়ে না যায়
+        $_SESSION['legacy_import']['map'] = $map;
+        $_SESSION['legacy_import']['course_override'] = $courseOverride;
+        $_SESSION['legacy_import']['batch_override']  = $batchOverride;
+
+        // অন্তত নাম বা ফোন ম্যাপ করা থাকতে হবে (নাহলে প্রতিটা সারি বাদ পড়ত)
         if ((($map['customer_name'] ?? '') === '') && (($map['phone'] ?? '') === '')) {
             set_flash('error', 'অন্তত "শিশুর নাম" বা "মোবাইল (মা)" কলাম ম্যাপ করুন।'); redirect('legacy-students.php?step=map');
         }
+        // 🔴 কোর্স ও ব্যাচ বাধ্যতামূলক — হয় উপরে লিখুন, নয় কলাম ম্যাপ করুন
+        if ($courseOverride === '' && !$courseMapped) {
+            set_flash('error', 'কোর্সের নাম দিন — হয় উপরে বাক্সে লিখুন, নয় "কোর্সের নাম" কলাম ম্যাপ করুন।'); redirect('legacy-students.php?step=map');
+        }
+        if ($batchOverride === '' && !$batchMapped) {
+            set_flash('error', 'ব্যাচ দিন — হয় উপরে বাক্সে লিখুন, নয় "ব্যাচ / সাল" কলাম ম্যাপ করুন।'); redirect('legacy-students.php?step=map');
+        }
+
         $cols = implode(', ', $LS_COLS);
         $phs  = ':' . implode(', :', $LS_COLS);
         $ins = $db->prepare("INSERT INTO legacy_students ($cols) VALUES ($phs)");
@@ -108,6 +202,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $idx = $map[$f] ?? '';
                 $rec[$f] = ($idx !== '' && isset($row[(int) $idx])) ? trim((string) $row[(int) $idx]) : '';
             }
+            // 🔴 টাইপ করা মান জেতে — ফাইলে কোর্স/ব্যাচ কলাম থাকলেও এটাই বসে (সব সারিতে)
+            if ($courseOverride !== '') { $rec['course_title'] = $courseOverride; }
+            if ($batchOverride !== '')  { $rec['batch'] = $batchOverride; }
             if ($rec['customer_name'] === '' && $rec['phone'] === '') { continue; } // দুটোই খালি → বাদ
             $ins->execute($rec);
             $count++;
@@ -137,13 +234,105 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('legacy-students.php');
 }
 
+// ==================== ফিল্টার + স্ক্যান + এক্সপোর্ট (layout-top-এর আগে) ====================
+// 🔴 এক্সপোর্ট CSV হেডার পাঠায়, তাই কোনো HTML আউটপুটের আগেই চালাতে হবে।
+$step        = $_GET['step'] ?? '';
+$q           = trim($_GET['q'] ?? '');
+$filterCourse = trim($_GET['course'] ?? '');     // '' = সব; '__NONE__' = কোর্স নেই; নাহলে হুবহু নাম
+$filterBatch  = trim($_GET['batch'] ?? '');       // '' = সব; '__NONE__' = ব্যাচ নেই; নাহলে হুবহু ব্যাচ
+$dupeView    = ($_GET['dupes'] ?? '') === '1';
+
+$activeFilters = array_filter([
+    'q'      => $q,
+    'course' => $filterCourse,
+    'batch'  => $filterBatch,
+    'dupes'  => $dupeView ? '1' : '',
+], fn($v) => $v !== '');
+
+// WHERE তৈরি — 🔴 প্রতিটা প্লেসহোল্ডার একবারই (HY093 এড়াতে), `%`/`_` escape (ESCAPE '!')
+$esc = fn(string $s): string => str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $s);
+$hay = "CONCAT_WS(' ', customer_name, phone, father_mobile, course_title, batch, facebook_id, address, notes)";
+$where  = [];
+$params = [];
+if ($q !== '') {
+    $where[]      = "($hay LIKE :q ESCAPE '!' OR $hay LIKE :qd ESCAPE '!')";
+    $params['q']  = '%' . $esc($q) . '%';
+    $params['qd'] = '%' . $esc(strtr($q, bn_digit_map())) . '%'; // বাংলা অঙ্কের English রূপও (ফোন খুঁজতে)
+}
+if ($filterCourse !== '') {
+    if ($filterCourse === '__NONE__') { $where[] = "course_title = ''"; }
+    else { $where[] = 'course_title = :course'; $params['course'] = $filterCourse; }
+}
+if ($filterBatch !== '') {
+    if ($filterBatch === '__NONE__') { $where[] = "batch = ''"; }
+    else { $where[] = 'batch = :batch'; $params['batch'] = $filterBatch; }
+}
+$whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+
+// map পাতায় এই স্ক্যান/এক্সপোর্ট দরকার নেই
+$dupIds = [];
+$dupGroupCount = 0;
+if ($step !== 'map') {
+    // 🔁 ডুপ্লিকেট স্ক্যান — হালকা কলামে পুরো ফিল্টার-সেট পড়ে PHP-তে গ্রুপ করা
+    //    (SQLite-এ REGEXP_REPLACE নেই, আর বাংলা অঙ্ক phone_last10()-ই ঠিকভাবে ধরে — তাই PHP-তে)
+    $scanSt = $db->prepare("SELECT id, customer_name, phone, course_title, batch FROM legacy_students $whereSql");
+    $scanSt->execute($params);
+    $groups = [];
+    foreach ($scanSt->fetchAll() as $r) {
+        $name = trim((string) $r['customer_name']);
+        $ph   = phone_last10((string) $r['phone']);
+        if ($ph === '' && $name === '') { continue; } // পরিচয়হীন সারি গ্রুপ করা যায় না
+        $groups[ls_dupe_key($r)][] = (int) $r['id'];
+    }
+    foreach ($groups as $ids) {
+        if (count($ids) >= 2) { $dupGroupCount++; foreach ($ids as $i) { $dupIds[$i] = true; } }
+    }
+
+    // 📤 CSV এক্সপোর্ট — চলতি ফিল্টার হুবহু মেনে (dupes হলে শুধু ডুপ্লিকেট সারি)
+    if (($_GET['export'] ?? '') === 'csv') {
+        $csvCols = [
+            'আইডি'              => fn($r) => (string) $r['id'],
+            'শিশুর নাম'          => fn($r) => ls_csv_safe($r['customer_name'] ?? ''),
+            'মোবাইল (মা)'        => fn($r) => ls_csv_phone($r['phone'] ?? ''),
+            'মোবাইল (বাবা)'      => fn($r) => ls_csv_phone($r['father_mobile'] ?? ''),
+            'কোর্স'              => fn($r) => ls_csv_safe($r['course_title'] ?? ''),
+            'ব্যাচ / সাল'        => fn($r) => ls_csv_safe($r['batch'] ?? ''),
+            'জন্ম তারিখ / বয়স'  => fn($r) => ls_csv_safe($r['date_of_birth'] ?? ''),
+            'ফেসবুক নাম'         => fn($r) => ls_csv_safe($r['facebook_id'] ?? ''),
+            'রিসিভার নাম'        => fn($r) => ls_csv_safe($r['receiver_name'] ?? ''),
+            'রিসিভার নম্বর'      => fn($r) => ls_csv_phone($r['receiver_phone'] ?? ''),
+            'ঠিকানা'             => fn($r) => ls_csv_safe($r['address'] ?? ''),
+            'মন্তব্য'            => fn($r) => ls_csv_safe($r['notes'] ?? ''),
+        ];
+        $fname = 'legacy-students' . ($dupeView ? '-duplicates' : '') . '-' . date('Y-m-d') . '.csv';
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $fname . '"');
+        echo "\xEF\xBB\xBF"; // UTF-8 BOM — নাহলে Excel-এ বাংলা mojibake
+        $out = fopen('php://output', 'w');
+        ls_csv_put($out, array_keys($csvCols));
+        $exSt = $db->prepare("SELECT * FROM legacy_students $whereSql ORDER BY id DESC");
+        $exSt->execute($params);
+        while (($r = $exSt->fetch()) !== false) {
+            if ($dupeView && !isset($dupIds[(int) $r['id']])) { continue; }
+            $vals = [];
+            foreach ($csvCols as $fn) { $vals[] = $fn($r); }
+            ls_csv_put($out, $vals);
+        }
+        fclose($out);
+        exit;
+    }
+}
+
 require __DIR__ . '/includes/layout-top.php';
 
 // ==================== ধাপ ২: কলাম ম্যাপিং ====================
-if (($_GET['step'] ?? '') === 'map' && !empty($_SESSION['legacy_import'])) {
+if ($step === 'map' && !empty($_SESSION['legacy_import'])) {
     $imp = $_SESSION['legacy_import'];
     $headers = $imp['headers'];
     $preview = array_slice($imp['rows'], 0, 4);
+    $savedMap = $imp['map'] ?? [];
+    $savedCourseOv = (string) ($imp['course_override'] ?? '');
+    $savedBatchOv  = (string) ($imp['batch_override'] ?? '');
     ?>
     <div class="max-w-3xl">
         <div class="bg-white rounded-2xl shadow p-4 sm:p-5 mb-4">
@@ -154,16 +343,35 @@ if (($_GET['step'] ?? '') === 'map' && !empty($_SESSION['legacy_import'])) {
         <form method="post" action="legacy-students.php">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="import">
+
+            <?php // 🔴 কোর্স + ব্যাচ (বাধ্যতামূলক) — টাইপ করলে সব সারিতে এটাই বসে ?>
+            <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5 mb-4">
+                <div class="text-sm font-black text-amber-800 mb-1">🔴 কোর্স ও ব্যাচ (বাধ্যতামূলক)</div>
+                <p class="text-xs text-amber-800 mb-3">এখানে লিখলে ফাইলে কোর্স/ব্যাচ কলাম যাই থাকুক, <b>সব সারিতে এই লেখাটাই</b> বসবে। খালি রাখলে নিচে ম্যাপ করা কলাম ব্যবহার হবে — তাই অন্তত একটা উপায়ে কোর্স ও ব্যাচ দিতেই হবে।</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">কোর্সের নাম (সব সারির জন্য)</label>
+                        <input type="text" name="course_override" value="<?= e($savedCourseOv) ?>" placeholder="যেমন: আরবি ভাষা" class="w-full border rounded-lg px-3 py-2 text-sm" style="min-width:0;">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">ব্যাচ / সাল (সব সারির জন্য)</label>
+                        <input type="text" name="batch_override" value="<?= e($savedBatchOv) ?>" placeholder="যেমন: ৫ম ব্যাচ" class="w-full border rounded-lg px-3 py-2 text-sm" style="min-width:0;">
+                    </div>
+                </div>
+            </div>
+
             <div class="bg-white rounded-2xl shadow p-4 sm:p-5 mb-4 space-y-3">
                 <?php foreach ($sysFields as $field => $label):
-                    $guess = ''; foreach ($headers as $i => $h) { if (ls_guess_field($h) === $field) { $guess = (string) $i; break; } } ?>
+                    // সেভ করা ম্যাপ থাকলে সেটা, নাহলে হেডার থেকে আন্দাজ
+                    $sel = array_key_exists($field, $savedMap) ? (string) $savedMap[$field] : '';
+                    if ($sel === '') { foreach ($headers as $i => $h) { if (ls_guess_field($h) === $field) { $sel = (string) $i; break; } } } ?>
                     <div class="flex items-center gap-3 flex-wrap">
                         <label class="text-sm font-semibold text-gray-700" style="min-width:130px;"><?= e($label) ?></label>
                         <span class="text-gray-400">→</span>
                         <select name="map[<?= e($field) ?>]" class="border rounded-lg px-3 py-2 text-sm flex-1" style="min-width:180px;">
                             <option value="">— বাদ দিন —</option>
                             <?php foreach ($headers as $i => $h): ?>
-                                <option value="<?= (int) $i ?>" <?= (string) $i === $guess ? 'selected' : '' ?>><?= e($h !== '' ? $h : ('কলাম ' . ($i + 1))) ?></option>
+                                <option value="<?= (int) $i ?>" <?= (string) $i === $sel ? 'selected' : '' ?>><?= e($h !== '' ? $h : ('কলাম ' . ($i + 1))) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -197,33 +405,50 @@ if (($_GET['step'] ?? '') === 'map' && !empty($_SESSION['legacy_import'])) {
 }
 
 // ==================== ডিফল্ট: গণনা + তালিকা + আপলোড ====================
-$q = trim($_GET['q'] ?? '');
 $total = (int) $db->query('SELECT COUNT(*) FROM legacy_students')->fetchColumn();
 $withPhone = (int) $db->query("SELECT COUNT(*) FROM legacy_students WHERE phone <> ''")->fetchColumn();
-$byCourse = $db->query("SELECT IF(course_title='','(কোর্স নেই)',course_title) c, COUNT(*) n FROM legacy_students GROUP BY course_title ORDER BY n DESC")->fetchAll();
+// কোর্স অনুযায়ী সংখ্যা (raw সহ — চিপের লিংক বানাতে)
+$byCourse = $db->query("SELECT course_title raw, IF(course_title='','(কোর্স নেই)',course_title) c, COUNT(*) n
+                        FROM legacy_students GROUP BY course_title ORDER BY n DESC")->fetchAll();
 
-// তালিকা (সার্চ + লিমিট)
-// 🔴 সব ঘর এক CONCAT_WS গাদায়, তাই প্রতি শব্দের জন্য একটাই প্লেসহোল্ডার —
-//    ঘর-প্রতি আলাদা `LIKE :q` লিখলে একই নামের প্লেসহোল্ডার বহুবার হতো, আর
-//    `ATTR_EMULATE_PREPARES => false`-এ MariaDB তাতে SQLSTATE[HY093] ছুঁড়ে পাতা ভাঙত
-//    (SQLite মেনে নেয় বলে হারনেসে ধরা পড়ত না — reg_search_haystack_sql()-এর একই নিয়ম)।
-// 🔴 `%`/`_` escape বাধ্যতামূলক (ESCAPE '!', search.php-এর হুবহু নিয়ম)।
-// 🔴 বাংলা অঙ্কের English রূপও খোঁজা হয় (ফোন "০১৭…" দিয়ে খুঁজতে), আলাদা নামের প্লেসহোল্ডারে।
-if ($q !== '') {
-    $esc = fn(string $s): string => str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $s);
-    $hay = "CONCAT_WS(' ', customer_name, phone, father_mobile, course_title, batch, facebook_id, address, notes)";
-    $st = $db->prepare(
-        "SELECT * FROM legacy_students
-          WHERE $hay LIKE :q ESCAPE '!' OR $hay LIKE :qd ESCAPE '!'
-          ORDER BY customer_name LIMIT 200");
-    $st->execute([
-        'q'  => '%' . $esc($q) . '%',
-        'qd' => '%' . $esc(strtr($q, bn_digit_map())) . '%',
-    ]);
+// ফিল্টার-ড্রপডাউনের অপশন (ব্যাচ কোর্সের সাথে কাস্কেড করে)
+$courseOpts = $db->query("SELECT DISTINCT course_title FROM legacy_students WHERE course_title <> '' ORDER BY course_title")->fetchAll(PDO::FETCH_COLUMN);
+if ($filterCourse !== '' && $filterCourse !== '__NONE__') {
+    $bst = $db->prepare("SELECT DISTINCT batch FROM legacy_students WHERE batch <> '' AND course_title = :c ORDER BY batch");
+    $bst->execute(['c' => $filterCourse]);
+    $batchOpts = $bst->fetchAll(PDO::FETCH_COLUMN);
 } else {
-    $st = $db->query('SELECT * FROM legacy_students ORDER BY id DESC LIMIT 200');
+    $batchOpts = $db->query("SELECT DISTINCT batch FROM legacy_students WHERE batch <> '' ORDER BY batch")->fetchAll(PDO::FETCH_COLUMN);
 }
-$list = $st->fetchAll();
+
+// তালিকা — ডুপ্লিকেট ভিউ হলে শুধু ডুপ্লিকেট সারি (গ্রুপ ধরে পাশাপাশি), নাহলে সার্চ/ফিল্টার + LIMIT 200
+$rowGroupCount = []; // id => ঐ গ্রুপে কতবার
+$rowGroupIdx   = []; // id => গ্রুপ-ইনডেক্স (zebra striping)
+if ($dupeView) {
+    $allSt = $db->prepare("SELECT * FROM legacy_students $whereSql");
+    $allSt->execute($params);
+    $byKey = [];
+    foreach ($allSt->fetchAll() as $r) {
+        if (!isset($dupIds[(int) $r['id']])) { continue; }
+        $byKey[ls_dupe_key($r)][] = $r;
+    }
+    ksort($byKey);
+    $list = [];
+    $gi = 0;
+    foreach ($byKey as $rs) {
+        foreach ($rs as $r) {
+            $list[] = $r;
+            $rowGroupCount[(int) $r['id']] = count($rs);
+            $rowGroupIdx[(int) $r['id']]   = $gi;
+        }
+        $gi++;
+    }
+} else {
+    $st = $db->prepare("SELECT * FROM legacy_students $whereSql ORDER BY id DESC LIMIT 200");
+    $st->execute($params);
+    $list = $st->fetchAll();
+}
+$hasFilter = $q !== '' || $filterCourse !== '' || $filterBatch !== '';
 ?>
 <div class="max-w-5xl">
     <?php // ── আপলোড ফর্ম ── ?>
@@ -233,13 +458,13 @@ $list = $st->fetchAll();
         <form method="post" action="legacy-students.php" enctype="multipart/form-data" class="flex items-center gap-3 flex-wrap">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="upload">
-            <input type="file" name="csv" accept=".csv,text/csv" required class="text-sm border rounded-lg px-3 py-2 bg-gray-50">
+            <input type="file" name="csv" accept=".csv,text/csv" required class="text-sm border rounded-lg px-3 py-2 bg-gray-50" style="max-width:100%;min-width:0;">
             <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm">আপলোড ও কলাম মেলান →</button>
         </form>
     </div>
 
     <?php // ── গণনা কার্ড ── ?>
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <div class="bg-white rounded-2xl shadow p-4">
             <div class="text-xs text-gray-500">মোট পুরাতন শিক্ষার্থী</div>
             <div class="text-2xl font-black text-gray-900"><?= number_format($total) ?></div>
@@ -251,41 +476,84 @@ $list = $st->fetchAll();
         </div>
         <div class="bg-white rounded-2xl shadow p-4">
             <div class="text-xs text-gray-500">ভিন্ন কোর্স</div>
-            <div class="text-2xl font-black text-gray-900"><?= number_format(count($byCourse)) ?></div>
+            <div class="text-2xl font-black text-gray-900"><?= number_format(count($courseOpts)) ?></div>
         </div>
+        <?php // 🔁 ডুপ্লিকেট কার্ড — ক্লিকে ডুপ্লিকেট ভিউ (চলতি ফিল্টার বয়ে নিয়ে) ?>
+        <?php if ($dupGroupCount > 0): ?>
+            <a href="<?= e(ls_url(['dupes' => '1'], $activeFilters)) ?>" class="bg-white rounded-2xl shadow p-4 block hover:bg-amber-50 border border-transparent hover:border-amber-200 transition">
+                <div class="text-xs text-gray-500">🔁 একই কোর্স+ব্যাচে ডুপ্লিকেট</div>
+                <div class="text-2xl font-black text-amber-600"><?= number_format($dupGroupCount) ?></div>
+                <div class="text-[11px] text-amber-700"><?= $dupeView ? 'এখন দেখছেন' : 'দেখতে ক্লিক করুন' ?></div>
+            </a>
+        <?php else: ?>
+            <div class="bg-white rounded-2xl shadow p-4">
+                <div class="text-xs text-gray-500">🔁 ডুপ্লিকেট</div>
+                <div class="text-2xl font-black text-gray-400">0</div>
+                <div class="text-[11px] text-gray-400">একই কোর্স+ব্যাচে নেই</div>
+            </div>
+        <?php endif; ?>
     </div>
 
-    <?php // ── কোর্স অনুযায়ী সংখ্যা ── ?>
+    <?php // ── কোর্স অনুযায়ী সংখ্যা (চিপে ক্লিকে কোর্স-ফিল্টার) ── ?>
     <?php if ($byCourse): ?>
     <div class="bg-white rounded-2xl shadow p-4 mb-4">
-        <div class="text-sm font-bold text-gray-700 mb-2">কোর্স অনুযায়ী সংখ্যা</div>
+        <div class="text-sm font-bold text-gray-700 mb-2">কোর্স অনুযায়ী সংখ্যা <span class="text-xs font-normal text-gray-400">(ক্লিক করে ফিল্টার করুন)</span></div>
         <div class="flex flex-wrap gap-2">
-            <?php foreach ($byCourse as $bc): ?>
-                <span class="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 rounded-lg px-3 py-1.5 text-sm font-semibold">
-                    <?= e($bc['c']) ?> <span class="bg-white rounded-md px-1.5 text-indigo-600"><?= number_format((int) $bc['n']) ?></span>
-                </span>
+            <?php foreach ($byCourse as $bc):
+                $cval = $bc['raw'] === '' ? '__NONE__' : $bc['raw'];
+                $isActive = $filterCourse === $cval; ?>
+                <a href="<?= e(ls_url(['course' => $cval, 'batch' => '', 'dupes' => ''], ['q' => $q])) ?>"
+                   class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold <?= $isActive ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100' ?>">
+                    <?= e($bc['c']) ?> <span class="<?= $isActive ? 'bg-white/20' : 'bg-white text-indigo-600' ?> rounded-md px-1.5"><?= number_format((int) $bc['n']) ?></span>
+                </a>
             <?php endforeach; ?>
         </div>
     </div>
     <?php endif; ?>
 
-    <?php // ── তালিকা + সার্চ ── ?>
+    <?php // ── ফিল্টার + সার্চ + এক্সপোর্ট ── ?>
     <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
-        <form method="get" action="legacy-students.php" id="lsFilterForm" class="flex items-center gap-2">
-            <input type="text" name="q" value="<?= e($q) ?>" placeholder="নাম / ফোন / কোর্স খুঁজুন..." class="border rounded-lg px-3 py-2 text-sm" style="width:230px;">
-            <button type="submit" class="bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold px-3 py-2 rounded-lg text-sm">খুঁজুন</button>
-            <?php if ($q !== ''): ?><a href="legacy-students.php" class="text-gray-500 text-sm">✕ ক্লিয়ার</a><?php endif; ?>
+        <form method="get" action="legacy-students.php" id="lsFilterForm" class="flex items-center gap-2 flex-wrap">
+            <input type="text" name="q" value="<?= e($q) ?>" placeholder="নাম / ফোন / কোর্স খুঁজুন..." data-autosearch="lsFilterForm" class="list-search border rounded-lg px-3 py-2 text-sm" style="width:200px;">
+            <select name="course" id="lsCourseSelect" class="border rounded-lg px-3 py-2 text-sm" onchange="var b=document.getElementById('lsBatchSelect'); if(b)b.value=''; this.form.submit();">
+                <option value="">সব কোর্স</option>
+                <option value="__NONE__" <?= $filterCourse === '__NONE__' ? 'selected' : '' ?>>(কোর্স নেই)</option>
+                <?php foreach ($courseOpts as $c): ?>
+                    <option value="<?= e($c) ?>" <?= $filterCourse === $c ? 'selected' : '' ?>><?= e($c) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <select name="batch" id="lsBatchSelect" class="border rounded-lg px-3 py-2 text-sm" onchange="this.form.submit();">
+                <option value="">সব ব্যাচ</option>
+                <option value="__NONE__" <?= $filterBatch === '__NONE__' ? 'selected' : '' ?>>(ব্যাচ নেই)</option>
+                <?php foreach ($batchOpts as $b): ?>
+                    <option value="<?= e($b) ?>" <?= $filterBatch === $b ? 'selected' : '' ?>><?= e($b) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <?php if ($dupeView): ?><input type="hidden" name="dupes" value="1"><?php endif; ?>
+            <button type="submit" class="bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold px-3 py-2 rounded-lg text-sm">🔍 খুঁজুন</button>
+            <?php if ($hasFilter || $dupeView): ?><a href="legacy-students.php" class="text-gray-500 text-sm">✕ ক্লিয়ার</a><?php endif; ?>
         </form>
-        <?php if ($total > 0): ?>
-        <form method="post" action="legacy-students.php" onsubmit="return confirmSubmit(this, 'সব পুরাতন শিক্ষার্থী মুছে ফেলবেন? এটা ফেরানো যাবে না।', 'সব মুছবেন?');">
-            <?= csrf_field() ?><input type="hidden" name="action" value="clear-all">
-            <button type="submit" class="text-red-600 text-sm font-semibold">সব মুছুন</button>
-        </form>
-        <?php endif; ?>
+        <div class="flex items-center gap-3">
+            <?php if ($total > 0): ?>
+            <a href="<?= e(ls_url(['export' => 'csv'], $activeFilters)) ?>" class="inline-flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white font-semibold px-3 py-2 rounded-lg text-sm">
+                <i data-lucide="download" class="w-4 h-4"></i> CSV এক্সপোর্ট
+            </a>
+            <form method="post" action="legacy-students.php" onsubmit="return confirmSubmit(this, 'সব পুরাতন শিক্ষার্থী মুছে ফেলবেন? এটা ফেরানো যাবে না।', 'সব মুছবেন?');">
+                <?= csrf_field() ?><input type="hidden" name="action" value="clear-all">
+                <button type="submit" class="text-red-600 text-sm font-semibold">সব মুছুন</button>
+            </form>
+            <?php endif; ?>
+        </div>
     </div>
 
+    <?php if ($dupeView): ?>
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 text-sm text-amber-800">
+            🔁 <b>ডুপ্লিকেট ভিউ</b> — একই <b>কোর্স + ব্যাচে</b> একই শিক্ষার্থী (ফোন বা নাম মিলিয়ে) একাধিকবার আছে এমন সারি। একই শিক্ষার্থী ঐ কোর্সের অন্য ব্যাচে বা আলাদা কোর্সে থাকলে এখানে আসবে না।
+        </div>
+    <?php endif; ?>
+
     <?php if (!$list): ?>
-        <div class="bg-white rounded-2xl shadow empty-state"><div class="empty-ic"><i data-lucide="users" class="w-8 h-8"></i></div><?= $q !== '' ? 'কিছু পাওয়া যায়নি।' : 'এখনো কোনো পুরাতন শিক্ষার্থী যোগ করা হয়নি — উপরে CSV আপলোড করুন।' ?></div>
+        <div class="bg-white rounded-2xl shadow empty-state"><div class="empty-ic"><i data-lucide="users" class="w-8 h-8"></i></div><?= ($hasFilter || $dupeView) ? 'কিছু পাওয়া যায়নি।' : 'এখনো কোনো পুরাতন শিক্ষার্থী যোগ করা হয়নি — উপরে CSV আপলোড করুন।' ?></div>
     <?php else: ?>
         <div class="bg-white rounded-2xl shadow overflow-x-auto"><table class="w-full text-sm mcard">
             <thead><tr class="text-left text-gray-500 border-b bg-gray-50">
@@ -293,16 +561,24 @@ $list = $st->fetchAll();
                 <th class="py-3 px-4">ব্যাচ/সাল</th><th class="py-3 px-4">ফেসবুক</th><th class="py-3 px-4">অ্যাকশন</th>
             </tr></thead>
             <tbody>
-            <?php foreach ($list as $s): ?>
-                <tr class="border-b last:border-0 hover:bg-gray-50">
-                    <td class="py-2.5 px-4 font-semibold text-gray-900"><?= e($s['customer_name'] ?: '—') ?></td>
+            <?php foreach ($list as $s):
+                $rid = (int) $s['id'];
+                // ডুপ্লিকেট ভিউতে গ্রুপ ধরে হালকা zebra (পরপর গ্রুপ আলাদা দেখা যায়)
+                $rowBg = ($dupeView && (($rowGroupIdx[$rid] ?? 0) % 2) === 1) ? 'bg-amber-50/60' : ''; ?>
+                <tr class="border-b last:border-0 hover:bg-gray-50 <?= $rowBg ?>">
+                    <td class="py-2.5 px-4 font-semibold text-gray-900">
+                        <?= e($s['customer_name'] ?: '—') ?>
+                        <?php if ($dupeView && isset($rowGroupCount[$rid])): ?>
+                            <span class="inline-block ml-1 text-[11px] font-bold text-amber-700 bg-amber-100 rounded px-1.5 py-0.5">🔁 <?= (int) $rowGroupCount[$rid] ?> বার</span>
+                        <?php endif; ?>
+                    </td>
                     <td class="py-2.5 px-4 font-mono whitespace-nowrap"><?= e($s['phone'] ?: '—') ?></td>
                     <td class="py-2.5 px-4"><?= e($s['course_title'] ?: '—') ?></td>
                     <td class="py-2.5 px-4"><?= e($s['batch'] ?: '—') ?></td>
                     <td class="py-2.5 px-4 text-gray-600"><?= e($s['facebook_id'] ?: '—') ?></td>
                     <td class="py-2.5 px-4">
                         <form method="post" action="legacy-students.php" class="inline" onsubmit="return confirmSubmit(this, 'এই শিক্ষার্থীকে মুছবেন?', 'মুছবেন?');">
-                            <?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
+                            <?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= $rid ?>">
                             <button type="submit" class="text-red-600 font-semibold text-xs">ডিলিট</button>
                         </form>
                     </td>
@@ -310,7 +586,7 @@ $list = $st->fetchAll();
             <?php endforeach; ?>
             </tbody>
         </table></div>
-        <?php if (count($list) >= 200): ?><p class="text-xs text-gray-400 mt-2">প্রথম ২০০টি দেখানো হচ্ছে — নির্দিষ্ট কাউকে খুঁজতে উপরে সার্চ করুন।</p><?php endif; ?>
+        <?php if (!$dupeView && count($list) >= 200): ?><p class="text-xs text-gray-400 mt-2">প্রথম ২০০টি দেখানো হচ্ছে — নির্দিষ্ট কাউকে খুঁজতে উপরে সার্চ/ফিল্টার করুন।</p><?php endif; ?>
     <?php endif; ?>
 </div>
 
