@@ -203,9 +203,23 @@ $withPhone = (int) $db->query("SELECT COUNT(*) FROM legacy_students WHERE phone 
 $byCourse = $db->query("SELECT IF(course_title='','(কোর্স নেই)',course_title) c, COUNT(*) n FROM legacy_students GROUP BY course_title ORDER BY n DESC")->fetchAll();
 
 // তালিকা (সার্চ + লিমিট)
+// 🔴 সব ঘর এক CONCAT_WS গাদায়, তাই প্রতি শব্দের জন্য একটাই প্লেসহোল্ডার —
+//    ঘর-প্রতি আলাদা `LIKE :q` লিখলে একই নামের প্লেসহোল্ডার বহুবার হতো, আর
+//    `ATTR_EMULATE_PREPARES => false`-এ MariaDB তাতে SQLSTATE[HY093] ছুঁড়ে পাতা ভাঙত
+//    (SQLite মেনে নেয় বলে হারনেসে ধরা পড়ত না — reg_search_haystack_sql()-এর একই নিয়ম)।
+// 🔴 `%`/`_` escape বাধ্যতামূলক (ESCAPE '!', search.php-এর হুবহু নিয়ম)।
+// 🔴 বাংলা অঙ্কের English রূপও খোঁজা হয় (ফোন "০১৭…" দিয়ে খুঁজতে), আলাদা নামের প্লেসহোল্ডারে।
 if ($q !== '') {
-    $st = $db->prepare("SELECT * FROM legacy_students WHERE customer_name LIKE :q OR phone LIKE :q OR course_title LIKE :q OR facebook_id LIKE :q ORDER BY customer_name LIMIT 200");
-    $st->execute(['q' => '%' . $q . '%']);
+    $esc = fn(string $s): string => str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $s);
+    $hay = "CONCAT_WS(' ', customer_name, phone, father_mobile, course_title, batch, facebook_id, address, notes)";
+    $st = $db->prepare(
+        "SELECT * FROM legacy_students
+          WHERE $hay LIKE :q ESCAPE '!' OR $hay LIKE :qd ESCAPE '!'
+          ORDER BY customer_name LIMIT 200");
+    $st->execute([
+        'q'  => '%' . $esc($q) . '%',
+        'qd' => '%' . $esc(strtr($q, bn_digit_map())) . '%',
+    ]);
 } else {
     $st = $db->query('SELECT * FROM legacy_students ORDER BY id DESC LIMIT 200');
 }
