@@ -203,7 +203,7 @@ function admin_task_opens_page(string $script): bool
 // (২০২৬-০৯-১৪ অডিটে পাওয়া — প্রতিটা ডিলিট-পথ এই তালিকায়; কোনো নীরব ডিলিট নেই)
 function admin_delete_actions(): array
 {
-    return ['delete', 'delete-batch', 'del', 'del-note', 'clear-all', 'purge'];
+    return ['delete', 'delete-batch', 'del', 'del-note', 'clear-all', 'purge', 'delete-dupes'];
 }
 
 // permissions (DB/session) → সেকশন=>caps[] ম্যাপ-এ নরমালাইজ।

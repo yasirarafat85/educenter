@@ -72,6 +72,76 @@ function ls_dupe_key(array $r): string
     return $course . '||' . $batch . '||' . $id;
 }
 
+/**
+ * 🗑️ একই দলের কোন সারিটা রাখা হবে, কোনগুলো "অতিরিক্ত" (মুছবে)।
+ * 🔴 নিয়ম (ইউজারের প্রশ্নের উত্তর): প্রতি দলে **একটি** সারি রাখা হয় —
+ *    সবচেয়ে বেশি ঘর ভরা (পূর্ণ তথ্য) সারিটা; সমান হলে **সবচেয়ে পুরনোটি** (ছোট id)।
+ *    বাকিগুলো অতিরিক্ত। তাই ১০ বার থাকলে ৯টা মুছবে, ১টা থাকবে।
+ * 🔴🔴 একই ফাংশন ভিউ ও হ্যান্ডলার দুটোই ডাকে — তাই পর্দায় যা "অতিরিক্ত" দেখায়
+ *    হুবহু সেগুলোই মোছে (দুই জায়গায় দুই নিয়ম রাখলে অন্যটা মুছে ফেলত)।
+ */
+function ls_complete_score(array $r): int
+{
+    $cols = ['customer_name', 'phone', 'father_mobile', 'course_title', 'batch',
+             'date_of_birth', 'facebook_id', 'receiver_name', 'receiver_phone', 'address', 'notes'];
+    $n = 0;
+    foreach ($cols as $c) { if (trim((string) ($r[$c] ?? '')) !== '') { $n++; } }
+    return $n;
+}
+
+/** একই দলের সারিগুলো "রাখা হবে আগে" ক্রমে সাজায় (index 0 = যেটা রাখা হবে)। */
+function ls_dupe_keep_sort(array &$rows): void
+{
+    usort($rows, function ($a, $b) {
+        $sa = ls_complete_score($a);
+        $sb = ls_complete_score($b);
+        if ($sa !== $sb) { return $sb <=> $sa; }      // বেশি ভরা আগে
+        return ((int) $a['id']) <=> ((int) $b['id']); // সমান হলে ছোট id আগে
+    });
+}
+
+/** সব সারি থেকে "অতিরিক্ত ডুপ্লিকেট" id-র তালিকা (প্রতি দলে একটি বাদে বাকি সব)। */
+function ls_dupe_extra_ids(array $rows): array
+{
+    $g = [];
+    foreach ($rows as $r) {
+        $name = trim((string) ($r['customer_name'] ?? ''));
+        $ph   = phone_last10((string) ($r['phone'] ?? ''));
+        if ($ph === '' && $name === '') { continue; } // পরিচয়হীন সারি দল করা যায় না
+        $g[ls_dupe_key($r)][] = $r;
+    }
+    $extra = [];
+    foreach ($g as $rs) {
+        if (count($rs) < 2) { continue; }
+        ls_dupe_keep_sort($rs);
+        for ($i = 1, $n = count($rs); $i < $n; $i++) { $extra[] = (int) $rs[$i]['id']; }
+    }
+    return $extra;
+}
+
+/** ফিল্টার থেকে WHERE + params — গ্যাপ ও delete-dupes হ্যান্ডলার দুটোই ডাকে (একটাই নিয়ম)। */
+function ls_filter_where(string $q, string $course, string $batch): array
+{
+    $esc = fn(string $s): string => str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $s);
+    $hay = "CONCAT_WS(' ', customer_name, phone, father_mobile, course_title, batch, facebook_id, address, notes)";
+    $where  = [];
+    $params = [];
+    if ($q !== '') {
+        $where[]      = "($hay LIKE :q ESCAPE '!' OR $hay LIKE :qd ESCAPE '!')";
+        $params['q']  = '%' . $esc($q) . '%';
+        $params['qd'] = '%' . $esc(strtr($q, bn_digit_map())) . '%';
+    }
+    if ($course !== '') {
+        if ($course === '__NONE__') { $where[] = "course_title = ''"; }
+        else { $where[] = 'course_title = :course'; $params['course'] = $course; }
+    }
+    if ($batch !== '') {
+        if ($batch === '__NONE__') { $where[] = "batch = ''"; }
+        else { $where[] = 'batch = :batch'; $params['batch'] = $batch; }
+    }
+    return [$where ? ('WHERE ' . implode(' AND ', $where)) : '', $params];
+}
+
 /* ════════════════════════════════════════════════════════════════════════
  * CSV লেখার নিরাপদ হেল্পার — registrations.php-এর reg_csv_* প্যাটার্নের হুবহু কপি
  * (শেয়ার্ড ফাইলে নেই, আর registrations.php require করলে তার হ্যান্ডলার/সাইড-ইফেক্ট চলে যেত)।
@@ -226,6 +296,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('legacy-students.php');
     }
 
+    // 🗑️ সব "অতিরিক্ত ডুপ্লিকেট" একসাথে মুছুন — প্রতি দলে একটি রাখে (ls_dupe_extra_ids)।
+    // 🔴 চলতি ফিল্টার (q/course/batch) হুবহু মেনে, আর কোন id মুছবে সেটা সার্ভারই নতুন করে
+    //    হিসাব করে (ব্রাউজারের পাঠানো id-তে ভরসা নয়) — তাই বাসি পাতা থেকেও নিরাপদ।
+    if ($action === 'delete-dupes') {
+        $dq = trim((string) ($_POST['q'] ?? ''));
+        $dc = trim((string) ($_POST['course'] ?? ''));
+        $dbt = trim((string) ($_POST['batch'] ?? ''));
+        [$wsql, $wparams] = ls_filter_where($dq, $dc, $dbt);
+        $rs = $db->prepare("SELECT * FROM legacy_students $wsql");
+        $rs->execute($wparams);
+        $extra = ls_dupe_extra_ids($rs->fetchAll());
+        $deleted = 0;
+        foreach (array_chunk($extra, 500) as $chunk) {
+            $ph = implode(',', array_fill(0, count($chunk), '?'));
+            $del = $db->prepare("DELETE FROM legacy_students WHERE id IN ($ph)");
+            $del->execute($chunk);
+            $deleted += $del->rowCount();
+        }
+        set_flash('success', $deleted > 0
+            ? ($deleted . ' টি অতিরিক্ত ডুপ্লিকেট মুছে ফেলা হয়েছে — প্রতি দলে একটি রাখা হয়েছে।')
+            : 'মোছার মতো কোনো অতিরিক্ত ডুপ্লিকেট পাওয়া যায়নি।');
+        redirect(ls_url(['dupes' => '1'], array_filter(
+            ['q' => $dq, 'course' => $dc, 'batch' => $dbt], fn($v) => $v !== '')));
+    }
+
     if ($action === 'cancel-import') {
         unset($_SESSION['legacy_import']);
         redirect('legacy-students.php');
@@ -249,25 +344,9 @@ $activeFilters = array_filter([
     'dupes'  => $dupeView ? '1' : '',
 ], fn($v) => $v !== '');
 
-// WHERE তৈরি — 🔴 প্রতিটা প্লেসহোল্ডার একবারই (HY093 এড়াতে), `%`/`_` escape (ESCAPE '!')
-$esc = fn(string $s): string => str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $s);
-$hay = "CONCAT_WS(' ', customer_name, phone, father_mobile, course_title, batch, facebook_id, address, notes)";
-$where  = [];
-$params = [];
-if ($q !== '') {
-    $where[]      = "($hay LIKE :q ESCAPE '!' OR $hay LIKE :qd ESCAPE '!')";
-    $params['q']  = '%' . $esc($q) . '%';
-    $params['qd'] = '%' . $esc(strtr($q, bn_digit_map())) . '%'; // বাংলা অঙ্কের English রূপও (ফোন খুঁজতে)
-}
-if ($filterCourse !== '') {
-    if ($filterCourse === '__NONE__') { $where[] = "course_title = ''"; }
-    else { $where[] = 'course_title = :course'; $params['course'] = $filterCourse; }
-}
-if ($filterBatch !== '') {
-    if ($filterBatch === '__NONE__') { $where[] = "batch = ''"; }
-    else { $where[] = 'batch = :batch'; $params['batch'] = $filterBatch; }
-}
-$whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+// WHERE তৈরি — 🔴 ls_filter_where() (delete-dupes হ্যান্ডলারও এটাই ডাকে, একটাই নিয়ম);
+//    প্রতিটা প্লেসহোল্ডার একবারই (HY093 এড়াতে), `%`/`_` escape (ESCAPE '!'), বাংলা অঙ্কও।
+[$whereSql, $params] = ls_filter_where($q, $filterCourse, $filterBatch);
 
 // map পাতায় এই স্ক্যান/এক্সপোর্ট দরকার নেই
 $dupIds = [];
@@ -424,11 +503,17 @@ if ($filterCourse !== '' && $filterCourse !== '__NONE__') {
 // তালিকা — ডুপ্লিকেট ভিউ হলে শুধু ডুপ্লিকেট সারি (গ্রুপ ধরে পাশাপাশি), নাহলে সার্চ/ফিল্টার + LIMIT 200
 $rowGroupCount = []; // id => ঐ গ্রুপে কতবার
 $rowGroupIdx   = []; // id => গ্রুপ-ইনডেক্স (zebra striping)
+$extraSet  = [];   // id => true : "অতিরিক্ত" সারি (মুছবে)
+$extraCount = 0;
 if ($dupeView) {
     $allSt = $db->prepare("SELECT * FROM legacy_students $whereSql");
     $allSt->execute($params);
+    $rowsAll = $allSt->fetchAll();
+    // 🔴 কোনগুলো অতিরিক্ত — হ্যান্ডলারের হুবহু একই ফাংশন (পর্দা = যা মুছবে)
+    $extraSet   = array_flip(ls_dupe_extra_ids($rowsAll));
+    $extraCount = count($extraSet);
     $byKey = [];
-    foreach ($allSt->fetchAll() as $r) {
+    foreach ($rowsAll as $r) {
         if (!isset($dupIds[(int) $r['id']])) { continue; }
         $byKey[ls_dupe_key($r)][] = $r;
     }
@@ -436,6 +521,7 @@ if ($dupeView) {
     $list = [];
     $gi = 0;
     foreach ($byKey as $rs) {
+        ls_dupe_keep_sort($rs); // রাখা-হবে সারিটা দলের উপরে
         foreach ($rs as $r) {
             $list[] = $r;
             $rowGroupCount[(int) $r['id']] = count($rs);
@@ -549,6 +635,25 @@ $hasFilter = $q !== '' || $filterCourse !== '' || $filterBatch !== '';
     <?php if ($dupeView): ?>
         <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 text-sm text-amber-800">
             🔁 <b>ডুপ্লিকেট ভিউ</b> — একই <b>কোর্স + ব্যাচে</b> একই শিক্ষার্থী (ফোন বা নাম মিলিয়ে) একাধিকবার আছে এমন সারি। একই শিক্ষার্থী ঐ কোর্সের অন্য ব্যাচে বা আলাদা কোর্সে থাকলে এখানে আসবে না।
+            <div class="mt-2 pt-2 border-t border-amber-200">
+                প্রতি দলে <b>✅ রাখা হবে</b> = সবচেয়ে বেশি তথ্য-ভরা একটি সারি (সমান হলে সবচেয়ে পুরনোটি); বাকিগুলো <b>🗑️ অতিরিক্ত</b> হিসেবে মুছবে।
+                <span class="text-amber-700">(১০ বার থাকলে ৯টা মুছবে, ১টা থাকবে।)</span>
+                <?php if ($extraCount > 0): ?>
+                    <div class="mt-2">
+                        <form method="post" action="legacy-students.php" class="inline"
+                              onsubmit="return confirmSubmit(this, 'প্রতি দলে একটি সারি রেখে বাকি <?= number_format($extraCount) ?> টি অতিরিক্ত ডুপ্লিকেট মুছে ফেলবেন? এটা আর ফেরানো যাবে না।', 'অতিরিক্ত ডুপ্লিকেট মুছবেন?');">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="delete-dupes">
+                            <input type="hidden" name="q" value="<?= e($q) ?>">
+                            <input type="hidden" name="course" value="<?= e($filterCourse) ?>">
+                            <input type="hidden" name="batch" value="<?= e($filterBatch) ?>">
+                            <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2 rounded-lg text-sm">
+                                🗑️ সব অতিরিক্ত ডুপ্লিকেট মুছুন (<?= number_format($extraCount) ?> টি)
+                            </button>
+                        </form>
+                    </div>
+                <?php endif; ?>
+            </div>
         </div>
     <?php endif; ?>
 
@@ -570,6 +675,11 @@ $hasFilter = $q !== '' || $filterCourse !== '' || $filterBatch !== '';
                         <?= e($s['customer_name'] ?: '—') ?>
                         <?php if ($dupeView && isset($rowGroupCount[$rid])): ?>
                             <span class="inline-block ml-1 text-[11px] font-bold text-amber-700 bg-amber-100 rounded px-1.5 py-0.5">🔁 <?= (int) $rowGroupCount[$rid] ?> বার</span>
+                            <?php if (isset($extraSet[$rid])): ?>
+                                <span class="inline-block ml-1 text-[11px] font-bold text-red-700 bg-red-100 rounded px-1.5 py-0.5">🗑️ অতিরিক্ত</span>
+                            <?php else: ?>
+                                <span class="inline-block ml-1 text-[11px] font-bold text-green-700 bg-green-100 rounded px-1.5 py-0.5">✅ রাখা হবে</span>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </td>
                     <td class="py-2.5 px-4 font-mono whitespace-nowrap"><?= e($s['phone'] ?: '—') ?></td>
