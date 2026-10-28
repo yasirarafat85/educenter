@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/entities.php';
+require_once __DIR__ . '/includes/tasks.php'; // 📌 করণীয় কার্ড (task_feature_ready)
 admin_require_login();
 
 $db = get_db();
@@ -183,6 +184,13 @@ $taskDefs = [
      'label' => 'ব্যর্থ কুরিয়ার চালান', 'hint' => 'আবার পাঠাতে হবে', 'cls' => 'bg-red-100 text-red-600', 'num' => 'text-red-600',
      'sql' => "SELECT COUNT(*) c FROM courier_batches WHERE send_status = 'failed'"],
 ];
+
+// 📌 করণীয় / রিকোয়ারমেন্ট — খোলা থাকলে ড্যাশবোর্ডে কার্ড (ফিচার চালু থাকলেই)
+if (task_feature_ready($db)) {
+    $taskDefs[] = ['page' => 'tasks.php', 'url' => 'tasks.php', 'icon' => 'clipboard-check',
+        'label' => 'করণীয় বাকি', 'hint' => 'রিকোয়ারমেন্ট — হয়ে গেলে টিক দিন', 'cls' => 'bg-indigo-100 text-indigo-600', 'num' => 'text-indigo-600',
+        'sql' => "SELECT COUNT(*) c FROM registration_tasks WHERE status = 'open'"];
+}
 
 $tasks = [];
 foreach ($taskDefs as $td) {

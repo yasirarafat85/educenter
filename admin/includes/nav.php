@@ -14,6 +14,7 @@
 
 require_once __DIR__ . '/entities.php';
 require_once __DIR__ . '/permissions.php';
+require_once __DIR__ . '/tasks.php'; // task_feature_ready() — 📌 করণীয় ইনবক্স লিংকের গার্ড
 
 // সেট করা না থাকলে এই চারটা পিন করা অবস্থায় শুরু হয় (ইউজারের নিজের বলা "রোজ যেগুলো বেশি লাগে")।
 // ⚠️ খালি অ্যারে সেভ করা আর "কখনো সেভ করাই হয়নি" — দুটো আলাদা: সেটিং-কী না থাকলেই কেবল
@@ -119,6 +120,11 @@ function admin_nav_groups(): array
     }
     if (admin_can('orders')) {
         $daily[] = ['key' => 'payment-inbox', 'href' => 'payment-inbox.php', 'file' => 'payment-inbox.php', 'icon' => 'inbox', 'label' => 'পেমেন্ট ইনবক্স'];
+    }
+    // 📌 করণীয় ইনবক্স — WhatsApp স্ক্রিনশটের বিকল্প। টেবিল আছে ও সুইচ চালু থাকলেই দেখায়
+    //    (task_feature_ready); অ্যাডমিন সেটিংসে ০ দিলে নীরবে লুকায়, ডেটা থাকে।
+    if (admin_can('tasks') && task_feature_ready()) {
+        $daily[] = ['key' => 'tasks', 'href' => 'tasks.php', 'file' => 'tasks.php', 'icon' => 'clipboard-check', 'label' => 'করণীয় ইনবক্স'];
     }
 
     // 💰 টাকা মেলানো — "আয় মেলানো" আর বইয়ের তিন পাতা একসাথে (আগে দুই আলাদা গ্রুপে ছিল,

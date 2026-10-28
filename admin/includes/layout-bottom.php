@@ -616,7 +616,7 @@
 
         // ইতিমধ্যে নিজস্ব ফিল্টার-ফর্ম বা নিজস্ব সার্চ আছে এমন পেজ বাদ
         // (`#cpSearchBox` = কোর্স পার্সেল — ওখানে সার্ভারে বানানো গাদা ধরে নিজের সার্চ আছে)
-        if (document.querySelector('#regFilterForm, #courierFilterForm, #logsFilterForm, #ciFilterForm, #usersFilterForm, #lsFilterForm, #ureqFilterForm, #llFilterForm, #alFilterForm, #ifxFilterForm, #gmPickForm, #incFilterForm, #expFilterForm, #cpSearchBox')) { return; }
+        if (document.querySelector('#regFilterForm, #courierFilterForm, #logsFilterForm, #ciFilterForm, #usersFilterForm, #lsFilterForm, #ureqFilterForm, #llFilterForm, #alFilterForm, #ifxFilterForm, #gmPickForm, #incFilterForm, #expFilterForm, #cpSearchBox, #tasksFilterForm')) { return; }
 
         // ১) টেবিল-ভিত্তিক লিস্ট
         document.querySelectorAll('main .overflow-x-auto > table').forEach(function (t) {

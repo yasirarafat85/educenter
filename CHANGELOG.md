@@ -4,6 +4,29 @@
 
 ---
 
+## ২০২৬-১০-২৮ — 📌 করণীয় / রিকোয়ারমেন্ট ইনবক্স (WhatsApp স্ক্রিনশটের বিকল্প)
+
+**কেন**: প্রতি অর্ডারের (বা অর্ডার ছাড়া কারও) ছোট রিকোয়ারমেন্ট — ঠিকানা বদল, পার্সেল পরে যাবে, টাকা পরে দিবে, পার্সেল ০ পরে টাকা, দুই সেট, সাথে অতিরিক্ত কিছু — আগে WhatsApp গ্রুপে স্ক্রিনশট দিয়ে মনে রাখা হতো, ট্র্যাকিং কঠিন ছিল। এখন কাঠামোবদ্ধ তালিকা।
+
+**🔴🔴 সম্পূর্ণ আলাদা স্তর — টাকা/খাতা/আয় (`registration_payments`/`income`) কিছুই ছোঁয় না** (`legacy_students`-এর মতো নীতি)।
+
+**দুই স্তরে সহজে ফেরানো যায় (ইউজারের দাবি অনুযায়ী)**:
+- **নরম**: সেটিংসে `task_feature_on = 0` → সাইডবার/ড্যাশবোর্ড/ব্যাজ থেকে লুকায়, ডেটা থাকে।
+- **সম্পূর্ণ**: phpMyAdmin-এ `DROP TABLE registration_tasks` → সব গার্ড (`db_has_table`) চুপচাপ বাদ, সাইট হুবহু আগের অবস্থায় (আসল MariaDB-তে যাচাই করা: টেবিল ড্রপ করলে index/registrations/view/course-parcel সব ২০০, ০ এরর; ব্যাজ/কার্ড উধাও)।
+- **সহজে ঠিক করা**: করণীয়ের ধরনের তালিকা (চিপ) সেটিংসে এডিটযোগ্য — কোড ছুঁতে হয় না।
+
+**নতুন**: `database/migrate-registration-tasks.sql` (+ schema.sql) টেবিল `registration_tasks` (registration_id nullable FK CASCADE, নাম/ফোন/কোর্স/ব্যাচ স্ন্যাপশট, type_key, note, target_month, image_path, status, created_by/at, done_by/at)। ইঞ্জিন `admin/includes/tasks.php` (task_feature_ready/switch · task_type_presets · task_palette/color · task_open_counts bulk · task_month_label=pay_month_label · task_upload_dir deny-all · task_image_abs_path path-traversal গার্ড)। পাতা `admin/tasks.php` (যোগ/তালিকা/ফিল্টার/✅হয়ে গেছে/↩আবার খোলা/ডিলিট→আর্কাইভ, মোবাইল কার্ড-লেআউট, ৬ রঙ ধরন-ভেদে)। গেটেড `admin/task-image.php` (admin-only, uploads/tasks/ deny-all + path গার্ড)। ঐচ্ছিক স্ক্রিনশট `handle_image_upload()` দিয়ে WebP।
+
+**ইন্টিগ্রেশন** (সব `task_feature_ready()` গার্ডে): registrations তালিকায় 📌 ব্যাজ (bulk count, কলাম বাড়ানো ছাড়াই) + বিস্তারিত ভিউতে "করণীয়" লিংক; ড্যাশবোর্ডে কার্ড; সাইডবার "📅 রোজকার কাজ" গ্রুপে লিংক; সেটিংসে গ্রুপ (চালু/বন্ধ সুইচ + ধরনের তালিকা)।
+
+**ওয়্যারিং**: RBAC নতুন সেকশন `tasks` (permissions.php ম্যাপ + delete action বিদ্যমান), nav.php, archive_children_map (registrations→registration_tasks শর্তসাপেক্ষে + archive_type_label), schema-check sc_file_notes, page-help, guide, layout-bottom সার্চ-গার্ডে `#tasksFilterForm`।
+
+**পথে ধরা ২ বাগ (আসল MariaDB হারনেসে, lint ধরেনি)**: (১) `nav_safe_return()` POST হ্যান্ডলারে undefined — layout-top অনেক পরে nav.php লোড করে, তাই পাতায় নিজে require করা হলো; (২) `handle_image_upload()` undefined — `includes/upload.php` auto-load হয় না, require যোগ। "ফাংশন আছে কিন্তু লোড হয়নি" শ্রেণির পুনরাবৃত্তি।
+
+**🔴 মাইগ্রেশন লাগে** (`migrate-registration-tasks.sql`) — না চালালে ফিচার চুপচাপ বাদ, সাইট আগের মতো। **Tailwind রিবিল্ড লাগে না** (সব রঙ ইনলাইন/সাধারণ CSS)। যাচাই: আসল MariaDB + Playwright (১৩/১৩ — ০ ওভারফ্লো 320/390/768/1280, নেস্টেড-ফর্ম ০, `form=` ০, add free+reg-linked·done·delete→archive, বাংলা HEX, নরম-সুইচ ও টেবিল-ড্রপ ফলব্যাক) + ৪৫ অ্যাডমিন পাতা রিগ্রেশন সুইপ ০ সমস্যা।
+
+---
+
 ## 2026-10-28 — 📤 রেজিস্ট্রেশন/অর্ডার CSV-তে "ফেসবুক আইডি নাম" (মেশানো লেআউটে)
 
 **ইউজারের চাওয়া:** রেজিস্ট্রেশন/অর্ডার পাতার Excel/CSV ডাউনলোডে (চলতি ফিল্টারের) ফেসবুক আইডি নাম সহ হবে।

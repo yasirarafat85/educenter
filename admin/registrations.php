@@ -6,6 +6,7 @@ require_once __DIR__ . '/includes/payments.php';
 // আয়ের হিসাব (INCOME_STATUSES / pay_write_income / sync_income_for_status) — শেয়ার্ড,
 // কারণ "আয় মেলানো" পেজ (income-fix.php) হুবহু এই নিয়মেই আয় বসায়
 require_once __DIR__ . '/includes/income-sync.php';
+require_once __DIR__ . '/includes/tasks.php'; // 📌 করণীয় ব্যাজ/লিংক (task_feature_ready)
 require_once __DIR__ . '/../includes/bd-districts.php';
 admin_require_login();
 
@@ -1079,6 +1080,9 @@ if ($action === 'list') {
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
     $ledgerByReg = pay_fetch_many($db, array_column($rows, 'id')); // প্রতি রো-তে আলাদা কোয়েরি না করে একবারে
+    // 📌 প্রতি অর্ডারে খোলা করণীয়ের সংখ্যা (bulk, N+1 এড়াতে) — reg_more_cell()-এর ব্যাজে।
+    // ফিচার বন্ধ/টেবিল না থাকলে খালি (task_open_counts নিজেই গার্ডেড) — ব্যাজ বসে না।
+    $GLOBALS['reg_task_counts'] = task_open_counts($db, array_column($rows, 'id'));
 
     // ফিল্টার ড্রপডাউনে দেখানোর জন্য আইটেমের নামের তালিকা (টাইপ ফিল্টার করা থাকলে সেই টাইপেই সীমাবদ্ধ)
     $itemsSql = 'SELECT DISTINCT item_title FROM registrations';
@@ -1316,6 +1320,13 @@ function reg_more_cell(array $row): void
     <button type="button" onclick="toggleInfoPanel(<?= (int) $row['id'] ?>)" title="<?= e($tip) ?>"
             class="px-2 py-1 rounded-lg text-xs font-semibold border whitespace-nowrap <?= $notes ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-gray-100 text-gray-600 border-gray-200' ?>"><?= $notes ? '📝 নোট' : 'ℹ️ তথ্য' ?></button>
     <?php
+    // 📌 এই অর্ডারে খোলা করণীয় থাকলে ছোট ব্যাজ — কলাম বাড়ানো ছাড়াই (তালিকার নিয়ম)।
+    // ক্লিকে ঐ অর্ডারের করণীয়গুলো খোলে। ফিচার বন্ধ/টেবিল নেই হলে $reg_task_counts খালি।
+    $tCount = (int) ($GLOBALS['reg_task_counts'][(int) $row['id']] ?? 0);
+    if ($tCount > 0): ?>
+        <a href="tasks.php?reg=<?= (int) $row['id'] ?>" title="এই অর্ডারের করণীয় দেখুন"
+           class="ml-1 px-2 py-1 rounded-lg text-xs font-semibold border whitespace-nowrap bg-indigo-100 text-indigo-700 border-indigo-200 inline-block">📌 <?= $tCount ?></a>
+    <?php endif;
 }
 
 // ── তথ্য-ড্রয়ার। 🔴 ভেতরে নেস্টেড <table> দেবেন না — মোবাইল কার্ড-CSS
@@ -2054,6 +2065,12 @@ require __DIR__ . '/includes/layout-top.php';
                 <a href="registrations.php?action=edit&id=<?= $viewRow['id'] ?>" class="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 border border-indigo-200 hover:border-indigo-300 rounded-lg px-3 py-1.5">
                     <i data-lucide="pencil" class="w-3.5 h-3.5"></i> সম্পাদনা
                 </a>
+                <?php // 📌 করণীয় যোগ/দেখা — এই অর্ডারের জন্য। ফিচার চালু ও অনুমতি থাকলেই। ?>
+                <?php if (task_feature_ready($db) && (admin_is_super() || admin_can('tasks'))): ?>
+                <a href="tasks.php?reg=<?= $viewRow['id'] ?>" class="flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 border border-emerald-200 hover:border-emerald-300 rounded-lg px-3 py-1.5">
+                    <i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i> করণীয়
+                </a>
+                <?php endif; ?>
             </div>
         </div>
 

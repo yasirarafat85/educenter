@@ -22,6 +22,7 @@ function admin_permission_sections(): array
     }
     return $out + [
         'orders'   => 'অর্ডার / রেজিস্ট্রেশন / আগ্রহ তালিকা / পুরাতন শিক্ষার্থী',
+        'tasks'    => 'করণীয় / রিকোয়ারমেন্ট ইনবক্স',
         'reports'  => 'রিপোর্ট / ফলাফল (PDF আপলোড)',
         'parcel'   => 'কোর্স পার্সেল',
         'courier'  => 'কুরিয়ার (পাঠানো ও ট্র্যাকিং)',
@@ -55,6 +56,9 @@ function admin_page_sections(): array
         //    প্রতিটা বোতাম registrations.php/course-parcel.php-র হ্যান্ডলারে যায় — ওখানেই cap যাচাই হয়
         'month-work.php'            => ['parcel', 'orders'],
         'registrations.php'         => ['orders'],
+        // 📌 করণীয় ইনবক্স — সম্পূর্ণ আলাদা স্তর (টাকা/খাতা ছোঁয় না), নিজস্ব সেকশন
+        'tasks.php'                 => ['tasks'],
+        'task-image.php'            => ['tasks'],
         'reports.php'               => ['reports'],
         'course-data.php'           => ['orders'],
         // 💰 আয় মেলানো — অর্ডারের টাকার খাতা বসায় (registrations.php-এর "টাকা" ড্রয়ারের মতোই), তাই একই সেকশন

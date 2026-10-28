@@ -50,6 +50,11 @@ function archive_children_map(): array
             //    আর্কাইভ **ও ডিলিট** ভাঙত (expenses-এর হুবহু একই কারণ)।
             (function_exists('db_has_column') && db_has_column(null, 'payment_claims', 'registration_id'))
                 ? [['table' => 'payment_claims', 'fk' => 'registration_id']]
+                : [],
+            // 📌 করণীয় / রিকোয়ারমেন্ট (FK CASCADE, তাই ডিলিটে এমনিতেই যায় — বান্ডলে রাখা হয়
+            //    যাতে রিস্টোরে করণীয়গুলোও ফেরে)। 🔴 শর্তসাপেক্ষে: মাইগ্রেশনের আগে টেবিলই নেই।
+            (function_exists('db_has_table') && db_has_table(null, 'registration_tasks'))
+                ? [['table' => 'registration_tasks', 'fk' => 'registration_id']]
                 : []
         ),
     ];
@@ -63,6 +68,7 @@ function archive_type_label(string $table): string
         'products' => 'প্রোডাক্ট', 'teachers' => 'শিক্ষক', 'reviews' => 'রিভিউ',
         'notices' => 'নোটিশ', 'gallery' => 'গ্যালারি', 'faqs' => 'প্রশ্নোত্তর (FAQ)',
         'registrations' => 'রেজিস্ট্রেশন/অর্ডার',
+        'registration_tasks' => 'করণীয় / রিকোয়ারমেন্ট',
     ][$table] ?? $table;
 }
 

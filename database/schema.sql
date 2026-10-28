@@ -993,4 +993,30 @@ CREATE TABLE IF NOT EXISTS student_reports (
     INDEX idx_rep_item (item_id, batch)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 📌 করণীয় / রিকোয়ারমেন্ট ইনবক্স (2026-10-28) — WhatsApp স্ক্রিনশটের বিকল্প।
+-- সম্পূর্ণ আলাদা স্তর, টাকা/খাতা/আয় কিছুই ছোঁয় না। registration_id nullable, FK CASCADE।
+CREATE TABLE IF NOT EXISTS registration_tasks (
+    id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    registration_id INT UNSIGNED NULL,
+    person_name     VARCHAR(150) NOT NULL DEFAULT '',
+    person_phone    VARCHAR(20)  NOT NULL DEFAULT '',
+    item_id         INT UNSIGNED NULL,
+    item_title      VARCHAR(200) NOT NULL DEFAULT '',
+    batch           VARCHAR(160) NOT NULL DEFAULT '',
+    type_key        VARCHAR(80)  NOT NULL DEFAULT '',
+    note            TEXT         NULL,
+    target_month    INT          NULL,
+    image_path      VARCHAR(255) NOT NULL DEFAULT '',
+    status          VARCHAR(20)  NOT NULL DEFAULT 'open',
+    created_by      VARCHAR(50)  NOT NULL DEFAULT '',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    done_by         VARCHAR(50)  NOT NULL DEFAULT '',
+    done_at         DATETIME     NULL,
+    INDEX idx_rtask_status (status, created_at),
+    INDEX idx_rtask_reg (registration_id),
+    INDEX idx_rtask_item (item_id),
+    CONSTRAINT fk_rtask_reg FOREIGN KEY (registration_id)
+        REFERENCES registrations (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

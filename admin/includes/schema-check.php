@@ -127,6 +127,7 @@ function sc_file_notes(): array
         'migrate-phone-lookup-hash.sql'          => 'ফোন-লুকআপের রেট-লিমিট (IP ধরে)',
         'migrate-registrations-indexes.sql'      => 'অর্ডারের তালিকা ও পার্সেলের পাতা দ্রুত খোলা (শুধু গতি)',
         'migrate-payment-methods.sql'            => 'থ্যাংক-ইউ পাতার বিকাশ/নগদ নাম্বার',
+        'migrate-registration-tasks.sql'         => 'করণীয় / রিকোয়ারমেন্ট ইনবক্স (WhatsApp স্ক্রিনশটের বিকল্প)',
         'migrate-notice-expiry.sql'              => 'নোটিশে সময় দিয়ে রাখলে সেটা নিজে থেকেই সাইট থেকে সরে যাওয়া',
         'migrate-moderator-group-track.sql'      => 'মডারেটর গ্রুপ-টিক দিলে কে/কখন দিল সারিতে দেখানো',
         'migrate-student-reports.sql'            => 'শিক্ষার্থীর রিপোর্ট কার্ড / ফলাফল — অ্যাডমিন PDF আপলোড, অভিভাবক লগইন করে দেখা',
