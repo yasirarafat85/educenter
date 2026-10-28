@@ -859,7 +859,9 @@ function reg_csv_columns(string $type, array $statusLabels, array $typeLabels): 
         'ব্যাচ'    => fn($r, $l) => reg_csv_safe($r['batch'] ?? ''),
         'নাম'     => fn($r, $l) => reg_csv_safe($r['customer_name'] ?? ''),
         'মোবাইল'  => fn($r, $l) => reg_csv_phone($r['phone'] ?? ''),
-        // তালিকার মেশানো লেআউটেও রিসিভার দেখানো হয় (কোর্সের সারিতে), তাই CSV-তেও
+        // তালিকার মেশানো লেআউটে ফেসবুক আইডি নাম ও রিসিভার দুটোই দেখানো হয় (কোর্সের
+        // সারিতে reg_fb_cell()/reg_person_cell() দিয়ে), তাই CSV-তেও
+        'ফেসবুক আইডি'     => fn($r, $l) => reg_csv_safe($r['facebook_id'] ?? ''),
         'রিসিভারের নাম'   => fn($r, $l) => reg_csv_safe($r['receiver_name'] ?? ''),
         'রিসিভারের নম্বর' => fn($r, $l) => reg_csv_phone($r['receiver_phone'] ?? ''),
         'ঠিকানা'  => fn($r, $l) => reg_csv_safe($r['address'] ?? ''),
