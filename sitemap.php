@@ -12,7 +12,7 @@ $urls = [];
 // ক্লিন URL (.htaccess রিরাইট) — index → রুট, বাকি পেজ extensionless,
 // আইটেম → `course/12-নাম` (item_url(); ২০২৬-০৯-২৭ থেকে, আগে `detail?type=..&id=..` ছিল)
 $urls[] = [$base . '/', '1.0', ''];
-foreach (['courses', 'worksheets', 'products', 'notice', 'teachers', 'reviews', 'about', 'gallery', 'faqs', 'course-interest'] as $p) {
+foreach (['courses', 'worksheets', 'products', 'notice', 'teachers', 'reviews', 'about', 'gallery', 'faqs', 'course-interest', 'contact'] as $p) {
     $urls[] = [$base . '/' . $p, '0.8', ''];
 }
 

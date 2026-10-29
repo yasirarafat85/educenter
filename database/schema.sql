@@ -1019,4 +1019,21 @@ CREATE TABLE IF NOT EXISTS registration_tasks (
         REFERENCES registrations (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 📨 যোগাযোগ বার্তা (Get in touch, 2026-10-29) — পাবলিক ভিজিটরের লেখা বার্তা।
+-- সম্পূর্ণ আলাদা স্তর, কোনো FK নেই, টাকা/খাতা/আয় কিছুই ছোঁয় না।
+CREATE TABLE IF NOT EXISTS contact_messages (
+    id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(150) NOT NULL DEFAULT '',
+    phone       VARCHAR(20)  NOT NULL DEFAULT '',
+    email       VARCHAR(190) NOT NULL DEFAULT '',
+    topic       VARCHAR(80)  NOT NULL DEFAULT '',
+    message     TEXT         NULL,
+    status      VARCHAR(20)  NOT NULL DEFAULT 'new',
+    ip_address  VARCHAR(45)  NOT NULL DEFAULT '',
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    handled_at  DATETIME     NULL,
+    INDEX idx_cmsg_status (status, id),
+    INDEX idx_cmsg_topic (topic)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

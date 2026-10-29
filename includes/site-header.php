@@ -191,6 +191,10 @@ $metaDescription = en_digits($metaDescription);
                     <a href="search" class="p-3 rounded-xl glass-effect hover:bg-white/30 transition-colors" aria-label="খুঁজুন" title="খুঁজুন">
                         <i data-lucide="search" class="w-6 h-6 text-gray-700"></i>
                     </a>
+                    <?php // ✉️ যোগাযোগ — আইকন হিসেবে (মেনুতে ৮ আইটেম ও স্টিকি বারে ৫ স্লট পূর্ণ, তাই এখানে) ?>
+                    <a href="contact" class="p-3 rounded-xl glass-effect hover:bg-white/30 transition-colors" aria-label="যোগাযোগ করুন" title="যোগাযোগ করুন">
+                        <i data-lucide="mail" class="w-6 h-6 text-gray-700"></i>
+                    </a>
                     <button id="mobile-menu-btn" class="lg:hidden p-3 rounded-xl glass-effect hover:bg-white/30 transition-colors" aria-label="মেনু" aria-expanded="false" aria-controls="mobile-nav">
                         <i data-lucide="menu" class="w-6 h-6 text-gray-700"></i>
                     </button>

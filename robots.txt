@@ -8,6 +8,7 @@ Disallow: /register-submit.php
 Disallow: /course-register-submit.php
 Disallow: /course-interest-submit.php
 Disallow: /account-request-submit.php
+Disallow: /contact-submit.php
 Disallow: /log-download.php
 Disallow: /ajax-lookup-registration.php
 Disallow: /ajax-lookup-interest.php

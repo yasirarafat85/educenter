@@ -15,6 +15,7 @@
 require_once __DIR__ . '/entities.php';
 require_once __DIR__ . '/permissions.php';
 require_once __DIR__ . '/tasks.php'; // task_feature_ready() — 📌 করণীয় ইনবক্স লিংকের গার্ড
+require_once dirname(__DIR__, 2) . '/includes/contact.php'; // contact_feature_ready() — 📨 যোগাযোগ বার্তা লিংকের গার্ড
 
 // সেট করা না থাকলে এই চারটা পিন করা অবস্থায় শুরু হয় (ইউজারের নিজের বলা "রোজ যেগুলো বেশি লাগে")।
 // ⚠️ খালি অ্যারে সেভ করা আর "কখনো সেভ করাই হয়নি" — দুটো আলাদা: সেটিং-কী না থাকলেই কেবল
@@ -167,6 +168,10 @@ function admin_nav_groups(): array
     if (admin_can('users')) {
         $sometimes[] = ['key' => 'users',         'href' => 'users.php',         'file' => 'users.php',         'icon' => 'users',          'label' => 'অভিভাবক অ্যাকাউন্ট'];
         $sometimes[] = ['key' => 'user-requests', 'href' => 'user-requests.php', 'file' => 'user-requests.php', 'icon' => 'message-square', 'label' => 'অনুরোধ / মন্তব্য'];
+    }
+    // 📨 যোগাযোগ বার্তা (Get in touch) — ফিচার চালু থাকলেই (টেবিল আছে ও সুইচ চালু)
+    if (admin_can('contact') && contact_feature_ready()) {
+        $sometimes[] = ['key' => 'contact-messages', 'href' => 'contact-messages.php', 'file' => 'contact-messages.php', 'icon' => 'mail', 'label' => 'যোগাযোগ বার্তা'];
     }
 
     $logs = [];

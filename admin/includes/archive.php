@@ -69,6 +69,7 @@ function archive_type_label(string $table): string
         'notices' => 'নোটিশ', 'gallery' => 'গ্যালারি', 'faqs' => 'প্রশ্নোত্তর (FAQ)',
         'registrations' => 'রেজিস্ট্রেশন/অর্ডার',
         'registration_tasks' => 'করণীয় / রিকোয়ারমেন্ট',
+        'contact_messages' => 'যোগাযোগ বার্তা',
     ][$table] ?? $table;
 }
 

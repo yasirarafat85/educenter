@@ -23,6 +23,7 @@ function admin_permission_sections(): array
     return $out + [
         'orders'   => 'অর্ডার / রেজিস্ট্রেশন / আগ্রহ তালিকা / পুরাতন শিক্ষার্থী',
         'tasks'    => 'করণীয় / রিকোয়ারমেন্ট ইনবক্স',
+        'contact'  => 'যোগাযোগ বার্তা (Get in touch)',
         'reports'  => 'রিপোর্ট / ফলাফল (PDF আপলোড)',
         'parcel'   => 'কোর্স পার্সেল',
         'courier'  => 'কুরিয়ার (পাঠানো ও ট্র্যাকিং)',
@@ -59,6 +60,8 @@ function admin_page_sections(): array
         // 📌 করণীয় ইনবক্স — সম্পূর্ণ আলাদা স্তর (টাকা/খাতা ছোঁয় না), নিজস্ব সেকশন
         'tasks.php'                 => ['tasks'],
         'task-image.php'            => ['tasks'],
+        // 📨 যোগাযোগ বার্তা — সম্পূর্ণ আলাদা স্তর (টাকা/খাতা ছোঁয় না), নিজস্ব সেকশন
+        'contact-messages.php'      => ['contact'],
         'reports.php'               => ['reports'],
         'course-data.php'           => ['orders'],
         // 💰 আয় মেলানো — অর্ডারের টাকার খাতা বসায় (registrations.php-এর "টাকা" ড্রয়ারের মতোই), তাই একই সেকশন

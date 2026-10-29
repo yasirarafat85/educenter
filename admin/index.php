@@ -2,6 +2,7 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/entities.php';
 require_once __DIR__ . '/includes/tasks.php'; // 📌 করণীয় কার্ড (task_feature_ready)
+require_once __DIR__ . '/../includes/contact.php'; // 📨 যোগাযোগ বার্তা কার্ড (contact_feature_ready)
 admin_require_login();
 
 $db = get_db();
@@ -190,6 +191,13 @@ if (task_feature_ready($db)) {
     $taskDefs[] = ['page' => 'tasks.php', 'url' => 'tasks.php', 'icon' => 'clipboard-check',
         'label' => 'করণীয় বাকি', 'hint' => 'রিকোয়ারমেন্ট — হয়ে গেলে টিক দিন', 'cls' => 'bg-indigo-100 text-indigo-600', 'num' => 'text-indigo-600',
         'sql' => "SELECT COUNT(*) c FROM registration_tasks WHERE status = 'open'"];
+}
+
+// 📨 যোগাযোগ বার্তা — নতুন (দেখা হয়নি) থাকলে ড্যাশবোর্ডে কার্ড (ফিচার চালু থাকলেই)
+if (contact_feature_ready($db)) {
+    $taskDefs[] = ['page' => 'contact-messages.php', 'url' => 'contact-messages.php', 'icon' => 'mail',
+        'label' => 'নতুন যোগাযোগ বার্তা', 'hint' => 'ভিজিটর লিখে পাঠিয়েছেন — পড়ে যোগাযোগ করুন', 'cls' => 'bg-blue-100 text-blue-600', 'num' => 'text-blue-600',
+        'sql' => "SELECT COUNT(*) c FROM contact_messages WHERE status = 'new'"];
 }
 
 $tasks = [];
