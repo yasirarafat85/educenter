@@ -46,10 +46,40 @@
     ?>
     <footer class="ft">
         <div class="container mx-auto px-4">
+
+            <?php // ── ১+২ কাজের ব্যান্ড — "প্রশ্ন আছে? সরাসরি জানান" + চলমান কোর্স চিপ + WhatsApp ──
+                  // 🔴 চিপ ও বোতাম আগে ব্র্যান্ড ঘরে ছিল, এখন উপরে এই ব্যান্ডে — ভর্তি ও যোগাযোগ চোখে বেশি পড়ে। ?>
+            <?php if ($ftWa !== '' || $ftOpenN > 0): ?>
+                <div class="ft-cta">
+                    <div class="ft-cta-txt">
+                        <b>প্রশ্ন আছে? সরাসরি জানান</b>
+                        <span>ভর্তি, কোর্স বা যেকোনো বিষয়ে — দ্রুত উত্তর দেব</span>
+                    </div>
+                    <div class="ft-cta-act">
+                        <?php if ($ftOpenN > 0): ?>
+                            <a href="courses" class="ft-chip">
+                                <span aria-hidden="true">🎓</span>
+                                এখন <?= (int) $ftOpenN ?> টি কোর্সে ভর্তি চলছে
+                            </a>
+                        <?php endif; ?>
+                        <?php if ($ftWa !== ''): ?>
+                            <a href="https://wa.me/<?= e($ftWa) ?>" target="_blank" rel="noopener noreferrer" class="ft-wa">
+                                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884a9.82 9.82 0 0 1 6.988 2.896 9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.886-9.885 9.886m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
+                                <span>WhatsApp-এ লিখুন</span>
+                            </a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php // ── ৩ স্ট্যাট ব্যান্ড — আইকনসহ কার্ড (আইকন `site_stats()`-এর lucide নাম থেকে) ── ?>
             <?php if ($ftStats): ?>
                 <div class="ft-trust">
                     <?php foreach ($ftStats as $ftSt): ?>
                         <div class="ft-tr">
+                            <?php if (!empty($ftSt['icon'])): ?>
+                                <span class="ft-tr-ic"><i data-lucide="<?= e($ftSt['icon']) ?>" aria-hidden="true"></i></span>
+                            <?php endif; ?>
                             <b><?= e($ftSt['value']) ?></b>
                             <span><?= e($ftSt['label']) ?></span>
                         </div>
@@ -70,20 +100,6 @@
                     </a>
                     <?php // 🔴 লেখাটা অ্যাডমিন সেটিংস → "সাধারণ তথ্য" → ফুটারের বর্ণনা থেকে ?>
                     <p class="ft-about"><?= e(footer_about_text()) ?></p>
-
-                    <?php if ($ftOpenN > 0): ?>
-                        <a href="courses" class="ft-open">
-                            <span aria-hidden="true">🎓</span>
-                            এখন <?= (int) $ftOpenN ?> টি কোর্সে ভর্তি চলছে
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if ($ftWa !== ''): ?>
-                        <a href="https://wa.me/<?= e($ftWa) ?>" target="_blank" rel="noopener noreferrer" class="ft-wa">
-                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884a9.82 9.82 0 0 1 6.988 2.896 9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.886-9.885 9.886m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
-                            <span>WhatsApp-এ লিখুন</span>
-                        </a>
-                    <?php endif; ?>
 
                     <?php
 $socialIcons = [
@@ -115,6 +131,7 @@ $socialIcons = [
                     }
                     if ($socialHtml !== ''):
                     ?>
+                        <div class="ft-follow">আমাদের ফলো করুন</div>
                         <div class="ft-socs"><?= $socialHtml ?></div>
                     <?php endif; ?>
                 </div>
@@ -122,7 +139,7 @@ $socialIcons = [
                 <?php // ── লিংক কলাম ── ?>
                 <?php foreach ($ftCols as $ftCol): ?>
                     <nav class="ft-col" aria-label="<?= e($ftCol['title']) ?>">
-                        <h4><?= e($ftCol['title']) ?></h4>
+                        <h4><?php if (!empty($ftCol['icon'])): ?><span class="ft-hic"><i data-lucide="<?= e($ftCol['icon']) ?>" aria-hidden="true"></i></span><?php endif; ?><?= e($ftCol['title']) ?></h4>
                         <ul>
                             <?php foreach ($ftCol['links'] as [$ftUrl, $ftEmoji, $ftLabel]): ?>
                                 <li><a href="<?= e($ftUrl) ?>"><span class="ft-em" aria-hidden="true"><?= $ftEmoji ?></span><?= e($ftLabel) ?></a></li>
@@ -133,33 +150,34 @@ $socialIcons = [
 
                 <?php // ── যোগাযোগ (🔴 ফোন/ইমেইল ক্লিকযোগ্য — ফোনেই সবচেয়ে বেশি কাজে লাগে) ── ?>
                 <div class="ft-col ft-contact">
-                    <h4>যোগাযোগ</h4>
-                    <ul>
-                        <?php if ($ftAddress !== ''): ?>
-                            <li>
-                                <i data-lucide="map-pin" aria-hidden="true"></i>
-                                <span><?= e($ftAddress) ?></span>
-                            </li>
-                        <?php endif; ?>
-                        <?php if ($ftHours !== ''): ?>
-                            <li>
-                                <i data-lucide="clock" aria-hidden="true"></i>
-                                <span><?= e($ftHours) ?></span>
-                            </li>
-                        <?php endif; ?>
+                    <h4><span class="ft-hic"><i data-lucide="phone" aria-hidden="true"></i></span>যোগাযোগ</h4>
+                    <div class="ft-crows">
+                        <?php // 🔴 ফোন/ইমেইল ক্লিকযোগ্য চিপ — ফোনে এক ট্যাপে কল/মেইল; ঠিকানা/সময় সাধারণ চিপ ?>
                         <?php if ($ftPhone !== ''): ?>
-                            <li>
-                                <i data-lucide="phone" aria-hidden="true"></i>
-                                <a href="tel:<?= e(preg_replace('/[^0-9+]/', '', $ftPhone)) ?>"><?= e($ftPhone) ?></a>
-                            </li>
+                            <a class="ft-crow" href="tel:<?= e(preg_replace('/[^0-9+]/', '', $ftPhone)) ?>">
+                                <span class="ft-cic"><i data-lucide="phone" aria-hidden="true"></i></span>
+                                <span class="ft-cmeta"><small>ফোন করুন</small><b><?= e($ftPhone) ?></b></span>
+                            </a>
                         <?php endif; ?>
                         <?php if ($ftEmail !== ''): ?>
-                            <li>
-                                <i data-lucide="mail" aria-hidden="true"></i>
-                                <a href="mailto:<?= e($ftEmail) ?>" class="ft-break"><?= e($ftEmail) ?></a>
-                            </li>
+                            <a class="ft-crow" href="mailto:<?= e($ftEmail) ?>">
+                                <span class="ft-cic"><i data-lucide="mail" aria-hidden="true"></i></span>
+                                <span class="ft-cmeta"><small>ইমেইল</small><b><?= e($ftEmail) ?></b></span>
+                            </a>
                         <?php endif; ?>
-                    </ul>
+                        <?php if ($ftAddress !== ''): ?>
+                            <div class="ft-crow ft-crow-plain">
+                                <span class="ft-cic"><i data-lucide="map-pin" aria-hidden="true"></i></span>
+                                <span class="ft-cmeta"><small>ঠিকানা</small><b><?= e($ftAddress) ?></b></span>
+                            </div>
+                        <?php endif; ?>
+                        <?php if ($ftHours !== ''): ?>
+                            <div class="ft-crow ft-crow-plain">
+                                <span class="ft-cic"><i data-lucide="clock" aria-hidden="true"></i></span>
+                                <span class="ft-cmeta"><small>খোলার সময়</small><b><?= e($ftHours) ?></b></span>
+                            </div>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
 
@@ -174,6 +192,8 @@ $socialIcons = [
                         <span aria-hidden="true">·</span>
                         <a href="account-signup">নতুন অ্যাকাউন্ট</a>
                     <?php endif; ?>
+                    <?php // ↑ উপরে — JS নিচের স্ক্রিপ্টে `#ft-top` ধরে পেজের উপরে নেয় (স্টিকি বারের সাথে শেয়ার্ড) ?>
+                    <button type="button" class="ft-up" id="ft-top" aria-label="উপরে যান">↑ উপরে</button>
                 </div>
             </div>
         </div>
@@ -236,14 +256,16 @@ $socialIcons = [
         // defer করা স্ক্রিপ্ট DOMContentLoaded-এর ঠিক আগে চলে, তাই এখানে লাইব্রেরিটা নিশ্চিতভাবে আছে
         document.addEventListener('DOMContentLoaded', eduIcons);
 
-        // ── স্টিকি বারের "উপরে" আইটেম — ক্লিকে পেজের উপরে নিয়ে যায় (আলাদা ভাসমান বাটন নয়) ──
+        // ── "উপরে" — স্টিকি বারের আইটেম (#bnav-top) ও ফুটারের "↑ উপরে" লিংক (#ft-top) দুটোই পেজের উপরে নেয় ──
         (function () {
-            var btn = document.getElementById('bnav-top');
-            if (!btn) { return; }
-            btn.addEventListener('click', function () {
+            function toTop() {
                 // prefers-reduced-motion সম্মান করা (CLAUDE.md এর মোবাইল/অ্যাক্সেসিবিলিটি নিয়ম)
                 var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
                 window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+            }
+            ['bnav-top', 'ft-top'].forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) { el.addEventListener('click', toTop); }
             });
         })();
 

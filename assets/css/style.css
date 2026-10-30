@@ -729,22 +729,92 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
    ══════════════════════════════════════════════════════════════════════════════ */
 .ft {
     position: relative;
+    overflow: hidden;                       /* BFC — ভেতরের margin বাইরে না গলে, আর গোল কোণে ক্লিপ */
     margin-top: 3rem;
-    padding: 2.75rem 0 1.5rem;
-    color: #d6dae3;
-    background: #0f1420;
-    /* থিম-রঙের হালকা আভা দুই কোনায় — একরঙা কালো বাক্সের বদলে গভীরতা */
-    background-image:
-        radial-gradient(900px 320px at 8% -10%, rgb(var(--c-primary) / .22), transparent 70%),
-        radial-gradient(760px 300px at 95% 0%, rgb(var(--c-primary-2) / .16), transparent 72%);
+    padding: 0 0 1.5rem;                    /* উপরের ফাঁক প্রথম ব্লকের margin-top থেকে (overflow:hidden তাই ভেতরেই বসে) */
+    color: #b8c0cd;
+    border-radius: 24px 24px 0 0;           /* ১ — উপরের কোণ গোল, কার্ডের মতো আধুনিক চেহারা */
+    /* থিম-রঙের হালকা আভা দুই কোনায় + গাঢ় গ্রেডিয়েন্ট সারফেস — গভীরতা */
+    background:
+        radial-gradient(130% 80% at 15% -10%, rgb(var(--c-primary) / .20), transparent 55%),
+        radial-gradient(120% 90% at 95% 0%, rgb(var(--c-primary-2) / .12), transparent 50%),
+        linear-gradient(180deg, #0f1a2e, #0b1220);
 }
 /* উপরে থিম-রঙের সরু পট্টি — পেজ আর ফুটারের মাঝে পরিষ্কার সীমানা */
 .ft::before {
-    content: ""; position: absolute; inset: 0 0 auto; height: 3px;
-    background: linear-gradient(90deg, rgb(var(--c-primary)), rgb(var(--c-primary-2)), rgb(var(--c-primary)));
+    content: ""; position: absolute; inset: 0 0 auto; height: 3px; z-index: 1;
+    background: linear-gradient(90deg, rgb(var(--c-primary)), rgb(var(--c-primary-2)), transparent);
+}
+
+/* ── ১+২ কাজের ব্যান্ড (CTA) — "প্রশ্ন আছে? সরাসরি জানান" + চলমান কোর্স চিপ + WhatsApp ── */
+.ft-cta {
+    margin-top: 2.25rem;
+    display: flex; flex-wrap: wrap; gap: .85rem 1rem;
+    align-items: center; justify-content: space-between;
+    padding: 1rem 1.15rem; border-radius: 18px;
+    background: rgb(255 255 255 / .04);
+    border: 1px solid rgb(255 255 255 / .08);
+}
+.ft-cta-txt { min-width: 0; }
+.ft-cta-txt b { display: block; color: #fff; font-size: 1.02rem; font-weight: 800; line-height: 1.4; }
+.ft-cta-txt span { font-size: .86rem; color: #8b94a3; }
+.ft-cta-act { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+
+/* 🎓 "এখন N টি কোর্সে ভর্তি চলছে" চিপ — গণনা `open_course_count()` থেকে, ০ হলে PHP-ই রেন্ডার করে না */
+.ft-chip {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .5rem .85rem; border-radius: 999px; text-decoration: none;
+    font-size: .84rem; font-weight: 700;
+    color: #d9f7e6;
+    background: rgb(var(--c-primary) / .16);
+    border: 1px solid rgb(var(--c-primary) / .4);
+    transition: background .15s ease, color .15s ease, transform .15s ease;
+}
+.ft-chip:hover { background: rgb(var(--c-primary) / .28); color: #fff; transform: translateY(-2px); }
+
+/* WhatsApp বোতাম — ফুটারের সবচেয়ে দরকারি কাজ (🔴 রঙটা WhatsApp-এর নিজের, থিম-নিরপেক্ষ) */
+.ft-wa {
+    display: inline-flex; align-items: center; gap: .55rem;
+    padding: .6rem 1.15rem; border-radius: 999px; text-decoration: none;
+    background: #25D366; color: #042711; font-weight: 800; font-size: .9rem;
+    box-shadow: 0 8px 20px rgb(37 211 102 / .3);
+    transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+.ft-wa svg { width: 18px; height: 18px; }
+.ft-wa:hover { filter: brightness(1.06); transform: translateY(-2px); box-shadow: 0 12px 26px rgb(37 211 102 / .4); }
+
+/* ── ৩ স্ট্যাট ব্যান্ড (২০২৬-১০-০৫, ১০-৩০ এ কার্ড+আইকন) — হোমপেজের "সংখ্যায় সাফল্য"-এর একই সংখ্যা।
+   🔴 হোমপেজে রেন্ডারই হয় না (PHP-তে গার্ড) — ওখানে উপরে বড় করে একই সংখ্যা আছে।
+   🔴 সংখ্যায় গ্রেডিয়েন্ট-ক্লিপড টেক্সট নয় (CLAUDE.md নিয়ম) — সলিড সাদা। ── */
+.ft-trust {
+    margin-top: 1.5rem;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .6rem;
+}
+.ft-tr {
+    min-width: 0; text-align: center;
+    padding: .85rem .4rem; border-radius: 14px;
+    background: rgb(255 255 255 / .035);
+    border: 1px solid rgb(255 255 255 / .08);
+}
+.ft-tr-ic { display: grid; place-items: center; margin: 0 auto .3rem; color: rgb(var(--c-primary-2)); }
+.ft-tr-ic i, .ft-tr-ic svg { width: 20px; height: 20px; }
+.ft-tr b {
+    display: block; font-size: 1.5rem; font-weight: 800; line-height: 1.2;
+    color: #fff; font-variant-numeric: tabular-nums;
+}
+.ft-tr span {
+    display: block; margin-top: .15rem; font-size: .74rem; color: #8b94a3; line-height: 1.45;
+}
+/* ৪৮০px থেকেই চার কলাম — `.ft-grid`-এর একই ব্রেকপয়েন্ট, আর ফোনে ফুটার যত ছোট রাখা যায় */
+@media (min-width: 480px) {
+    .ft-trust { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .ft-tr b { font-size: 1.7rem; }
 }
 
 .ft-grid {
+    margin-top: 2rem;
     display: grid;
     gap: 2rem 2.5rem;
     grid-template-columns: 1fr;
@@ -756,134 +826,120 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
     .ft-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .ft-brand, .ft-contact { grid-column: 1 / -1; }
 }
-/* 🔴 ব্র্যান্ড কলামটা একটু চওড়া (1.4fr) — ওতে লোগো, বর্ণনা, WhatsApp ও সোশ্যাল সব আছে */
+/* 🔴 ব্র্যান্ড কলামটা একটু চওড়া (1.4fr) — ওতে লোগো, বর্ণনা ও সোশ্যাল আছে */
 @media (min-width: 1024px) {
     .ft-grid { grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 2rem; }
     .ft-brand, .ft-contact { grid-column: auto; }
 }
 
-/* ── 📊 ট্রাস্ট-সারি (২০২৬-১০-০৫) — হোমপেজের "সংখ্যায় সাফল্য"-এর একই চারটা সংখ্যা।
-   🔴 হোমপেজে রেন্ডারই হয় না (PHP-তে গার্ড) — ওখানে উপরে বড় করে একই সংখ্যা আছে।
-   সংখ্যাগুলো থিমের রঙে, লেখা ধূসর — ফুটারের গাঢ় ব্যাকগ্রাউন্ডে দুটোই পড়া যায়। ── */
-.ft-trust {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem .5rem;
-    padding: 0 0 1.75rem;
-    margin-bottom: 1.75rem;
-    border-bottom: 1px solid rgb(255 255 255 / .08);
-}
-.ft-tr { min-width: 0; text-align: center; }
-.ft-tr b {
-    display: block; font-size: 1.6rem; font-weight: 800; line-height: 1.2;
-    color: rgb(var(--c-primary-2));
-    font-variant-numeric: tabular-nums;
-}
-.ft-tr span {
-    display: block; margin-top: .2rem; font-size: .82rem; color: #9aa3b2; line-height: 1.5;
-}
-/* ৪৮০px থেকেই চার কলাম — `.ft-grid`-এর একই ব্রেকপয়েন্ট, আর ফোনে ফুটার যত ছোট রাখা যায় */
-@media (min-width: 480px) {
-    .ft-trust { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .ft-tr b { font-size: 1.85rem; }
-}
-
 /* ── ব্র্যান্ড ── */
 .ft-brand { min-width: 0; }
 .ft-logo { display: flex; align-items: center; gap: .75rem; color: inherit; text-decoration: none; }
-.ft-logo img { width: 48px; height: 48px; border-radius: 12px; object-fit: cover; flex-shrink: 0;
-               box-shadow: 0 6px 18px rgb(0 0 0 / .45); }
+/* লোগোয় থিম-রঙের আভা (improvement ১) — একরঙা ছায়ার বদলে ব্র্যান্ডের রঙ */
+.ft-logo img { width: 52px; height: 52px; border-radius: 14px; object-fit: cover; flex-shrink: 0;
+               box-shadow: 0 0 0 1px rgb(255 255 255 / .08), 0 8px 20px rgb(var(--c-primary) / .3); }
 .ft-logo b { display: block; font-size: 1.15rem; font-weight: 800; color: #fff; line-height: 1.3; }
-.ft-logo i { display: block; font-style: normal; font-size: .8rem; color: #9aa3b2; }
+.ft-logo i { display: block; font-style: normal; font-size: .8rem; color: #8b94a3; }
 .ft-about { margin-top: 1rem; font-size: .92rem; line-height: 1.85; color: #b8c0cd; }
 
-/* 🎓 "এখন N টি কোর্সে ভর্তি চলছে" চিপ (২০২৬-১০-০৫) — গণনা `open_course_count()` থেকে,
-   ০ হলে PHP-ই রেন্ডার করে না। 🔴 ইচ্ছাকৃতভাবে বোতাম নয়, চিপ — WhatsApp বোতামটাই
-   ফুটারের মূল কাজ, দুটো সমান বড় হলে একটা আরেকটাকে খেয়ে ফেলত। */
-.ft-open {
-    display: inline-flex; align-items: center; gap: .4rem; margin-top: .9rem;
-    padding: .35rem .8rem; border-radius: 999px; text-decoration: none;
-    font-size: .84rem; font-weight: 700;
-    color: rgb(var(--c-primary-2));
-    background: rgb(var(--c-primary) / .14);
-    border: 1px solid rgb(var(--c-primary) / .35);
-    transition: background .15s ease, color .15s ease;
-}
-.ft-open:hover { background: rgb(var(--c-primary) / .26); color: #fff; }
-
-/* WhatsApp বোতাম — ফুটারের সবচেয়ে দরকারি কাজ, তাই সবচেয়ে চোখে পড়ে
-   (🔴 রঙটা WhatsApp-এর নিজের, থিম-নিরপেক্ষ — মানুষ রঙ দেখেই চেনে) */
-.ft-wa {
-    display: inline-flex; align-items: center; gap: .55rem; margin-top: 1.1rem;
-    padding: .6rem 1.1rem; border-radius: 999px; text-decoration: none;
-    background: #25D366; color: #06331a; font-weight: 700; font-size: .9rem;
-    box-shadow: 0 8px 20px rgb(37 211 102 / .28);
-    transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
-}
-.ft-wa svg { width: 18px; height: 18px; }
-.ft-wa:hover { filter: brightness(1.06); transform: translateY(-2px); box-shadow: 0 12px 26px rgb(37 211 102 / .38); }
-
+/* ── ৬ সোশ্যাল সারি + "আমাদের ফলো করুন" লেবেল ── */
+.ft-follow { margin-top: 1.2rem; font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; color: #8b94a3; }
+.ft-socs { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .55rem; }
 /* সোশ্যাল আইকন — ডিফল্টে নিরপেক্ষ, হোভারে নিজের ব্র্যান্ড-রঙ (`--soc`, সার্ভারে inline) */
-.ft-socs { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1.25rem; }
 .ft-soc {
-    display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px;
-    color: #cdd4df; background: rgb(255 255 255 / .07);
-    border: 1px solid rgb(255 255 255 / .09);
+    display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px;
+    color: #cfd6e2; background: rgb(255 255 255 / .05);
+    border: 1px solid rgb(255 255 255 / .08);
     transition: background .15s ease, color .15s ease, transform .15s ease, border-color .15s ease;
 }
 .ft-soc svg { width: 19px; height: 19px; }
 .ft-soc:hover { background: var(--soc); border-color: var(--soc); color: #fff; transform: translateY(-3px); }
 
-/* ── লিংক কলাম ── */
+/* ── ৪ লিংক কলাম (শিরোনামে আইকন-চিপ) ── */
 .ft-col { min-width: 0; }
 .ft-col h4 {
-    position: relative; margin: 0 0 1.1rem; padding-bottom: .55rem;
-    font-size: 1rem; font-weight: 700; color: #fff;
+    display: flex; align-items: center; gap: .5rem;
+    margin: 0 0 1rem; font-size: .98rem; font-weight: 800; color: #fff;
 }
-/* শিরোনামের নিচে ছোট থিম-রঙের দাগ */
-.ft-col h4::after {
-    content: ""; position: absolute; left: 0; bottom: 0; width: 34px; height: 3px; border-radius: 3px;
-    background: linear-gradient(90deg, rgb(var(--c-primary)), rgb(var(--c-primary-2)));
+.ft-hic {
+    width: 26px; height: 26px; flex-shrink: 0; display: grid; place-items: center; border-radius: 8px;
+    background: rgb(var(--c-primary) / .16); color: rgb(var(--c-primary-2));
 }
+.ft-hic i, .ft-hic svg { width: 15px; height: 15px; }
 .ft-col ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .15rem; }
 .ft-col a {
     display: flex; align-items: center; gap: .55rem;
-    padding: .45rem .5rem .45rem 0; border-radius: 8px;
+    padding: .4rem .5rem .4rem 0; border-radius: 8px;
     color: #b8c0cd; text-decoration: none; font-size: .93rem;
-    transition: color .15s ease, transform .15s ease, padding-left .15s ease;
+    transition: color .15s ease, transform .15s ease;
 }
 .ft-col a:hover { color: #fff; transform: translateX(3px); }
 .ft-em { width: 1.25rem; flex-shrink: 0; text-align: center; font-size: .95rem; }
 
-/* ── যোগাযোগ ── */
-.ft-contact ul { gap: .85rem; }
-.ft-contact li { display: flex; align-items: flex-start; gap: .6rem; font-size: .93rem; color: #b8c0cd; line-height: 1.7; }
-.ft-contact li > i, .ft-contact li > svg { width: 17px; height: 17px; flex-shrink: 0; margin-top: .25rem; color: rgb(var(--c-primary-2)); }
-.ft-contact a { padding: 0; color: #b8c0cd; }
-.ft-contact a:hover { color: #fff; transform: none; }
-/* 🔴 ইমেইল লম্বা হলে ৩২০px পর্দায় ফুটার উপচে পড়ত — এই গার্ডটা সরাবেন না */
-.ft-break { word-break: break-all; }
+/* ── ৫ যোগাযোগ — আইকন-বৃত্তসহ চিপ (ফোন/ইমেইল ক্লিকযোগ্য) ── */
+.ft-crows { display: grid; grid-template-columns: 1fr; gap: .55rem; }
+/* পূর্ণ-চওড়ার (৪৮০–১০২৩px) অবস্থায় চিপ দুই কলামে — একক কলামে বড্ড চওড়া দেখাত */
+@media (min-width: 480px) and (max-width: 1023px) {
+    .ft-crows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.ft-crow {
+    display: flex; align-items: center; gap: .7rem;
+    padding: .6rem .7rem; border-radius: 12px; text-decoration: none; color: #b8c0cd;
+    background: rgb(255 255 255 / .035);
+    border: 1px solid rgb(255 255 255 / .08);
+    transition: background .15s ease, border-color .15s ease, transform .15s ease;
+}
+.ft-crow:not(.ft-crow-plain):hover { background: rgb(255 255 255 / .06); border-color: rgb(var(--c-primary) / .5); }
+.ft-crow-plain { cursor: default; }
+.ft-cic {
+    width: 34px; height: 34px; flex-shrink: 0; display: grid; place-items: center; border-radius: 10px;
+    background: rgb(var(--c-primary) / .16); color: rgb(var(--c-primary-2));
+}
+.ft-cic i, .ft-cic svg { width: 16px; height: 16px; }
+.ft-cmeta { min-width: 0; }
+.ft-cmeta small { display: block; font-size: .68rem; color: #8b94a3; }
+/* 🔴 ইমেইল/ঠিকানা লম্বা হলে ৩২০px পর্দায় ফুটার উপচে পড়ত — `min-width:0`+`break-word` গার্ড, সরাবেন না */
+.ft-cmeta b { display: block; font-weight: 700; color: #e8edf4; font-size: .9rem; line-height: 1.4; word-break: break-word; }
 
-/* ── নিচের পট্টি ── */
+/* ── ৭ নিচের পট্টি ── */
 .ft-bottom {
+    margin-top: 2rem;
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-    gap: .75rem; padding-top: 1.35rem;
-    border-top: 1px solid rgb(255 255 255 / .09);
-    font-size: .86rem; color: #8e97a6;
+    gap: .75rem 1rem; padding-top: 1.35rem;
+    border-top: 1px solid rgb(255 255 255 / .08);
+    font-size: .84rem; color: #8b94a3;
 }
 .ft-bottom p { margin: 0; }
 /* 🔴 ডান পাশে ফাঁকা জায়গা — ভাসমান WhatsApp বোতামটা (`#wa-float`, fixed) পাতার
-   একদম নিচে এসে ঠিক এখানেই বসে আর "সাইটম্যাপ" লিংকটা ঢেকে দিত (স্ক্রিনশটে ধরা)।
+   একদম নিচে এসে ঠিক এখানেই বসে আর লিংকগুলো ঢেকে দিত (স্ক্রিনশটে ধরা)।
    নতুন কোনো ভাসমান বোতাম যোগ করলে এই ফাঁকটাও মিলিয়ে দেখুন। */
 @media (min-width: 481px) { .ft-bottom { padding-right: 76px; } }
-.ft-bottom-links { display: flex; align-items: center; gap: .5rem; }
+.ft-bottom-links { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .ft-bottom-links a { color: #b8c0cd; text-decoration: none; }
 .ft-bottom-links a:hover { color: #fff; text-decoration: underline; }
+/* ↑ উপরে — বোতাম, কিন্তু লিংকের মতো দেখতে (JS `#ft-top` ধরে পেজের উপরে নেয়) */
+.ft-up {
+    display: inline-flex; align-items: center; gap: .3rem;
+    padding: .3rem .7rem; border-radius: 999px; cursor: pointer;
+    font: inherit; font-size: .82rem; color: #b8c0cd;
+    background: transparent; border: 1px solid rgb(255 255 255 / .12);
+    transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.ft-up:hover { color: #fff; border-color: rgb(var(--c-primary) / .5); background: rgb(255 255 255 / .05); }
 @media (max-width: 480px) { .ft-bottom { justify-content: center; text-align: center; } }
+
+/* ── ৮ মৃদু প্রবেশ-অ্যানিমেশন — `prefers-reduced-motion` সম্মান করে (দৃশ্যমান rest state থেকে) ── */
+@media (prefers-reduced-motion: no-preference) {
+    .ft-cta, .ft-trust, .ft-grid, .ft-bottom { animation: ftRise .5s both; }
+    .ft-trust  { animation-delay: .06s; }
+    .ft-grid   { animation-delay: .1s; }
+    .ft-bottom { animation-delay: .14s; }
+    @keyframes ftRise { from { opacity: .4; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+}
 
 /* ছোঁয়া-পর্দায় হোভারের নড়াচড়া বাতিল (উপরের `hover: none` নিয়মের মতোই) */
 @media (hover: none) {
-    .ft-wa:hover, .ft-soc:hover, .ft-col a:hover, .ft-open:hover { transform: none; }
+    .ft-wa:hover, .ft-soc:hover, .ft-col a:hover, .ft-chip:hover, .ft-crow:hover { transform: none; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
