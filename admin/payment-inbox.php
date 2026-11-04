@@ -19,6 +19,7 @@ require_once __DIR__ . '/../includes/payment-sms.php';
 require_once __DIR__ . '/../includes/payment-claim.php';
 require_once __DIR__ . '/includes/payments.php';      // 💰 ধাপ ৩ — খাতায় বসানো
 require_once __DIR__ . '/includes/income-sync.php';   // 🔴 শুধু অ্যাডমিন পেজ থেকে require করা যায়
+require_once __DIR__ . '/includes/claim-post.php';    // 💰 হাতে + 🤖 অটো — একই শেয়ার্ড ইঞ্জিন
 admin_require_login();
 
 $db = get_db();
@@ -163,105 +164,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
      *      অ্যাডমিনের হাতে বসানো আগের জমা মুছে যেত। `pay_apply_payment()` **যোগ করে**।
      */
     if ($act === 'claim-post') {
-        $id     = (int) ($_POST['id'] ?? 0);
-        $amount = round((float) str_replace(',', '', (string) ($_POST['amount'] ?? '0')), 2);
+        // 🔴 হাতে ও 🤖 অটো — দুটোই একই `pclaim_post_one()` ডাকে (admin/includes/claim-post.php)।
+        //    আগে এই ৭ ধাপ এখানে ইনলাইন ছিল; এখন শেয়ার্ড, যাতে টাকার নিয়ম দুই জায়গায় দু-রকম না হয়।
+        $id          = (int) ($_POST['id'] ?? 0);
+        $amount      = round((float) str_replace(',', '', (string) ($_POST['amount'] ?? '0')), 2);
         $alsoConfirm = !empty($_POST['confirm_order']);
 
-        try {
-            $st = $db->prepare('SELECT * FROM payment_claims WHERE id = :id LIMIT 1');
-            $st->execute(['id' => $id]);
-            $claim = $st->fetch();
-
-            // 🔴 শুধু "যাচাই হয়েছে" দাবিই বসানো যায় — অযাচাই (new) দাবি বসালে ভুয়া TrxID-ও
-            //    টাকা হয়ে যেত, আর আগে বসানো (posted) দাবি দুইবার বসত।
-            if (!$claim || $claim['status'] !== 'verified') {
-                set_flash('error', $claim ? 'এই দাবিটা এখনো "যাচাই হয়েছে" অবস্থায় নেই (বা আগেই বসানো হয়েছে)।' : 'দাবিটা পাওয়া যায়নি।');
-                redirect('payment-inbox.php');
-            }
-            if ($amount <= 0 || $amount > PCLAIM_MAX_AMOUNT) {
-                set_flash('error', 'টাকার অঙ্কটা ঠিক নেই — ০-এর বেশি একটা সংখ্যা লিখুন।');
-                redirect('payment-inbox.php');
-            }
-
-            $regId = (int) ($claim['registration_id'] ?? 0);
-            $r2 = $db->prepare('SELECT * FROM registrations WHERE id = :id LIMIT 1');
-            $r2->execute(['id' => $regId]);
-            $reg = $r2->fetch();
-            if (!$reg) {
-                set_flash('error', 'দাবিটা কোনো অর্ডারের সাথে জোড়া নেই, তাই খাতায় বসানো যাচ্ছে না।');
-                redirect('payment-inbox.php');
-            }
-
-            $incBefore = (float) $db->query('SELECT COALESCE(SUM(amount), 0) s FROM income')->fetch()['s'];
-
-            $db->beginTransaction();
-
-            /* অর্ডারটা এখনো pending হলে কনফার্ম করা — নাহলে টাকা খাতায় বসলেও আয়ে যেত না
-             * (আয়ের গেট `INCOME_STATUSES`)। 🔴 শুধু pending → confirmed, আর শুধু
-             * অ্যাডমিন টিক রাখলে; অন্য কোনো স্ট্যাটাস কখনো বদলানো হয় না।
-             * 🔴 এটা `pay_collect()`-এর **আগে**, একই ট্রানজ্যাকশনের ভেতরে — কারণ ঐ
-             *    ফাংশনের ভেতরের `sync_income_for_status()` `$reg['status']`-ই দেখে।
-             *    টাকা বসাতে ব্যর্থ হলে নিচের rollback এই কনফার্মটাও ফিরিয়ে নেয়। */
-            $didConfirm = false;
-            if ($alsoConfirm && ($reg['status'] ?? '') === 'pending') {
-                $db->prepare("UPDATE registrations SET status = 'confirmed' WHERE id = :id")->execute(['id' => $regId]);
-                $reg['status'] = 'confirmed';
-                $didConfirm = true;
-            }
-
-            /* 🔴 টাকা বসানোর একটাই দরজা — `pay_collect()` (admin/includes/income-sync.php)।
-             *    ভেতরে হুবহু সেই প্রমাণিত পথ: pay_ensure_plan() → pay_apply_payment() →
-             *    pay_save_rows() → due_amount → **তারপর** sync_income_for_status()।
-             *    registrations.php-এর ড্রয়ার ও course-parcel.php-এর "টাকা মিলিয়ে নিন"-ও
-             *    এই একটাই ফাংশন ডাকে — এখানে আলাদা করে আর লিখবেন না। */
-            $res = pay_collect($db, $reg, $amount, 'claim');
-            if (!$res['ok']) {
-                $db->rollBack();
-                set_flash('error', $res['code'] === 'mismatch'
-                    ? 'হিসাব মিলছে না, তাই কিছুই বসানো হয়নি। অর্ডারের "টাকা" খাতায় নিজে বসান।'
-                    : $res['err']);
-                redirect('payment-inbox.php');
-            }
-            $sum = ['balance' => $res['balance']];
-
-            /* 🔗 মিলে যাওয়া বার্তাটা এখনো জোড়া না লাগানো থাকলে এখানেই লাগিয়ে দেওয়া —
-             * নাহলে টাকাটা খাতায় বসার পরেও বার্তাটা "দাবি হয়নি এমন টাকা" তালিকায়
-             * পড়ে থাকত আর অ্যাডমিন চোখে দুইবার গুনতেন।
-             * 🔴 বার্তাটা সত্যিই আছে ও অন্য দাবিতে লাগেনি — DB থেকেই যাচাই। */
-            $mId = (int) ($claim['matched_sms_id'] ?? 0);
-            if ($mId > 0) {
-                $db->prepare('UPDATE payment_sms SET claim_id = :c WHERE id = :s AND claim_id IS NULL')
-                   ->execute(['c' => $id, 's' => $mId]);
-            }
-
-            $note = '💰 খাতায় বসানো হয়েছে — ' . number_format($amount, 2);
-            $old  = trim((string) ($claim['admin_note'] ?? ''));
-            $db->prepare("UPDATE payment_claims
-                            SET status = 'posted', posted_at = NOW(), posted_by = :by, admin_note = :n
-                          WHERE id = :id AND status = 'verified'")
-               ->execute([
-                   'by' => (int) ($_SESSION['admin_id'] ?? 0),
-                   'n'  => mb_substr($old === '' ? $note : $note . ' · ' . $old, 0, 500),
-                   'id' => $id,
-               ]);
-
-            $db->commit();
-
-            $incAfter = (float) $db->query('SELECT COALESCE(SUM(amount), 0) s FROM income')->fetch()['s'];
-            set_flash('success', '✅ ' . pi_money($amount) . ' টাকার খাতায় বসানো হয়েছে।'
-                . ($didConfirm ? ' অর্ডারটাও কনফার্ম করা হলো।' : '')
-                . ' বইয়ের মোট আয় ' . pi_money($incBefore) . ' → ' . pi_money($incAfter) . '।'
-                . ' এখন বাকি ' . pi_money($sum['balance']) . '।');
-        } catch (Throwable $e) {
-            if ($db->inTransaction()) {
-                $db->rollBack();
-            }
-            set_flash('error', 'খাতায় বসাতে সমস্যা হয়েছে — কিছুই বদলায়নি।');
+        $res = pclaim_post_one($db, $id, $amount, $alsoConfirm, (int) ($_SESSION['admin_id'] ?? 0));
+        if (!$res['ok']) {
+            set_flash('error', $res['code'] === 'mismatch'
+                ? 'হিসাব মিলছে না, তাই কিছুই বসানো হয়নি। অর্ডারের "টাকা" খাতায় নিজে বসান।'
+                : $res['err']);
+        } else {
+            set_flash('success', '✅ ' . pi_money($res['amount']) . ' টাকার খাতায় বসানো হয়েছে।'
+                . ($res['confirmed'] ? ' অর্ডারটাও কনফার্ম করা হলো।' : '')
+                . ' বইয়ের মোট আয় ' . pi_money($res['incBefore']) . ' → ' . pi_money($res['incAfter']) . '।'
+                . ' এখন বাকি ' . pi_money($res['balance']) . '।');
         }
         redirect('payment-inbox.php');
     }
 
     redirect('payment-inbox.php');
+}
+
+// ---------------- 🤖 অটো খাতায় বসা (সুইচ চালু থাকলে) ----------------
+// 🔴 শুধু এই পাতা খুললে চলে (অ্যাডমিন-সাইড, idempotent) — পাবলিক পথে কখনো আয়ে লেখা হয় না।
+//    সুইচ `pay_auto_post` বন্ধ থাকলে কিচ্ছু করে না। try/catch — কখনো পাতা ভাঙতে পারে না।
+$autoSwept = ['on' => false, 'posted' => 0, 'total' => 0.0, 'confirmed' => 0];
+if ($ready) {
+    try {
+        $autoSwept = pclaim_auto_sweep($db);
+    } catch (Throwable $e) {
+        $autoSwept = ['on' => false, 'posted' => 0, 'total' => 0.0, 'confirmed' => 0];
+    }
 }
 
 // ---------------- ডেটা ----------------
@@ -402,10 +337,23 @@ require_once __DIR__ . '/includes/layout-top.php';
     <h1 class="text-2xl font-bold text-gray-800">📥 পেমেন্ট ইনবক্স</h1>
     <p class="text-sm text-gray-500 mt-1">
         ফোন থেকে আসা বিকাশ/নগদের টাকা-পাওয়ার বার্তাগুলো এখানে জমা হয়।
-        যাচাই হয়ে যাওয়া দাবির টাকা <b>"💰 খাতায় বসান"</b> চাপলেই অর্ডারের খাতায় ও আয়ের বইয়ে যায় —
-        <b>আপনি না চাপলে নিজে থেকে কিচ্ছু বসে না</b>।
+        <?php if (!empty($autoSwept['on'])): ?>
+            🤖 <b>অটো খাতায় বসা চালু</b> — বিশ্বস্ত প্রেরকের যাচাই হওয়া পেমেন্ট এই পাতা খুললেই নিজে থেকে খাতায় ও আয়ে বসে যায় (সুইচ সেটিংসে)।
+        <?php else: ?>
+            যাচাই হয়ে যাওয়া দাবির টাকা <b>"💰 খাতায় বসান"</b> চাপলেই অর্ডারের খাতায় ও আয়ের বইয়ে যায় —
+            <b>আপনি না চাপলে নিজে থেকে কিচ্ছু বসে না</b>।
+        <?php endif; ?>
     </p>
 </div>
+
+<?php if (!empty($autoSwept['posted'])): ?>
+    <div class="bg-green-50 border border-green-200 text-green-800 rounded-2xl p-4 mb-6 text-sm">
+        🤖 এইমাত্র <b><?= (int) $autoSwept['posted'] ?> টি</b> যাচাই হওয়া পেমেন্ট নিজে থেকে খাতায় বসানো হয়েছে
+        (মোট <?= e(pi_money($autoSwept['total'])) ?>)<?php if (!empty($autoSwept['confirmed'])): ?>,
+        এর মধ্যে <?= (int) $autoSwept['confirmed'] ?> টি অর্ডার কনফার্মও করা হয়েছে<?php endif; ?>।
+        নিচের <b>"✔ সম্প্রতি খাতায় বসানো"</b>-তে 🤖 চিহ্ন দিয়ে দেখা যাবে — কিছু ভুল মনে হলে অর্ডারের "টাকা" ড্রয়ারে গিয়ে বদলানো যায়।
+    </div>
+<?php endif; ?>
 
 <?php if (!$ready): ?>
     <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 mb-6 text-sm">
@@ -813,6 +761,9 @@ require_once __DIR__ . '/includes/layout-top.php';
         <?php foreach ($posted as $pc): ?>
             <div class="text-sm border-t pt-2" style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:baseline">
                 <b class="text-gray-800"><?= e(pi_money($pc['amount'])) ?></b>
+                <?php if ($pc['posted_by'] === null): ?>
+                    <span class="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700" title="অটো খাতায় বসানো হয়েছে">🤖 অটো</span>
+                <?php endif; ?>
                 <?php if (!empty($pc['registration_id'])): ?>
                     <a href="registrations.php?action=view&amp;id=<?= (int) $pc['registration_id'] ?>" class="text-indigo-600">
                         <?= e($pc['item_title'] ?: 'অর্ডার #' . (int) $pc['registration_id']) ?>
