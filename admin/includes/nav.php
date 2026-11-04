@@ -206,6 +206,7 @@ function admin_nav_groups(): array
 
     $groups[] = ['section' => '', 'items' => [
         ['key' => 'index', 'href' => 'index.php', 'file' => 'index.php', 'icon' => 'layout-dashboard', 'label' => 'ড্যাশবোর্ড'],
+        ['key' => 'menu',  'href' => 'menu.php',  'file' => 'menu.php',  'icon' => 'layout-grid',      'label' => 'সব মেনু'],
         ['key' => 'guide', 'href' => 'guide.php', 'file' => 'guide.php', 'icon' => 'help-circle',      'label' => 'গাইড / সাহায্য'],
     ]];
     // 🔴 ক্রম = ইউজারের কাজের ক্রম (রোজকার আগে, মাঝেমধ্যেরটা পরে)। খালি গ্রুপ
