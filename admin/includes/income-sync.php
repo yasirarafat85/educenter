@@ -200,3 +200,49 @@ function pay_collect_noplan_hint(string $source): string
             return 'এই অর্ডারে কিস্তির ছক বসানো যায়নি — নিচের খাতা থেকে একবার "সংরক্ষণ করুন" চাপুন।';
     }
 }
+
+/* ============================================================================
+ * 🔑 কনফার্ম করলে রেজিস্ট্রেশন ফি অটো "জমা" — সুইচ `pay_auto_regfee` (ডিফল্ট বন্ধ)
+ * ============================================================================
+ * ইউজারের চাওয়া (২০২৬-১১-০৪): কনফার্ম মানে রেজি ফি পাওয়া গেছে — তাই খাতায় সেটা অটো
+ * জমা হয়ে আয়েও চলে যাক; advance/ছাড়/পুরো পেমেন্ট অ্যাডমিন হাতে ঠিক করবেন।
+ *
+ * 🔴🔴 শুধু **রেজি ফি** বসে (পুরো মাসিক ফি নয় — ২০২৬-০৯-২৯-এর বাগ এড়াতে), আর শুধু
+ *      জমা-শূন্য, ছাড়হীন রেজি-ফি সারিতেই (pay_fill_regfee_paid-এর গার্ড — তাই SMS
+ *      অটো-পোস্ট বা হাতে বসানো থাকলে কখনো দুইবার গুনে না)।
+ * 🔴 নিজে ট্রানজ্যাকশন খোলে না — কলার (update-status) খোলে বা সরাসরি চালায়। খাতা না
+ *    থাকলে (pay_ensure_plan আগে ডাকতে হবে) বা সুইচ বন্ধ থাকলে কিছুই করে না, ০ ফেরায়।
+ * 🔴 আয় নিজে সিঙ্ক করে না — কলার **পরে** sync_income_for_status() ডাকবে (pay_collect-এর নিয়ম)।
+ * @return float  কত টাকা অটো জমা বসল (০ = কিছুই না)।
+ */
+function pay_regfee_autopost_enabled(): bool
+{
+    return function_exists('get_setting') && get_setting('pay_auto_regfee') === '1';
+}
+
+function pay_autopost_regfee(PDO $db, array $reg): float
+{
+    if (!pay_regfee_autopost_enabled()) {
+        return 0.0;
+    }
+    $regId = (int) ($reg['id'] ?? 0);
+    if ($regId <= 0) {
+        return 0.0;
+    }
+    $rows = pay_fetch_many($db, [$regId])[$regId] ?? [];
+    if (!$rows) {
+        return 0.0;   // খাতা নেই — কলার আগে pay_ensure_plan() ডাকবে
+    }
+    [$filled, $added] = pay_fill_regfee_paid($rows);
+    if ($added <= 0.009) {
+        return 0.0;   // বসানোর মতো কিছু নেই (আগেই জমা / ছাড় / রেজি ফি নেই)
+    }
+    pay_save_rows($db, $regId, $filled);
+
+    // বাকি টাকা registrations.due_amount-এ (খাতাই আসল উৎস, এটা দ্রুত রেফারেন্স)
+    $summary = pay_summary(pay_fetch_many($db, [$regId])[$regId] ?? []);
+    $db->prepare('UPDATE registrations SET due_amount = :due WHERE id = :id')
+        ->execute(['due' => $summary['balance'], 'id' => $regId]);
+
+    return $added;
+}

@@ -130,7 +130,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'update-status') {
                 }
             }
 
-            // 🔴 খাতা বসানোর **পরে** সিঙ্ক — নাহলে এইমাত্র বসানো জমা (prefill) বইয়ে যেত না
+            /* 🔑 সুইচ `pay_auto_regfee` চালু থাকলে রেজিস্ট্রেশন ফি অটো "জমা" বসে (ইউজারের চাওয়া
+             * ২০২৬-১১-০৪) — শুধু জমা-শূন্য ছাড়হীন রেজি-ফি সারিতে; advance/ছাড়/পুরো পেমেন্ট
+             * অ্যাডমিন হাতে ঠিক করেন। 🔴 সিঙ্কের **আগে** — নাহলে এইমাত্র বসানো জমা বইয়ে যেত না।
+             * try/catch — মাইগ্রেশন/সুইচ যা-ই হোক স্ট্যাটাস বদলানো কখনো আটকায় না। */
+            $regFeePosted = 0.0;
+            if (in_array($status, INCOME_STATUSES, true)) {
+                try {
+                    $regFeePosted = pay_autopost_regfee($db, $reg);
+                } catch (PDOException $ex) {
+                    $regFeePosted = 0.0;
+                }
+            }
+
+            // 🔴 খাতা বসানোর **পরে** সিঙ্ক — নাহলে এইমাত্র বসানো জমা (prefill/রেজি ফি) বইয়ে যেত না
             sync_income_for_status($db, $reg, $status);
 
             // 🔔 খাতা আছে কিন্তু জমা এখনো ০ — অ্যাডমিনকে মনে করিয়ে দেওয়া হয়, নাহলে
@@ -139,6 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'update-status') {
                 && pay_paid_total(pay_fetch_many($db, [$id])[$id] ?? []) < 0.01;
             set_flash('success', 'স্ট্যাটাস আপডেট হয়েছে।'
                 . ($madeLedger > 0 ? ' 📒 কোর্সের সেটিংস দেখে ' . $madeLedger . ' টি কিস্তির খাতা বসানো হয়েছে।' : '')
+                . ($regFeePosted > 0 ? ' 💰 রেজিস্ট্রেশন ফি ৳' . number_format($regFeePosted, 2) . ' অটো জমা বসানো হয়েছে।' : '')
                 . ($needsMoney ? ' 💰 কত টাকা হাতে এসেছে সেটা "টাকা" চিপে ক্লিক করে বসিয়ে সেভ করুন — আয় ওখান থেকেই বইয়ে যাবে।' : ''));
         }
     }
