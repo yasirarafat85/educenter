@@ -22,6 +22,11 @@ Disallow: /pay-status.php
 Disallow: /account
 Disallow: /account-*
 Disallow: /register-thanks.php
+Disallow: /cart
+Disallow: /cart-add.php
+Disallow: /checkout
+Disallow: /checkout-submit.php
+Disallow: /order-thanks.php
 Disallow: /my-registration
 Disallow: /report-view.php
 

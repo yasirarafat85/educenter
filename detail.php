@@ -126,9 +126,14 @@ require __DIR__ . '/includes/site-header.php';
             </div>
             <?php else: ?>
             <?= render_countdown_html($item, $type, 'lg') ?>
+            <?php if ($type === 'course'): ?>
             <a href="<?= e($actionUrl) ?>" class="block w-full text-center py-4 px-6 rounded-xl font-bold text-lg shadow-lg btn-primary text-white">
                 <?= e($actionLabel) ?>
             </a>
+            <?php else: // 🛒 ওয়ার্কশিট/প্রোডাক্ট — কার্টে যোগ (২০২৬-১১-০৭) ?>
+            <?= cart_add_button_html($type, (int) $item['id'], 'কার্টে যোগ করুন', 'block w-full text-center py-4 px-6 rounded-xl font-bold text-lg shadow-lg btn-primary text-white') ?>
+            <a href="cart" class="block w-full text-center py-3 px-6 mt-2 rounded-xl font-semibold border-2 text-gray-700 hover:bg-gray-50" style="border-color:rgb(var(--c-border));">🛒 কার্ট দেখুন</a>
+            <?php endif; ?>
             <?= $courseMediaHtml ?>
             <?php if ($type === 'course'): ?>
                 <?php // ⚠️ ইচ্ছাকৃতভাবে ছোট টেক্সট লিংক, বোতাম নয় — ভর্তির বোতামের পাশে সমান বড়

@@ -98,6 +98,7 @@ function sc_skip_files(): array
 function sc_file_notes(): array
 {
     return [
+        'migrate-cart-order-group.sql'           => '🛒 কার্ট — এক চেকআউটের একাধিক আইটেম অ্যাডমিন তালিকায় "একই অর্ডার" ব্যাজে জোড়া লাগা (না চালালেও কার্ট/অর্ডার চলে)',
         'migrate-payment-plan-fields.sql'        => 'টাকার খাতায় রেজিস্ট্রেশন ফি ও মাস-সংখ্যা ঠিকভাবে বসা, আর "⊘ বাদ" কিস্তি',
         'migrate-payment-installments.sql'       => 'রেজি ফি / বেতন কয় কিস্তিতে নেবেন — ব্যাচভেদে আলাদা করা',
         'migrate-payment-split.sql'              => 'কিস্তির টাকা সমান ভাগ, কিস্তি যোগ/মোছা, আর কোন কিস্তি কোন পার্সেলে উঠবে',

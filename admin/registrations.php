@@ -1098,6 +1098,21 @@ if ($action === 'list') {
     // ফিচার বন্ধ/টেবিল না থাকলে খালি (task_open_counts নিজেই গার্ডেড) — ব্যাজ বসে না।
     $GLOBALS['reg_task_counts'] = task_open_counts($db, array_column($rows, 'id'));
 
+    // 🛒 একই চেকআউটের (order_group) আইটেম-সংখ্যা (bulk) — reg_item_cell()-এর "একই অর্ডার" ব্যাজে।
+    // মাইগ্রেশনের আগে কলাম নেই → খালি, ব্যাজ বসে না (এই গার্ড সরাবেন না)।
+    $GLOBALS['reg_order_group_counts'] = [];
+    if (db_has_column($db, 'registrations', 'order_group')) {
+        $groups = array_values(array_unique(array_filter(array_map(static fn($r) => (string) ($r['order_group'] ?? ''), $rows), static fn($g) => $g !== '')));
+        if ($groups) {
+            $ph  = implode(',', array_fill(0, count($groups), '?'));
+            $gst = $db->prepare("SELECT order_group, COUNT(*) AS c FROM registrations WHERE order_group IN ($ph) GROUP BY order_group");
+            $gst->execute($groups);
+            foreach ($gst->fetchAll() as $gr) {
+                $GLOBALS['reg_order_group_counts'][(string) $gr['order_group']] = (int) $gr['c'];
+            }
+        }
+    }
+
     // ফিল্টার ড্রপডাউনে দেখানোর জন্য আইটেমের নামের তালিকা (টাইপ ফিল্টার করা থাকলে সেই টাইপেই সীমাবদ্ধ)
     $itemsSql = 'SELECT DISTINCT item_title FROM registrations';
     $itemsParams = [];
@@ -1273,6 +1288,12 @@ function reg_item_cell(array $row): void
     <div class="text-gray-800 max-w-[200px] truncate" title="<?= e($title) ?>"><?= e($title !== '' ? $title : '—') ?></div>
     <?php if ($meta): ?>
         <div class="text-[10px] text-gray-400"><?= e(implode(' · ', $meta)) ?></div>
+    <?php endif; ?>
+    <?php // 🛒 একই চেকআউটের একাধিক আইটেম হলে ছোট ব্যাজ (ইউজারের চাওয়া — প্রতি আইটেম আলাদা সারি, এক ব্যাজে জোড়া)
+    $grp = (string) ($row['order_group'] ?? '');
+    $grpN = $grp !== '' ? (int) ($GLOBALS['reg_order_group_counts'][$grp] ?? 0) : 0;
+    if ($grpN > 1): ?>
+        <div class="mt-0.5"><span class="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded-full" title="একই অর্ডারে <?= $grpN ?> টি আইটেম">🛒 একই অর্ডার (<?= $grpN ?>)</span></div>
     <?php endif;
 }
 

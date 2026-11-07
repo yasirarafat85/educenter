@@ -1153,7 +1153,10 @@ function render_item_card(array $item, string $type): string
     $ctaBtn = $registrationClosed
         ? '<a href="course-interest?course_id=' . $id . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">জানিয়ে রাখুন</a>'
             . '<p class="text-center text-xs text-gray-500 mt-1.5">নতুন ব্যাচ খুললে আপনাকে জানাবো</p>'
-        : '<a href="' . $actionUrl . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">' . $actionLabel . '</a>';
+        : ($type === 'course'
+            ? '<a href="' . $actionUrl . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">' . $actionLabel . '</a>'
+            // 🛒 ওয়ার্কশিট/প্রোডাক্ট — ডাইরেক্ট অর্ডার নয়, কার্টে যোগ (২০২৬-১১-০৭)
+            : cart_add_button_html($type, $id, 'কার্টে যোগ করুন', 'pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg', 'background:' . $grad));
 
     // 🔴 চলমান কোর্সের কার্ডেই "আগ্রহ জানিয়ে রাখুন" (২০২৬-০৯-২৪, ইউজার: "সবাই তো বিস্তারিততে
     // নাও যেতে পারে")। কার্ড একটাই ফাংশন থেকে রেন্ডার হয় বলে **কোর্স পেজ ও হোমপেজ দুটোতেই**
@@ -1772,6 +1775,154 @@ function render_payment_box(string $itemType = '', int $itemId = 0): string
         });
     }
     </script>';
+}
+
+// ============================================================
+// 🛒 কার্ট সিস্টেম — শুধু worksheet ও product (কোর্স নয়, ২০২৬-১১-০৭)
+//
+// ইউজারের চাওয়া: Products ও Worksheet-এ ডাইরেক্ট অর্ডার নয়, কার্ট — একজন একসাথে
+// একাধিক আইটেম নিয়ে এক চেকআউটে অর্ডার করতে পারবেন। কোর্স আগের মতোই (আলাদা ফর্ম)।
+//
+// 🔴 কার্ট সেশনে — লগইন লাগে না (প্রোডাক্ট/ওয়ার্কশিট ক্রেতা লগইন করেন না)।
+//    $_SESSION['cart'] = [ "type:id" => qty, ... ]।
+// 🔴 দাম/শিরোনাম সবসময় সার্ভার থেকে (fetch_item) — সেশনে কখনো দাম রাখা হয় না,
+//    তাই সেশন বিষিয়ে দিলেও দাম বদলানো যায় না।
+// 🔴 চেকআউটে প্রতিটা আইটেম একটা করে registrations সারি হয় (একই order_group) —
+//    আয়/কুরিয়ার/অ্যাডমিন সব আগের যন্ত্রেই চলে, নতুন টাকার কোড লেখা লাগে না।
+// ============================================================
+const CART_TYPES     = ['worksheet', 'product'];
+const CART_MAX_QTY   = 99;   // এক আইটেমের সর্বোচ্চ পরিমাণ
+const CART_MAX_LINES = 30;   // কার্টে সর্বোচ্চ ভিন্ন আইটেম
+
+function cart_type_ok(string $type): bool
+{
+    return in_array($type, CART_TYPES, true);
+}
+
+function cart_key(string $type, int $id): string
+{
+    return $type . ':' . $id;
+}
+
+// কাঁচা সেশন-কার্ট (সবসময় অ্যারে)
+function cart_raw(): array
+{
+    $c = $_SESSION['cart'] ?? [];
+    return is_array($c) ? $c : [];
+}
+
+// হেডারের ব্যাজে দেখানোর মোট পরিমাণ (সব লাইনের qty যোগফল)
+function cart_count(): int
+{
+    $n = 0;
+    foreach (cart_raw() as $qty) {
+        $n += max(0, (int) $qty);
+    }
+    return $n;
+}
+
+// আইটেম যোগ (আগে থাকলে পরিমাণ বাড়ায়)। সার্ভারে আইটেম সত্যিই আছে কিনা যাচাই করে।
+function cart_add(string $type, int $id, int $qty = 1): bool
+{
+    if (!cart_type_ok($type) || $id <= 0) {
+        return false;
+    }
+    if (!fetch_item($type, $id)) {
+        return false;  // অস্তিত্বহীন/নিষ্ক্রিয় আইটেম
+    }
+    $c   = cart_raw();
+    $k   = cart_key($type, $id);
+    $cur = (int) ($c[$k] ?? 0);
+    if ($cur === 0 && count($c) >= CART_MAX_LINES) {
+        return false;  // নতুন লাইনের সীমা (আগে থাকা আইটেম বাড়ানো আটকায় না)
+    }
+    $c[$k]           = max(1, min(CART_MAX_QTY, $cur + max(1, $qty)));
+    $_SESSION['cart'] = $c;
+    return true;
+}
+
+// পরিমাণ সেট (০ বা কম হলে লাইনটা বাদ)
+function cart_set(string $type, int $id, int $qty): void
+{
+    $c = cart_raw();
+    $k = cart_key($type, $id);
+    if ($qty <= 0) {
+        unset($c[$k]);
+    } else {
+        $c[$k] = min(CART_MAX_QTY, $qty);
+    }
+    $_SESSION['cart'] = $c;
+}
+
+function cart_clear(): void
+{
+    unset($_SESSION['cart']);
+}
+
+// সার্ভার থেকে দাম মিলিয়ে কার্টের লাইন বানায়; মুছে ফেলা/নিষ্ক্রিয় আইটেম নীরবে বাদ
+// (এবং সেশন থেকেও সরিয়ে দেয়, যাতে পরে আর না দেখায়)।
+function cart_contents(): array
+{
+    $lines   = [];
+    $c       = cart_raw();
+    $changed = false;
+    foreach ($c as $k => $qty) {
+        $qty = (int) $qty;
+        [$type, $idRaw] = array_pad(explode(':', (string) $k, 2), 2, '');
+        $id = (int) $idRaw;
+        if (!cart_type_ok($type) || $id <= 0 || $qty < 1) {
+            unset($c[$k]);
+            $changed = true;
+            continue;
+        }
+        $item = fetch_item($type, $id);
+        if (!$item) {
+            unset($c[$k]);
+            $changed = true;
+            continue;
+        }
+        $qty  = min(CART_MAX_QTY, $qty);
+        $unit = parse_price_to_number($item['price'] ?? '');
+        $lines[] = [
+            'key'        => (string) $k,
+            'type'       => $type,
+            'id'         => $id,
+            'qty'        => $qty,
+            'title'      => $item['title'] ?? '',
+            'image'      => $item['image'] ?? '',
+            'price_text' => $item['price'] ?? '',
+            'unit'       => $unit,
+            'line'       => $unit * $qty,
+        ];
+    }
+    if ($changed) {
+        $_SESSION['cart'] = $c;
+    }
+    return $lines;
+}
+
+function cart_total(array $lines): float
+{
+    $t = 0.0;
+    foreach ($lines as $l) {
+        $t += (float) ($l['line'] ?? 0);
+    }
+    return $t;
+}
+
+// 🔴 শেয়ার্ড "কার্টে যোগ করুন" বোতাম — কার্ড · ডিটেইল · (পুরনো) register তিন জায়গায়
+//    এই একটাই পথ (CLAUDE.md: একই কাজ দুই পথে নয়)। ছোট POST ফর্ম → cart-add.php, CSRF সহ।
+//    GET লিংক নয় — নাহলে prefetch/crawler নীরবে কার্টে আইটেম বসাত।
+function cart_add_button_html(string $type, int $id, string $label, string $btnClass, string $btnStyle = ''): string
+{
+    return '<form method="post" action="cart-add.php" class="cart-add-form">'
+        . csrf_field()
+        . '<input type="hidden" name="type" value="' . e($type) . '">'
+        . '<input type="hidden" name="id" value="' . (int) $id . '">'
+        . '<input type="hidden" name="qty" value="1">'
+        . '<button type="submit" class="' . e($btnClass) . '"' . ($btnStyle !== '' ? ' style="' . e($btnStyle) . '"' : '') . '>'
+        . '<i data-lucide="shopping-cart" class="w-5 h-5 inline-block align-text-bottom"></i> ' . e($label) . '</button>'
+        . '</form>';
 }
 
 // ============================================================

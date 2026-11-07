@@ -374,6 +374,7 @@ INSERT INTO faqs (question, answer, sort_order) VALUES
 CREATE TABLE registrations (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     type ENUM('course', 'worksheet', 'product') NOT NULL,
+    order_group VARCHAR(32) NULL DEFAULT NULL, -- 🛒 একই কার্ট-চেকআউটের আইটেমগুলো এক টোকেনে বাঁধে (worksheet/product); NULL = একক অর্ডার
     item_id INT UNSIGNED NOT NULL, -- type='course' হলে course_batches.id কে পয়েন্ট করে (courses parent টেবিলকে না — একটা ব্যাচই আসল রেজিস্ট্রেশনযোগ্য ইউনিট)
     item_title VARCHAR(255) NOT NULL,
     batch VARCHAR(100), -- শুধু কোর্স টাইপের জন্য — রেজিস্ট্রেশনের সময় course_batches.batch_name থেকে স্ন্যাপশট নেওয়া হয় (ব্যাচের নাম পরে বদলালেও পুরনো রেজিস্ট্রেশনের ব্যাচ অপরিবর্তিত থাকে)
@@ -414,7 +415,9 @@ CREATE TABLE registrations (
     -- 🔴 `type` আগে — GROUP BY কোয়েরিতে ওটাই একমাত্র সমান-শর্ত (migrate-registrations-indexes.sql)
     INDEX idx_reg_type_item (type, item_id),
     -- অর্ডার তালিকা: `WHERE status = ? ORDER BY created_at DESC LIMIT 25` + স্ট্যাটাস-গণনা
-    INDEX idx_reg_status_created (status, created_at)
+    INDEX idx_reg_status_created (status, created_at),
+    -- 🛒 এক চেকআউটের আইটেমগুলো জোড়া লাগাতে (admin ব্যাজ)
+    INDEX idx_reg_order_group (order_group)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------

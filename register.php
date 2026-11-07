@@ -9,6 +9,13 @@ if ($type === 'course') {
     redirect('course-register.php');
 }
 
+// 🛒 ওয়ার্কশিট/প্রোডাক্টে ডাইরেক্ট অর্ডার সরানো হয়েছে — এখন কার্ট (২০২৬-১১-০৭)।
+// পুরনো `register?type=..&id=..` লিংক/বুকমার্ক বিস্তারিত পাতায় পাঠানো হয়, যেখানে
+// "কার্টে যোগ করুন" বোতাম আছে (GET-এ কার্টে বসানো হয় না — prefetch এড়াতে)।
+if ($type === 'worksheet' || $type === 'product') {
+    redirect('detail?type=' . urlencode($type) . '&id=' . $id);
+}
+
 $orderItem = fetch_item($type, $id);
 
 if (!$orderItem) {

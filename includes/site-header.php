@@ -167,11 +167,11 @@ $metaDescription = en_digits($metaDescription);
     <header class="header-glass sticky top-0 z-40">
         <div class="container mx-auto px-4">
             <div class="flex justify-between items-center py-4">
-                <a href="./" class="flex items-center space-x-4">
-                    <img src="<?= e($logoPath) ?>" alt="<?= e($siteName) ?> Logo" class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl shadow-lg object-cover">
-                    <div>
-                        <h1 class="text-xl sm:text-2xl font-black text-gray-800"><?= e($siteName) ?></h1>
-                        <p class="text-xs sm:text-sm text-gray-600 font-medium"><?= e($siteTagline) ?></p>
+                <a href="./" class="flex items-center space-x-2 sm:space-x-4 min-w-0">
+                    <img src="<?= e($logoPath) ?>" alt="<?= e($siteName) ?> Logo" class="flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-xl shadow-lg object-cover">
+                    <div class="min-w-0">
+                        <h1 class="text-lg sm:text-2xl font-black text-gray-800 truncate"><?= e($siteName) ?></h1>
+                        <p class="text-xs sm:text-sm text-gray-600 font-medium truncate hidden sm:block"><?= e($siteTagline) ?></p>
                     </div>
                 </a>
 
@@ -184,19 +184,32 @@ $metaDescription = en_digits($metaDescription);
                     <?php endforeach; ?>
                 </nav>
 
-                <div class="flex items-center gap-2">
+                <?php // 🔴 আইকন ক্লাস্টার ছোট পর্দায় টাইট (p-2/gap-1/w-5) — ৩২০px-এ লোগো+ব্র্যান্ড+৪ আইকন
+                      //    (সার্চ·যোগাযোগ·কার্ট·মেনু) যাতে উপচে না পড়ে (২০২৬-১১-০৭ কার্ট যোগের সময়)। ?>
+                <div class="flex items-center gap-1 flex-shrink-0">
                     <?php // 🔎 সার্চ — ডেস্কটপ ও মোবাইল দুটোতেই আইকন হিসেবে (২০২৬-০৯-২৭)।
                           // 🔴 উপরের মেনুতে টেক্সট-আইটেম হিসেবে যোগ করা হয়নি — ওটা আইকনেই যথেষ্ট,
                           //    আর মেনুর জায়গা কম (CLAUDE.md-এর নিয়ম)। নিচের স্টিকি বারেও নয় (৫ স্লট পূর্ণ)। ?>
-                    <a href="search" class="p-3 rounded-xl glass-effect hover:bg-white/30 transition-colors" aria-label="খুঁজুন" title="খুঁজুন">
-                        <i data-lucide="search" class="w-6 h-6 text-gray-700"></i>
+                    <a href="search" class="p-2 rounded-xl glass-effect hover:bg-white/30 transition-colors" aria-label="খুঁজুন" title="খুঁজুন">
+                        <i data-lucide="search" class="w-5 h-5 text-gray-700"></i>
                     </a>
                     <?php // ✉️ যোগাযোগ — আইকন হিসেবে (মেনুতে ৮ আইটেম ও স্টিকি বারে ৫ স্লট পূর্ণ, তাই এখানে) ?>
-                    <a href="contact" class="p-3 rounded-xl glass-effect hover:bg-white/30 transition-colors" aria-label="যোগাযোগ করুন" title="যোগাযোগ করুন">
-                        <i data-lucide="mail" class="w-6 h-6 text-gray-700"></i>
+                    <a href="contact" class="p-2 rounded-xl glass-effect hover:bg-white/30 transition-colors" aria-label="যোগাযোগ করুন" title="যোগাযোগ করুন">
+                        <i data-lucide="mail" class="w-5 h-5 text-gray-700"></i>
                     </a>
-                    <button id="mobile-menu-btn" class="lg:hidden p-3 rounded-xl glass-effect hover:bg-white/30 transition-colors" aria-label="মেনু" aria-expanded="false" aria-controls="mobile-nav">
-                        <i data-lucide="menu" class="w-6 h-6 text-gray-700"></i>
+                    <?php // 🛒 কার্ট — আইকন + সংখ্যা-ব্যাজ (worksheet/product; স্টিকি বারে জায়গা নেই তাই হেডারে, ২০২৬-১১-০৭)
+                          // 🔴 ব্যাজের আকার/অবস্থান inline style-এ — ছোট arbitrary Tailwind ক্লাস (w-[18px] ইত্যাদি)
+                          //    কম্পাইলড CSS-এ নেই, রিবিল্ড এড়াতে। ?>
+                    <?php $cartN = cart_count(); ?>
+                    <a href="cart" class="relative p-2 rounded-xl glass-effect hover:bg-white/30 transition-colors" aria-label="কার্ট" title="আমার কার্ট">
+                        <i data-lucide="shopping-cart" class="w-5 h-5 text-gray-700"></i>
+                        <?php if ($cartN > 0): ?>
+                            <span class="absolute flex items-center justify-center rounded-full text-white font-bold"
+                                  style="top:-4px;right:-4px;min-width:17px;height:17px;padding:0 4px;font-size:10px;line-height:1;background:rgb(var(--c-primary));"><?= (int) $cartN ?></span>
+                        <?php endif; ?>
+                    </a>
+                    <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-xl glass-effect hover:bg-white/30 transition-colors" aria-label="মেনু" aria-expanded="false" aria-controls="mobile-nav">
+                        <i data-lucide="menu" class="w-5 h-5 text-gray-700"></i>
                     </button>
                 </div>
             </div>

@@ -14,6 +14,13 @@ if ($type === 'course') {
     redirect('course-register.php');
 }
 
+// 🛒 ওয়ার্কশিট/প্রোডাক্টের ডাইরেক্ট অর্ডার সরানো হয়েছে — এখন কার্ট/চেকআউট (২০২৬-১১-০৭)।
+// এই পুরনো হ্যান্ডলার আর কোনো ফর্ম থেকে ডাকা হয় না; বাসি পাতা থেকে এলে কার্টে পাঠানো হয়
+// (অর্ডার তৈরির একটাই পথ এখন checkout-submit.php — CLAUDE.md: একই কাজ দুই পথে নয়)।
+if ($type === 'worksheet' || $type === 'product') {
+    redirect('cart.php');
+}
+
 function fail(string $msg, string $backUrl): void
 {
     log_registration_error('order', $msg);
