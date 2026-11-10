@@ -75,6 +75,8 @@ function admin_page_sections(): array
         'sms-patterns.php'          => ['settings'],
         'legacy-students.php'       => ['orders'],
         'course-parcel.php'         => ['parcel'],
+        // 🖨️ পার্সেল লেবেল প্রিন্ট — শুধু পড়ে ছাপায় (POST নেই), রিসিভারের তথ্য+পার্সেল অবস্থা
+        'parcel-labels.php'         => ['parcel', 'orders'],
         // 👥 গ্রুপ মিলিয়ে দেখা — শুধু পড়ে দেখায় (কিছু সেভ করে না), কিন্তু গ্রুপের
         //    টিক parcel-এ আর রেজিস্ট্রেশনের নাম orders-এ — যেকোনো একটা থাকলেই চলবে।
         'group-match.php'           => ['parcel', 'orders'],

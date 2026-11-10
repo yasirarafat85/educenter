@@ -119,6 +119,10 @@ function admin_nav_groups(): array
     if (admin_can('parcel')) {
         $daily[] = ['key' => 'course-parcel', 'href' => 'course-parcel.php', 'file' => 'course-parcel.php', 'icon' => 'package-check', 'label' => 'কোর্স পার্সেল'];
     }
+    // 🖨️ পার্সেল লেবেল — permissions.php-এর ম্যাপের হুবহু প্রতিধ্বনি (parcel বা orders)
+    if (admin_can('parcel') || admin_can('orders')) {
+        $daily[] = ['key' => 'parcel-labels', 'href' => 'parcel-labels.php', 'file' => 'parcel-labels.php', 'icon' => 'printer', 'label' => 'পার্সেল লেবেল'];
+    }
     if (admin_can('orders')) {
         $daily[] = ['key' => 'payment-inbox', 'href' => 'payment-inbox.php', 'file' => 'payment-inbox.php', 'icon' => 'inbox', 'label' => 'পেমেন্ট ইনবক্স'];
     }
