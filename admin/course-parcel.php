@@ -342,7 +342,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ? $db->prepare('UPDATE courier_batches SET collect_parts = :p WHERE id = :id')
             : null;
 
-        $prep = 0; $declined = 0; $sent = 0; $resent = 0; $failed = []; $editedSent = 0;
+        $prep = 0; $declined = 0; $sent = 0; $resent = 0; $failed = []; $editedSent = 0; $heldPick = 0;
         // ✅ হাতে পাঠানো / 💰 টাকা — ঘরগুলো এখন এই ফর্মেই, তাই গণনাও এখানেই
         $manualSent = 0; $manualNew = 0; $moneyOk = 0; $moneyTotal = 0.0; $moneyFail = [];
         $incBefore = 0.0;
@@ -378,6 +378,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($row['present']) || !isset($regMap[$rid])) { continue; }
             $decision = ($row['decision'] ?? 'go') === 'no' ? 'no' : 'go';
             $resend   = !empty($row['resend']); // পাঠানো কার্ডে "আবার পাঠান" armed কিনা
+            // 📮 এই কার্ডটি এখন আসল কুরিয়ারে পাঠানো হবে কিনা (ডিফল্টে টিক, তাই "সব পাঠান" আগের মতোই এক ক্লিকে)।
+            // 🔴 টিক তুলে দিলে কার্ডটি খসড়া হিসেবে প্রস্তুতই থাকে — পাঠানো হয় না (পরে পাঠানো যায়)।
+            //    এটি শুধু **নতুন "যাবে"** পাঠানোর পথ গেট করে; "আবার পাঠান" (resend) আলাদা স্পষ্ট টিক।
+            $sendPick = !empty($row['send_pick']);
 
             $findBatch->execute(['r' => $rid, 'p' => $period]);
             $existing = $findBatch->fetch();
@@ -517,7 +521,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $applyParts($draftId, $rid, $tokens, $heldDeliv);
             $prep++;
 
-            if ($mode === 'send') {
+            if ($mode === 'send' && $sendPick) {
                 try {
                     $res = send_courier_batch($db, $provider, $regMap[$rid], [], $draftId);
                     if (!empty($res['success'])) { $sent++; }
@@ -525,6 +529,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } catch (Throwable $e) {
                     $failed[] = ['name' => $regMap[$rid]['customer_name'], 'reason' => $e->getMessage()];
                 }
+            } elseif ($mode === 'send') {
+                // 📮 নির্বাচন করা হয়নি — খসড়া হিসেবে প্রস্তুত থাকল, আসল কুরিয়ারে কিছু যায়নি
+                $heldPick++;
             }
         }
 
@@ -536,7 +543,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($mode === 'send') {
-            $_SESSION['cp_result'] = ['item' => $itemId, 'period' => cp_month_display($month), 'sent' => $sent, 'resent' => $resent, 'prep' => $prep, 'declined' => $declined, 'failed' => $failed, 'edited' => $editedSent,
+            $_SESSION['cp_result'] = ['item' => $itemId, 'period' => cp_month_display($month), 'sent' => $sent, 'resent' => $resent, 'prep' => $prep, 'declined' => $declined, 'failed' => $failed, 'edited' => $editedSent, 'held' => $heldPick,
                                       'waive_set' => $waiveSet, 'waive_total' => $waiveTotal, 'waive_cleared' => $waiveCleared,
                                       'manual' => $manualSent, 'money_ok' => $moneyOk, 'money_total' => $moneyTotal,
                                       'money_fail' => $moneyFail, 'income_line' => $incLine];
@@ -862,6 +869,8 @@ function cp_cell(?array $b): array
         <div class="flex flex-wrap gap-2 mt-2 text-sm">
             <span class="px-2 py-1 rounded-lg bg-green-100 text-green-800 font-semibold">✓ সফল: <?= (int) $sr['sent'] ?><?= !empty($sr['resent']) ? ' (আবার-পাঠানো ' . (int) $sr['resent'] . ')' : '' ?></span>
             <?php if ($hasFail): ?><span class="px-2 py-1 rounded-lg bg-red-100 text-red-800 font-semibold">✕ ব্যর্থ: <?= count($sr['failed']) ?></span><?php endif; ?>
+            <?php // 📮 নির্বাচন করা হয়নি এমন "যাবে" কার্ড — খসড়া হিসেবে প্রস্তুত, এখনো পাঠানো হয়নি ?>
+            <?php if (!empty($sr['held'])): ?><span class="px-2 py-1 rounded-lg bg-amber-100 text-amber-800 font-semibold">📮 নির্বাচন হয়নি (খসড়া থাকল): <?= (int) $sr['held'] ?></span><?php endif; ?>
             <?php if (!empty($sr['edited'])): ?><span class="px-2 py-1 rounded-lg bg-gray-100 text-gray-700 font-semibold">তথ্য আপডেট: <?= (int) $sr['edited'] ?></span><?php endif; ?>
             <?php // 💸 ছাড় দিলে সেটা খরচের বইয়ে গেছে — টাকা জড়িত বলে ফলাফলেও বলা হয় ?>
             <?php if (!empty($sr['waive_set'])): ?><span class="px-2 py-1 rounded-lg bg-amber-100 text-amber-800 font-semibold">💸 ছাড় খরচে: <?= (int) $sr['waive_set'] ?> জন · ৳<?= e(number_format((float) $sr['waive_total'])) ?></span><?php endif; ?>
@@ -1162,6 +1171,16 @@ function cpPermZone(sel) {
                 <?php if ($periodHasExisting): ?><span class="block text-xs text-indigo-600 mt-0.5">এই মাসের কিছু আগে থেকেই আছে — বদলালে নিশ্চিতকরণ চাইবে।</span><?php endif; ?>
             </div>
 
+            <?php /* 📮 কুরিয়ারে কাদের পাঠানো হবে — এক সাথে সবাই, নাকি কয়েকজন/একজন বেছে।
+                     🔴 প্রতিটা "যাবে" কার্ডে "📮 পাঠাবো" টিক ডিফল্টে দেওয়া — এই বোতামগুলো শুধু
+                        একসাথে টিক দেয়/তোলে। নিচের "কুরিয়ারে পাঠান" চাপলে **টিক দেওয়াদেরই** যাবে। */ ?>
+            <div class="flex items-center flex-wrap gap-2 mb-3 text-xs">
+                <span class="text-gray-500">কুরিয়ারে পাঠাবেন যাদের বেছে নিন:</span>
+                <button type="button" id="pickAll" class="font-semibold px-2.5 py-1 rounded-lg border border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-200">☑ সব নির্বাচন</button>
+                <button type="button" id="pickNone" class="font-semibold px-2.5 py-1 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100">☐ কাউকে না</button>
+                <span id="pickCount" class="text-gray-600 font-semibold"></span>
+            </div>
+
             <?php if (!$cpWaiveReady): ?>
                 <div class="p-3 mb-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl">
                     💸 <b>ছাড় / মাফ খরচে নেওয়ার ঘরটা এখনো চালু হয়নি।</b>
@@ -1235,7 +1254,16 @@ function cpPermZone(sel) {
                                 <button type="button" class="resendBtn text-xs font-semibold px-2.5 py-1 rounded-lg border border-indigo-300 text-indigo-700 bg-indigo-50 hidden">↻ আবার পাঠান</button>
                             </div>
                         <?php else: ?>
-                            <button type="button" class="goNoBtn flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border"></button>
+                            <?php /* 📮 "যাবে/না" টগলের নিচে — এই পার্সেলটি এখন আসল কুরিয়ারে পাঠানো হবে কিনা।
+                                     🔴 ডিফল্টে টিক — তাই "সবাইকে পাঠান" আগের মতোই (টিক তুলে দিলে তবেই বাদ পড়ে)।
+                                     🔴 ঘরটা `roundForm`-এর ভেতরেই (`bd[<id>][send_pick]`) — `form=` অ্যাট্রিবিউট নয়। */ ?>
+                            <div class="flex-shrink-0 flex flex-col items-end gap-1">
+                                <button type="button" class="goNoBtn text-xs font-semibold px-3 py-1.5 rounded-lg border"></button>
+                                <label class="pickWrap flex items-center gap-1 text-xs font-semibold text-indigo-700 cursor-pointer select-none whitespace-nowrap">
+                                    <input type="checkbox" class="sendPick w-4 h-4 accent-indigo-600" name="bd[<?= $rid ?>][send_pick]" value="1" checked> 📮 পাঠাবো
+                                </label>
+                                <button type="button" class="onlyThisBtn text-xs text-gray-400 hover:text-indigo-600 underline whitespace-nowrap">শুধু একে</button>
+                            </div>
                         <?php endif; ?>
                     </div>
                     <?php if ($isFailed): ?><div class="text-sm text-orange-700 bg-orange-50 rounded px-2 py-1.5 mb-2">গতবার পাঠানো ব্যর্থ হয়েছিল — আবার চেষ্টা করতে পারেন।</div><?php endif; ?>
@@ -1463,8 +1491,10 @@ function cpPermZone(sel) {
     var dec=el.querySelector('.decision').value, btn=el.querySelector('.goNoBtn');
     if(!btn){ return; }
     var bld=el.querySelector('.builder');
-    if(dec==='no'){ btn.textContent='না এই মাসে'; btn.className='goNoBtn flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-300 bg-red-50 text-red-700'; el.classList.add('opacity-60'); if(bld)bld.style.display='none'; }
-    else { btn.textContent='✓ যাবে'; btn.className='goNoBtn flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-green-300 bg-green-50 text-green-700'; el.classList.remove('opacity-60'); if(bld)bld.style.display=''; }
+    // 📮 "না এই মাসে" হলে পাঠানোর টিক/শুধু-একে অর্থহীন — লুকানো হয় (ঘরটা তবু সাবমিট হয়, ক্ষতি নেই)
+    var pw=el.querySelector('.pickWrap'), ob=el.querySelector('.onlyThisBtn');
+    if(dec==='no'){ btn.textContent='না এই মাসে'; btn.className='goNoBtn text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-300 bg-red-50 text-red-700'; el.classList.add('opacity-60'); if(bld)bld.style.display='none'; if(pw)pw.style.display='none'; if(ob)ob.style.display='none'; }
+    else { btn.textContent='✓ যাবে'; btn.className='goNoBtn text-xs font-semibold px-3 py-1.5 rounded-lg border border-green-300 bg-green-50 text-green-700'; el.classList.remove('opacity-60'); if(bld)bld.style.display=''; if(pw)pw.style.display=''; if(ob)ob.style.display=''; }
   }
   function calc(el){
     // ভিত্তি = খাতায় এই মাসের বাকি (খাতা না থাকলে মাসিক ফি) — সার্ভারেও হুবহু একই হিসাব
@@ -1511,19 +1541,40 @@ function cpPermZone(sel) {
     // ✅ "হাতে পাঠানো" টিক দেওয়া কার্ড আসল কুরিয়ারে যায় না (সার্ভারেও `continue`) —
     //    তাই গণনা/মোট থেকেও বাদ, নাহলে মডাল ভুল সংখ্যা বলত
     var dsEl=el.querySelector('.doneSent'), ds=!!(dsEl&&dsEl.checked);
-    // পাঠাবে = (নতুন যাবে) অথবা (পাঠানো + আবার-পাঠান armed)
-    var willSend=(dec==='go' && !sent && !ds) || (sent && resend);
-    return {send: willSend, resend: sent && resend, no: dec==='no' && !sent, t:+amtEl.value||0};
+    // 📮 এই কার্ডটি আসল কুরিয়ারে পাঠানোর জন্য নির্বাচিত কিনা (ডিফল্টে টিক) — সার্ভারেও
+    //    একই গেট (`$sendPick`); টিক তুলে দিলে কার্ডটি খসড়া হিসেবে থাকে, পাঠানো হয় না।
+    var pkEl=el.querySelector('.sendPick'), picked = pkEl ? pkEl.checked : true;
+    // ফ্রেশ "যাবে" কার্ড = এই মাসে নতুন পাঠানো যায় এমন (নির্বাচন করা যায় এমন)
+    var isFreshGo=(dec==='go' && !sent && !ds);
+    // পাঠাবে = (নতুন যাবে + নির্বাচিত) অথবা (পাঠানো + আবার-পাঠান armed)
+    var willSend=(isFreshGo && picked) || (sent && resend);
+    return {send: willSend, resend: sent && resend, no: dec==='no' && !sent, t:+amtEl.value||0,
+            pickable: isFreshGo, picked: isFreshGo && picked};
   }
   function refresh(){
-    var s=0,g=0,no=0;
-    document.querySelectorAll('.stu').forEach(function(el){var r=calc(el); if(r.send){s+=r.t;g++;} if(r.no){no++;} paintGoNo(el);});
+    var s=0,g=0,no=0,pickable=0,picked=0;
+    document.querySelectorAll('.stu').forEach(function(el){var r=calc(el); if(r.send){s+=r.t;g++;} if(r.no){no++;} if(r.pickable){pickable++; if(r.picked){picked++;}} paintGoNo(el);});
     var gc=document.getElementById('goCount'),nc=document.getElementById('noCount'),sa=document.getElementById('sumAmt');
     if(gc)gc.textContent=g; if(nc)nc.textContent=no; if(sa)sa.textContent='৳'+s;
+    // 📮 উপরের "নির্বাচন" লাইন — কতজন পাঠানোর জন্য টিক দেওয়া
+    var pc=document.getElementById('pickCount');
+    if(pc){
+      if(pickable===0){ pc.textContent=''; }
+      else if(picked===pickable){ pc.textContent='✓ সবাই নির্বাচিত ('+picked+' জন পাঠানো হবে)'; }
+      else if(picked===0){ pc.textContent='কেউ নির্বাচিত নয় — পাঠানো হবে না'; }
+      else { pc.textContent=picked+' / '+pickable+' জন নির্বাচিত (বাকিরা খসড়া থাকবে)'; }
+    }
   }
   document.querySelectorAll('.stu').forEach(function(el){
     var btn=el.querySelector('.goNoBtn');
     if(btn){ btn.addEventListener('click',function(){ var d=el.querySelector('.decision'); d.value=(d.value==='no')?'go':'no'; refresh(); }); }
+    // 📮 "শুধু একে" — সবার টিক তুলে দিয়ে শুধু এই কার্ডটি নির্বাচন (স্পেসিফিক একজনকে পাঠাতে)
+    var ot=el.querySelector('.onlyThisBtn'), pkSelf=el.querySelector('.sendPick');
+    if(ot){ ot.addEventListener('click',function(){
+      document.querySelectorAll('.sendPick').forEach(function(c){ c.checked=false; });
+      if(pkSelf){ pkSelf.checked=true; }
+      refresh();
+    }); }
     var amtEl=el.querySelector('.amt'), manualEl=el.querySelector('.manual');
     if(amtEl){ amtEl.addEventListener('input',function(){ manualEl.value='1'; refresh(); }); }
     // 🧾 কিস্তির টিক বদলালে অঙ্কটা আবার হিসাব হয় — 🔴 `manual` রিসেট করা হয়, নাহলে
@@ -1573,18 +1624,25 @@ function cpPermZone(sel) {
   });
   function doSubmit(mode){
     document.getElementById('roundMode').value=mode;
-    var g=0,no=0,s=0,re=0,wv=0;
+    var g=0,no=0,s=0,re=0,wv=0,held=0;
     document.querySelectorAll('.stu').forEach(function(el){
       var r=calc(el); if(r.send){g++;s+=r.t; if(r.resend)re++;} if(r.no)no++;
+      // 📮 "যাবে" অথচ নির্বাচন করা হয়নি — খসড়া হিসেবে থাকবে
+      if(r.pickable && !r.picked){ held++; }
       if(!r.no){ var w=el.querySelector('.waive'); if(w){ wv+=Math.max(0,+w.value||0); } }
     });
     if(mode==='send' && g===0){
       var dm0=doneMsg();
-      showConfirmModal('আসল কুরিয়ারে পাঠানোর জন্য কাউকে বাছাই করা হয়নি (নতুন "যাবে" বা পাঠানো কার্ডে "আবার পাঠান")।'
+      // 📮 "যাবে" কার্ড আছে অথচ একটাও নির্বাচন নেই — কীভাবে নির্বাচন করতে হয় বলা হয়
+      var pickHint = held>0
+        ? ('উপরের "☑ সব নির্বাচন" চাপুন, অথবা প্রতিটি কার্ডের "📮 পাঠাবো" টিক দিন (একজনকে পাঠাতে তার "শুধু একে")।')
+        : ('নতুন "যাবে" বা পাঠানো কার্ডে "আবার পাঠান" বাছাই করুন।');
+      showConfirmModal('আসল কুরিয়ারে পাঠানোর জন্য কাউকে নির্বাচন করা হয়নি।\n\n' + pickHint
         + (dm0 ? ('\n\n' + dm0 + '\n\nএগুলো করতে পাশের "সেভ" বোতামটা চাপুন — কুরিয়ারে কিছু যাবে না।') : ''),
         function(){},'পাঠানো খালি'); return; }
     var msg = (mode==='send')
-      ? ('মাস '+selMonth+' — '+g+' জনের পার্সেল এখনই আসল কুরিয়ারে পাঠাবেন?'+(re?(' (তার মধ্যে '+re+' জন আবার-পাঠানো)'):'')+' মোট কালেকশন ৳'+s+'। পাঠানোর পর আর ফেরানো যাবে না।')
+      ? ('মাস '+selMonth+' — '+g+' জনের পার্সেল এখনই আসল কুরিয়ারে পাঠাবেন?'+(re?(' (তার মধ্যে '+re+' জন আবার-পাঠানো)'):'')+' মোট কালেকশন ৳'+s+'। পাঠানোর পর আর ফেরানো যাবে না।'
+         +(held>0?('\n\n📮 '+held+' জন নির্বাচন করা হয়নি — তারা খসড়া হিসেবে প্রস্তুত থাকবে, পরে পাঠাতে পারবেন।'):''))
       : ('মাস '+selMonth+' — সেভ করবেন? এটা সংবেদনশীল পেজ — শুধু ঠিক করে রাখা হবে (এখনো কুরিয়ারে পাঠাবে না)।');
     if(wv>0){ msg+='\n\n💸 মোট ৳'+wv+' ছাড়/মাফ দেওয়া হয়েছে — এটা খরচের বইয়ে যোগ হবে।'; }
     // ✅/💰 ড্রয়ারে কিছু বাছাই করা থাকলে সেটাও এই সেভেই হবে — না বললে অ্যাডমিন টের পেতেন না
@@ -1636,6 +1694,11 @@ function cpPermZone(sel) {
     });
   });
 
+  // 📮 সব নির্বাচন / কাউকে না — একসাথে সব "📮 পাঠাবো" টিক দেয়/তোলে
+  var pa=document.getElementById('pickAll');
+  if(pa){ pa.addEventListener('click',function(){ document.querySelectorAll('.sendPick').forEach(function(c){ c.checked=true; }); refresh(); }); }
+  var pn=document.getElementById('pickNone');
+  if(pn){ pn.addEventListener('click',function(){ document.querySelectorAll('.sendPick').forEach(function(c){ c.checked=false; }); refresh(); }); }
   var d1=document.getElementById('draftBtn'); if(d1){ d1.addEventListener('click',function(){ doSubmit('draft'); }); }
   var s1=document.getElementById('sendBtn'); if(s1){ s1.addEventListener('click',function(){ doSubmit('send'); }); }
   form.addEventListener('input',refresh); form.addEventListener('change',refresh); refresh();
