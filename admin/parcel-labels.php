@@ -71,7 +71,7 @@ if (!$itemId) {
     ?>
     <div class="mb-5">
         <h1 class="text-2xl font-bold text-gray-800">🖨️ পার্সেল লেবেল</h1>
-        <p class="text-sm text-gray-500 mt-1">কোন কোর্স-ব্যাচের পার্সেল লেবেল ছাপাবেন বেছে নিন — নাম · ঠিকানা · মোবাইল · ফেসবুক আইডির নাম দিয়ে A4 কার্ড, কেটে পার্সেলে লাগানোর জন্য।</p>
+        <p class="text-sm text-gray-500 mt-1">কোন কোর্স-ব্যাচের পার্সেল লেবেল ছাপাবেন বেছে নিন — নাম · ঠিকানা · মোবাইল · যোগাযোগ নাম দিয়ে A4 কার্ড, কেটে পার্সেলে লাগানোর জন্য।</p>
     </div>
     <?php if (!$batches): ?>
         <div class="bg-white rounded-2xl shadow empty-state">
@@ -286,7 +286,7 @@ $currentUrl = plabel_url($itemId, $mode, $selMonth);
                     <div class="pl-row pl-name"><span class="pl-k">নাম:</span><span class="pl-v"><?= e(trim((string) ($r['receiver_name'] ?? ''))) ?></span></div>
                     <div class="pl-row pl-addr"><span class="pl-k">ঠিকানা:</span><span class="pl-v"><?= e(trim((string) ($r['address'] ?? ''))) ?></span></div>
                     <div class="pl-row pl-mob"><span class="pl-k">মোবাইল:</span><span class="pl-v"><?= e(trim((string) ($r['receiver_phone'] ?? ''))) ?></span></div>
-                    <div class="pl-row pl-fb"><span class="pl-k">ফেসবুক আইডির নাম:</span><span class="pl-v"><?= e(trim((string) ($r['facebook_id'] ?? ''))) ?></span></div>
+                    <div class="pl-row pl-fb"><span class="pl-k">যোগাযোগ নামঃ</span><span class="pl-v"><?= e(trim((string) ($r['facebook_id'] ?? ''))) ?></span></div>
                 </div>
             </div>
         <?php endforeach; ?>
