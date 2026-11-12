@@ -26,6 +26,7 @@ require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/nav.php';
 require_once __DIR__ . '/includes/form-helpers.php'; // admin_image_src()
 require_once __DIR__ . '/includes/payments.php';     // pay_month_label()
+require_once __DIR__ . '/includes/courier-notes.php'; // fetch_registration_notes()
 admin_require_login();
 
 $db        = get_db();
@@ -126,29 +127,58 @@ $rStmt = $db->prepare("SELECT * FROM registrations WHERE type='course' AND item_
 $rStmt->execute(['id' => $itemId]);
 $allRegs = $rStmt->fetchAll();
 
-$inactive = 0;  // confirmed কিন্তু কুরিয়ারে যাবে না — confirmed মোডে বাদ
+// পার্সেল নোট = কুরিয়ার নোট চিপ (registration_courier_notes) + খাতার admin_note।
+// এক কোয়েরিতে সব নোট (N+1 এড়াতে)।
+$ids       = array_map(fn($r) => (int) $r['id'], $allRegs);
+$noteChips = $ids ? fetch_registration_notes($db, $ids) : [];
+$plNote = static function (array $r) use ($noteChips): string {
+    $parts = [];
+    foreach ($noteChips[(int) $r['id']] ?? [] as $n) {
+        $t = trim((string) ($n['lbl'] ?? ''));
+        if ($t !== '') { $parts[] = $t; }
+    }
+    $adm = trim((string) ($r['admin_note'] ?? ''));
+    if ($adm !== '') { $parts[] = $adm; }
+    return implode(' · ', $parts);
+};
+
+// এই মাসের পার্সেল-অবস্থা (শুধু prepared মোডে) — reg_id → [send_status, amount_to_collect]
+$batchRows = [];
+if ($mode === 'prepared' && $ids && $selLabel !== '') {
+    $in = implode(',', array_fill(0, count($ids), '?'));
+    $st = $db->prepare("SELECT registration_id, send_status, amount_to_collect
+                        FROM courier_batches WHERE registration_id IN ($in) AND period_label = ?");
+    $st->execute(array_merge($ids, [$selLabel]));
+    foreach ($st->fetchAll() as $row) { $batchRows[(int) $row['registration_id']] = $row; }
+}
+
+// 🔴 ইউজারের চাওয়া (২০২৬-১১-১২): এই মাসে পার্সেল না গেলেও (declined / এখনো প্রস্তুত নয়)
+//    তাঁর লেবেল ছাপবে — শুধু অটো নোট বসবে। তাই prepared মোডে এখন **সব সক্রিয়
+//    শিক্ষার্থী** আসে, প্রতিটায় এই মাসের অবস্থা (going/declined/none) বসানো হয়।
+//    (আগে শুধু non-declined ব্যাচ আসত।) নিষ্ক্রিয় (courier_active=0) দুই মোডেই বাদ।
+$inactive = 0;
+$goCnt    = 0;   // এই মাসে পার্সেল যাবে (prepared মোড)
 $cards    = [];
 
-if ($mode === 'confirmed') {
-    foreach ($allRegs as $r) {
-        if ((int) ($r['courier_active'] ?? 1) !== 1) { $inactive++; continue; }
-        $cards[] = $r;
+foreach ($allRegs as $r) {
+    if ((int) ($r['courier_active'] ?? 1) !== 1) { $inactive++; continue; }
+    $status = 'plain';   // confirmed মোডে মাস-অবস্থা নেই
+    $amount = null;
+    if ($mode === 'prepared') {
+        $b = $batchRows[(int) $r['id']] ?? null;
+        if ($b && (string) $b['send_status'] !== 'declined') {
+            $status = 'going';
+            $amount = (float) $b['amount_to_collect'];
+            $goCnt++;
+        } elseif ($b) {
+            $status = 'declined';   // "না এই মাসে"
+        } else {
+            $status = 'none';       // এই মাসে এখনো প্রস্তুত/পাঠানো হয়নি
+        }
     }
-} else {
-    // এই মাসে যাদের পার্সেল প্রস্তুত — courier_batches-এ period_label মিলে, declined ছাড়া।
-    $prepared = [];
-    if ($allRegs && $selLabel !== '') {
-        $ids = array_map(fn($r) => (int) $r['id'], $allRegs);
-        $in  = implode(',', array_fill(0, count($ids), '?'));
-        $st  = $db->prepare("SELECT DISTINCT registration_id FROM courier_batches
-                             WHERE registration_id IN ($in) AND period_label = ? AND send_status <> 'declined'");
-        $st->execute(array_merge($ids, [$selLabel]));
-        foreach ($st->fetchAll() as $row) { $prepared[(int) $row['registration_id']] = true; }
-    }
-    foreach ($allRegs as $r) {
-        if (isset($prepared[(int) $r['id']])) { $cards[] = $r; }
-    }
+    $cards[] = ['reg' => $r, 'status' => $status, 'amount' => $amount, 'note' => $plNote($r)];
 }
+$noGoCnt = count($cards) - $goCnt;   // prepared মোডে যাবে না / প্রস্তুত নয়
 
 $currentUrl = plabel_url($itemId, $mode, $selMonth);
 ?>
@@ -185,6 +215,16 @@ $currentUrl = plabel_url($itemId, $mode, $selMonth);
 .pl-row.pl-mob  .pl-v{ font-size:15px; font-weight:800; letter-spacing:.5px; min-height:1em; }
 .pl-row.pl-addr .pl-v{ font-size:13px; font-weight:500; }
 .pl-row.pl-fb   .pl-v{ font-size:13px; font-weight:700; }
+/* ── নিচের অংশ: পার্সেল নোট / amount / অবস্থা — ছোট, কেটে বাদ দেওয়া যায় ── */
+.pl-cut{ margin-top:1.6mm; border-top:1px dashed #000; padding-top:1.3mm; }
+.pl-cut-hint{ font-size:6px; color:#555; letter-spacing:.4px; margin-bottom:0.8mm; }
+.pl-foot{ display:flex; flex-direction:column; gap:0.7mm; }
+.pl-foot .pl-stat{ font-size:11px; font-weight:800; }
+.pl-foot .pl-note{ font-size:10.5px; font-weight:600; word-break:break-word; }
+.pl-foot .pl-amt{ font-size:12px; font-weight:800; }
+/* গ্রুপ-রিপোর্ট গ্রিড — পাতার নিজের CSS (md:grid-cols-2 কম্পাইলড CSS-এ নেই) */
+.pl-gm-grid{ display:grid; grid-template-columns:1fr; gap:1rem; }
+@media (min-width:768px){ .pl-gm-grid{ grid-template-columns:1fr 1fr; } }
 @media screen and (max-width:640px){ .pl-sheet{ grid-template-columns:1fr; } }
 @media print{
     /* admin print CSS @page A4/margin:12mm মেনেই শিটটা ছাপার-এলাকা ভরে — ওভাররাইড লাগে না */
@@ -235,10 +275,12 @@ $currentUrl = plabel_url($itemId, $mode, $selMonth);
         <div class="text-sm text-gray-700">
             <b class="text-gray-900"><?= count($cards) ?> টি লেবেল</b>
             <?php if ($mode === 'prepared'): ?>
-                — <?= e($selLabel ?: '—') ?> মাসে পার্সেল প্রস্তুত
+                — <?= e($selLabel ?: '—') ?>
+                <span class="text-gray-400">(<?= $goCnt ?> যাবে<?php if ($noGoCnt > 0): ?> · <?= $noGoCnt ?> যাবে না/প্রস্তুত নয়<?php endif; ?>)</span>
             <?php else: ?>
-                — সব কনফার্ম শিক্ষার্থী<?php if ($inactive > 0): ?> <span class="text-gray-400">(<?= $inactive ?> জন নিষ্ক্রিয় বাদ)</span><?php endif; ?>
+                — সব কনফার্ম শিক্ষার্থী
             <?php endif; ?>
+            <?php if ($inactive > 0): ?> <span class="text-gray-400">(<?= $inactive ?> জন নিষ্ক্রিয় বাদ)</span><?php endif; ?>
         </div>
         <?php if ($cards): ?>
             <button type="button" onclick="window.print()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold ml-auto">🖨️ এখন প্রিন্ট করুন</button>
@@ -248,7 +290,8 @@ $currentUrl = plabel_url($itemId, $mode, $selMonth);
     <?php if ($cards): ?>
         <p class="text-xs text-gray-500 mb-3">
             নিচের লেবেলগুলোই ছাপা হবে। 🔴 রিসিভারের নাম/মোবাইল খালি থাকলে খালিই থাকবে — পার্সেলের গায়ে লেখার আগে মিলিয়ে নিন।
-            কালো বর্ডার ধরে কেটে নিন। ছাপাতে Ctrl/⌘+P চাপুন (A4, রঙিন দরকার নেই)।
+            কালো বর্ডার ধরে কেটে নিন। নোট/পার্সেল amount-এর ঘরটা ছোট ড্যাশ-লাইনের নিচে — চাইলে লাগানোর সময় <b>কেটে বাদ</b> দিতে পারেন।
+            ছাপাতে Ctrl/⌘+P চাপুন (A4, রঙিন দরকার নেই)।
         </p>
     <?php endif; ?>
 </div>
@@ -256,17 +299,14 @@ $currentUrl = plabel_url($itemId, $mode, $selMonth);
 <?php if (!$cards): ?>
     <div class="bg-white rounded-2xl shadow empty-state no-print">
         <div class="empty-ic"><i data-lucide="printer" class="w-8 h-8"></i></div>
-        <?php if ($mode === 'prepared'): ?>
-            <?= e($selLabel ?: 'এই মাস') ?>-এ কারও পার্সেল এখনো প্রস্তুত করা হয়নি।
-            <a class="text-indigo-600" href="<?= e('course-parcel.php?item_id=' . $itemId . ($selMonth ? '&month=' . $selMonth : '')) ?>">কোর্স পার্সেল পাতায়</a> প্রস্তুত করুন,
-            অথবা <b>সব কনফার্ম শিক্ষার্থী</b> টগল দেখুন।
-        <?php else: ?>
-            এই ব্যাচে কুরিয়ারে যাবে এমন confirmed কোনো শিক্ষার্থী নেই।
-        <?php endif; ?>
+        এই ব্যাচে কুরিয়ারে যাবে এমন confirmed কোনো শিক্ষার্থী নেই।
     </div>
 <?php else: ?>
     <div class="pl-sheet">
-        <?php foreach ($cards as $r): ?>
+        <?php foreach ($cards as $c): $r = $c['reg'];
+            $hasFoot = $c['status'] === 'declined' || $c['status'] === 'none'
+                       || $c['note'] !== '' || ($c['amount'] !== null && $c['amount'] > 0.009);
+        ?>
             <div class="pl-card">
                 <div class="pl-head">
                     <div class="pl-logo">
@@ -287,10 +327,122 @@ $currentUrl = plabel_url($itemId, $mode, $selMonth);
                     <div class="pl-row pl-addr"><span class="pl-k">ঠিকানা:</span><span class="pl-v"><?= e(trim((string) ($r['address'] ?? ''))) ?></span></div>
                     <div class="pl-row pl-mob"><span class="pl-k">মোবাইল:</span><span class="pl-v"><?= e(trim((string) ($r['receiver_phone'] ?? ''))) ?></span></div>
                     <div class="pl-row pl-fb"><span class="pl-k">যোগাযোগ নামঃ</span><span class="pl-v"><?= e(trim((string) ($r['facebook_id'] ?? ''))) ?></span></div>
+                    <?php if ($hasFoot): ?>
+                    <div class="pl-cut">
+                        <div class="pl-cut-hint">✂ — — এখান থেকে কেটে বাদ দেওয়া যায় — —</div>
+                        <div class="pl-foot">
+                            <?php if ($c['status'] === 'declined'): ?>
+                                <div class="pl-stat">⊘ এই মাসে পার্সেল যাবে না</div>
+                            <?php elseif ($c['status'] === 'none'): ?>
+                                <div class="pl-stat">⚠ এই মাসে পার্সেল প্রস্তুত হয়নি</div>
+                            <?php endif; ?>
+                            <?php if ($c['note'] !== ''): ?>
+                                <div class="pl-note">নোট: <?= e($c['note']) ?></div>
+                            <?php endif; ?>
+                            <?php if ($c['amount'] !== null && $c['amount'] > 0.009): ?>
+                                <div class="pl-amt">পার্সেল: ৳<?= number_format($c['amount']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
         <?php endforeach; ?>
     </div>
 <?php endif; ?>
+
+<?php
+// ───────────── 👥 গ্রুপ মিলিয়ে দেখা রিপোর্ট (সর্বশেষ সেভ করা স্ক্যান থেকে) ─────────────
+// 🔴 এটা **লেবেলের অংশ নয়** — শুধু পর্দায় (`.no-print`), লেবেলের নিচে রিপোর্ট হিসেবে।
+// 🔴 ডেটা group-match.php-এর সেভ করা স্ক্যান (`group_match_runs.result_json`) থেকে —
+//    এই পাতা নিজে কিছু মেলায় না, শুধু পড়ে দেখায় (ফোন কখনো জমা হয় না স্ন্যাপশটে)।
+// 🔴 টেবিল না থাকলে (মাইগ্রেশনের আগে) try/catch-এ চুপচাপ বাদ — এই ফলব্যাক সরাবেন না।
+// 🔴 লেবেলে "যোগাযোগ নাম" = registrations.facebook_id; গ্রুপ-ম্যাচ ঐ facebook_id-র
+//    সাথেই হুবহু মেলায় (how==='fb')। তাই "fb-tier মিল নেই" = "যোগাযোগ নাম মেলেনি"।
+$gmSnap = null; $gmMeta = null;
+try {
+    $gs = $db->prepare('SELECT admin_name, created_at, result_json FROM group_match_runs
+                        WHERE item_id = :id ORDER BY created_at DESC, id DESC LIMIT 1');
+    $gs->execute(['id' => $itemId]);
+    if ($grow = $gs->fetch()) {
+        $dec = json_decode((string) $grow['result_json'], true);
+        if (is_array($dec)) { $gmSnap = $dec; $gmMeta = $grow; }
+    }
+} catch (\Throwable $e) { $gmSnap = null; } // টেবিল নেই → চুপচাপ বাদ
+
+$gmNoFb = [];    // গ্রুপে আছে, কিন্তু যোগাযোগ নামে (fb) হুবহু মেলেনি
+$gmMissing = []; // রেজিস্ট্রেশন আছে, কিন্তু গ্রুপের তালিকায় পাইনি
+if ($gmSnap) {
+    foreach ($gmSnap['entries'] ?? [] as $en) {
+        $hasFb = false;
+        foreach ($en['matches'] ?? [] as $mt) { if (($mt['how'] ?? '') === 'fb') { $hasFb = true; break; } }
+        if (!$hasFb) {
+            $poss = [];
+            foreach ($en['matches'] ?? [] as $mt) {
+                $nm = trim((string) ($mt['name'] ?? ''));
+                if ($nm !== '') { $poss[] = $nm; }
+            }
+            $gmNoFb[] = ['name' => (string) ($en['name'] ?? ''), 'poss' => $poss];
+        }
+    }
+    foreach ($gmSnap['missing'] ?? [] as $ms) {
+        $gmMissing[] = ['name' => (string) ($ms['name'] ?? ''), 'fb' => (string) ($ms['fb'] ?? '')];
+    }
+}
+?>
+<div class="no-print mt-6">
+    <h2 class="font-bold text-gray-800 mb-1">👥 গ্রুপ মিলিয়ে দেখা রিপোর্ট <span class="text-xs font-normal text-gray-400">(লেবেলের অংশ নয় — ছাপা হয় না)</span></h2>
+    <?php if (!$gmSnap): ?>
+        <div class="bg-white rounded-2xl shadow p-4 text-sm text-gray-600">
+            এই কোর্স-ব্যাচে এখনো গ্রুপ মিলিয়ে দেখা হয়নি।
+            <a class="text-indigo-600 font-semibold" href="group-match.php" target="_blank" rel="noopener">গ্রুপ মিলিয়ে দেখা পাতায়</a>
+            গিয়ে গ্রুপের সদস্য-তালিকা পেস্ট করে স্ক্যান করলে এখানে "যোগাযোগ নাম মেলেনি" গরমিল দেখাবে।
+        </div>
+    <?php else: ?>
+        <p class="text-xs text-gray-500 mb-2">
+            সর্বশেষ স্ক্যান: <?= e(date('d M Y, h:i A', strtotime((string) $gmMeta['created_at']))) ?><?php if (trim((string) $gmMeta['admin_name']) !== ''): ?> · <?= e($gmMeta['admin_name']) ?><?php endif; ?>
+            · <a class="text-indigo-600" href="group-match.php" target="_blank" rel="noopener">↻ আবার স্ক্যান</a>
+        </p>
+        <div class="pl-gm-grid">
+            <div class="bg-white rounded-2xl shadow p-4">
+                <div class="font-semibold text-amber-700 mb-2">গ্রুপে আছে, কিন্তু যোগাযোগ নাম মেলেনি (<?= count($gmNoFb) ?>)</div>
+                <?php if (!$gmNoFb): ?>
+                    <div class="text-sm text-green-700">✓ গ্রুপের সব নাম কোনো না কোনো যোগাযোগ নামে মিলেছে।</div>
+                <?php else: ?>
+                    <ul class="text-sm space-y-1">
+                        <?php foreach ($gmNoFb as $g): ?>
+                            <li class="border-b last:border-0 py-1 min-w-0">
+                                <span class="font-semibold text-gray-800 break-words"><?= e($g['name'] ?: '—') ?></span>
+                                <?php if ($g['poss']): ?>
+                                    <span class="text-gray-500 text-xs break-words"> — সম্ভবত: <?= e(implode(', ', $g['poss'])) ?> (যোগাযোগ নামে মেলেনি)</span>
+                                <?php else: ?>
+                                    <span class="text-gray-400 text-xs"> — কোনো রেজিস্ট্রেশন মেলেনি</span>
+                                <?php endif; ?>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+            </div>
+            <div class="bg-white rounded-2xl shadow p-4">
+                <div class="font-semibold text-red-700 mb-2">রেজিস্ট্রেশন আছে, কিন্তু গ্রুপে পাইনি (<?= count($gmMissing) ?>)</div>
+                <?php if (!$gmMissing): ?>
+                    <div class="text-sm text-green-700">✓ সবাইকে গ্রুপের তালিকায় পাওয়া গেছে।</div>
+                <?php else: ?>
+                    <ul class="text-sm space-y-1">
+                        <?php foreach ($gmMissing as $m): ?>
+                            <li class="border-b last:border-0 py-1 min-w-0">
+                                <span class="font-semibold text-gray-800 break-words"><?= e($m['name'] ?: '—') ?></span>
+                                <?php if (trim($m['fb']) !== ''): ?>
+                                    <span class="text-gray-500 text-xs break-words"> — যোগাযোগ নাম: <?= e($m['fb']) ?></span>
+                                <?php endif; ?>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+            </div>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">🔴 এই রিপোর্ট ব্যাচ-ভিত্তিক (মাস-ভিত্তিক নয়), আর গ্রুপের টিক/রেজিস্ট্রেশন কিছুই বদলায় না — শুধু সর্বশেষ স্ক্যানের গরমিল দেখায়।</p>
+    <?php endif; ?>
+</div>
 
 <?php require __DIR__ . '/includes/layout-bottom.php'; ?>
