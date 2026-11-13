@@ -201,7 +201,7 @@ function admin_nav_groups(): array
     }
     $settings[] = ['key' => 'change-password', 'href' => 'change-password.php', 'file' => 'change-password.php', 'icon' => 'key',         'label' => 'পাসওয়ার্ড পরিবর্তন'];
     $settings[] = ['key' => 'security',        'href' => 'security.php',        'file' => 'security.php',        'icon' => 'fingerprint', 'label' => 'নিরাপত্তা / ফিঙ্গারপ্রিন্ট'];
-    if (admin_can('backup')) {
+    if (admin_is_super()) { // 🔴 ব্যাকআপ শুধু মূল অ্যাডমিন (অডিট S7)
         $settings[] = ['key' => 'backup', 'href' => 'backup.php', 'file' => 'backup.php', 'icon' => 'hard-drive-download', 'label' => 'ব্যাকআপ ও ডাউনলোড'];
     }
     if (admin_can('archive')) {

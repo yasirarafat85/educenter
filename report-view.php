@@ -16,6 +16,29 @@ function report_deny(int $code): void
     exit;
 }
 
+/**
+ * অ্যাডমিন/মডারেটর এই রিপোর্ট প্রিভিউ করতে পারেন কিনা।
+ * সেশনের role/permissions সরাসরি পড়া হয় (admin/includes/auth.php লোড করা হয় না —
+ * ওটা পাবলিক পাতায় টানলে অ্যাডমিনের পুরো গার্ড-যন্ত্র চলে আসত)। নিয়মটা
+ * admin_can('reports') ও admin_require_login()-এর নিষ্ক্রিয়তা-সীমার হুবহু প্রতিধ্বনি —
+ * permissions.php / auth.php-এ ওগুলো বদলালে এখানেও বদলান।
+ */
+function report_admin_may_view(): bool
+{
+    if (empty($_SESSION['admin_id'])) {
+        return false;
+    }
+    $last = (int) ($_SESSION['admin_last_activity'] ?? 0);
+    if ($last > 0 && (time() - $last) > 30 * 60) {
+        return false; // নিষ্ক্রিয় হয়ে পড়ে থাকা অ্যাডমিন সেশন — এখান দিয়ে ঢোকা যাবে না
+    }
+    if (($_SESSION['admin_role'] ?? 'admin') === 'admin') {
+        return true;
+    }
+    $perms = $_SESSION['admin_permissions'] ?? [];
+    return is_array($perms) && in_array('view', (array) ($perms['reports'] ?? []), true);
+}
+
 $id = (int) ($_GET['id'] ?? 0);
 if ($id <= 0 || !report_reports_ready()) {
     report_deny(404);
@@ -36,7 +59,12 @@ if (!$row) {
 // ── অ্যাক্সেস যাচাই ──
 // (ক) অ্যাডমিন লগইন করা থাকলে যেকোনো রিপোর্ট দেখতে পারেন (নিজেই আপলোড করেছেন — প্রিভিউ)।
 // (খ) নাহলে অভিভাবক লগইন বাধ্যতামূলক, আর তাঁর সেশনের ফোন = রিপোর্টের ফোন হতে হবে।
-$adminLoggedIn = !empty($_SESSION['admin_id']);
+// 🔴 অডিট S4 (২০২৬-১১-১৩): আগে "অ্যাডমিন লগইন আছে" দেখেই ছাড়া হতো — তাই যে মডারেটরকে
+//    রিপোর্টের অনুমতি দেওয়াই হয়নি তিনিও id বদলে বদলে সব শিক্ষার্থীর PDF খুলতে পারতেন।
+//    এখন মূল অ্যাডমিন অথবা `reports` সেকশনে view অনুমতি লাগে, আর অ্যাডমিন সেশনটা
+//    নিষ্ক্রিয়তা-সীমার (ADMIN_IDLE_TIMEOUT_MINUTES) ভেতরে থাকতে হয়। না মিললে নিচের
+//    অভিভাবক-যাচাইয়ে পড়ে — অর্থাৎ আগের মতোই ৪০৪/লগইন, অস্তিত্ব ফাঁস হয় না।
+$adminLoggedIn = report_admin_may_view();
 if (!$adminLoggedIn) {
     $user = user_current(); // approved না হলে null
     if (!$user) {
@@ -58,6 +86,9 @@ $downloadName = (string) ($row['file_name'] ?: 'report.pdf');
 $asciiName = preg_replace('/[^\x20-\x7E]/', '', $downloadName);
 if ($asciiName === '' || !preg_match('/\.pdf$/i', $asciiName)) { $asciiName = 'report.pdf'; }
 
+// PDF-এর উত্তরে পাতার CSP লাগে না (ওটা HTML-এর জন্য); কিছু ব্রাউজারের PDF-ভিউয়ার
+// `object-src 'none'` পেলে ফাইলটা দেখাতে চায় না — তাই শুধু এই উত্তর থেকে সরানো।
+header_remove('Content-Security-Policy');
 header('Content-Type: application/pdf');
 header('Content-Disposition: inline; filename="' . str_replace('"', '', $asciiName) . '"; filename*=UTF-8\'\'' . rawurlencode($downloadName));
 header('Content-Length: ' . (string) filesize($abs));

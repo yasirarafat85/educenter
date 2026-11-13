@@ -645,9 +645,13 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                     <p class="text-sm font-bold text-gray-800 truncate leading-tight"><?= e($adminName) ?></p>
                     <p class="text-xs text-gray-500">অ্যাডমিন</p>
                 </div>
-                <a href="logout.php" title="লগআউট" class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 flex-shrink-0">
-                    <i data-lucide="log-out" class="w-4 h-4"></i>
-                </a>
+                <?php // 🔴 লগআউট এখন POST + CSRF (অডিট S5) — লিংক নয়, ছোট ফর্ম ?>
+                <form method="post" action="logout.php" class="flex-shrink-0" style="margin:0">
+                    <?= csrf_field() ?>
+                    <button type="submit" title="লগআউট" aria-label="লগআউট" class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50">
+                        <i data-lucide="log-out" class="w-4 h-4"></i>
+                    </button>
+                </form>
             </div>
         </div>
     </aside>

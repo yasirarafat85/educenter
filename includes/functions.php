@@ -49,7 +49,44 @@ if (session_status() === PHP_SESSION_NONE) {
 const HSTS_MAX_AGE = 604800;   // ৭ দিন (সেকেন্ডে)
 
 // বেসিক সিকিউরিটি হেডার — সব পেজেই প্রযোজ্য (clickjacking, MIME-sniffing ঠেকাতে)
+/**
+ * 🛡️ Content-Security-Policy (অডিট S6, ২০২৬-১১-১৩) — "হালকা" নীতি।
+ * কাজ: বাইরের কোনো ডোমেইন থেকে স্ক্রিপ্ট চালানো, অচেনা সাইটের ফ্রেম বসানো, ফর্মের ডেটা
+ * বাইরে পাঠানো আর <base>/<object> দিয়ে করা কৌশল আটকায়।
+ * 🔴 `'unsafe-inline'` ইচ্ছাকৃত — সাইটের প্রায় প্রতিটা পাতায় ইনলাইন <script>/<style>/style=""
+ *    আছে; ওটা বাদ দিলে পুরো সাইট ভাঙে। তাই এটা ইনলাইন-XSS আটকায় না (সেটার গার্ড e()),
+ *    আটকায় বাইরে থেকে কোড/ফ্রেম টানা।
+ * 🔴 নতুন কিছু বাইরের ডোমেইন থেকে আনলে (ফন্ট/ভিডিও-প্রোভাইডার/এমবেড) **এই তালিকায় যোগ করুন**,
+ *    নাহলে ব্রাউজার নীরবে আটকে দেবে (কনসোলে "Refused to load…")। বর্তমান তালিকার কারণ:
+ *      style/font  → অ্যাডমিনের Google Fonts (পাবলিকে সেল্ফ-হোস্টেড, ফলব্যাকে গুগল)
+ *      img         → https: (ইউটিউব/ড্রাইভ থাম্বনেইল, অ্যাডমিনের বসানো বাইরের ছবি) + data:/blob: (QR, html2canvas, OCR)
+ *      frame       → ফেসবুক পোস্ট · ইউটিউব · গুগল ড্রাইভ ভিডিও
+ *      script      → 'wasm-unsafe-eval' + worker blob: শুধু অ্যাডমিনের OCR-এর (tesseract.js) জন্য
+ */
+function security_csp_header(): string
+{
+    return implode('; ', [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:",
+        "worker-src 'self' blob:",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' data: https://fonts.gstatic.com",
+        "img-src 'self' data: blob: https:",
+        "media-src 'self' data: blob:",
+        "connect-src 'self' data: blob:",
+        "frame-src 'self' https://www.facebook.com https://web.facebook.com https://www.youtube-nocookie.com https://www.youtube.com https://drive.google.com",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'self'",
+    ]);
+}
+
 if (!headers_sent()) {
+    header_remove('X-Powered-By'); // PHP ভার্সন বাইরে জানানোর দরকার নেই (অডিট S6)
+    header('Content-Security-Policy: ' . security_csp_header());
+    // ক্যামেরা/মাইক/লোকেশন ইত্যাদি এই সাইটের কোনো পাতাই ব্যবহার করে না — এমবেড করা ফ্রেমও পাবে না
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()');
     header('X-Frame-Options: SAMEORIGIN');
     header('X-Content-Type-Options: nosniff');
     header('Referrer-Policy: strict-origin-when-cross-origin');

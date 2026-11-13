@@ -154,6 +154,12 @@ require __DIR__ . '/includes/layout-top.php';
 ?>
 <div class="max-w-3xl space-y-5">
 
+    <?php // 🔐 অডিট S7 — ব্যাকআপে গোপন চাবিও থাকে, সেটা স্পষ্ট করে বলা ?>
+    <div class="rounded-2xl p-4 bg-red-50 border border-red-200">
+        <p class="font-bold text-red-700">🔐 ব্যাকআপ ফাইল = সাইটের চাবির গোছা</p>
+        <p class="text-sm text-red-700 mt-1">ডাটাবেস ব্যাকআপে কাস্টমারের তথ্যের পাশাপাশি <strong>কুরিয়ার (Pathao/Steadfast), গুগল লগইন ও SMS-এর গোপন চাবি</strong> থাকে; "পুরো সাইট" জিপে ডাটাবেসের পাসওয়ার্ডও থাকে। তাই এই পাতা <strong>শুধু মূল অ্যাডমিন</strong> খুলতে পারেন — কোনো মডারেটর নয়। ফাইলটা WhatsApp/ইমেইলে কাউকে পাঠাবেন না, শেয়ার করা কম্পিউটারে রাখবেন না।</p>
+    </div>
+
     <?php // কোন সার্ভারের ব্যাকআপ হচ্ছে সেটা স্পষ্ট করে বলা — সবচেয়ে বড় বিভ্রান্তির জায়গা ?>
     <div class="rounded-2xl p-4 <?= $isLive ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200' ?>">
         <p class="font-bold <?= $isLive ? 'text-green-800' : 'text-amber-800' ?>">

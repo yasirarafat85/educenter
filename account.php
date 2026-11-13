@@ -135,7 +135,11 @@ require __DIR__ . '/includes/site-header.php';
         </div>
         <div class="flex gap-2">
             <a href="account-password" class="text-sm font-semibold text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl">পাসওয়ার্ড</a>
-            <a href="account-logout" class="text-sm font-semibold text-red-600 bg-red-50 px-4 py-2 rounded-xl">লগআউট</a>
+            <?php // 🔴 লগআউট POST + CSRF (অডিট S5) — লিংক নয়, ছোট ফর্ম ?>
+            <form method="post" action="account-logout.php" style="margin:0;display:inline">
+                <?= csrf_field() ?>
+                <button type="submit" class="text-sm font-semibold text-red-600 bg-red-50 px-4 py-2 rounded-xl">লগআউট</button>
+            </form>
         </div>
     </div>
 

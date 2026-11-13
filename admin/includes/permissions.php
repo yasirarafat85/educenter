@@ -32,7 +32,6 @@ function admin_permission_sections(): array
         'finance'  => 'আয়-ব্যয় (আয়/খরচ)',
         'settings' => 'সাইট সেটিংস',
         'payment'  => 'পেমেন্ট মেথড',
-        'backup'   => 'ব্যাকআপ ও ডাউনলোড',
         'archive'  => 'আর্কাইভ (রিস্টোর)',
     ];
 }
@@ -103,7 +102,6 @@ function admin_page_sections(): array
         // 🩺 সিস্টেম চেক — শুধু পড়ে (কোন SQL বাকি), কিছুই লেখে না; তাই settings সেকশনেই
         'system-check.php'          => ['settings'],
         'payment-methods.php'       => ['payment'],
-        'backup.php'                => ['backup'],
         'archive.php'               => ['archive'],
     ];
 }
@@ -127,7 +125,10 @@ function admin_always_allowed_pages(): array
 // শুধু team.php (মডারেটর-ম্যানেজমেন্ট — মডারেটরকে দিলে সে নিজেই নিজেকে সব অনুমতি দিয়ে দিতে পারত = privilege escalation)।
 function admin_super_only_pages(): array
 {
-    return ['team.php'];
+    // 🔴 backup.php (অডিট S7, ২০২৬-১১-১৩): ব্যাকআপ ফাইলে কুরিয়ার/গুগল/SMS-এর গোপন চাবি
+    //    (settings টেবিল) আর "পুরো সাইট" জিপে config.php (DB পাসওয়ার্ড) থাকে — তাই এটা আর
+    //    মডারেটরকে দেওয়া যায় না। আগে দেওয়া `backup` অনুমতি থাকলেও এখন কাজ করে না।
+    return ['team.php', 'backup.php'];
 }
 
 // প্রতি সেকশনে যে ৩ ধরনের ক্ষমতা: দেখা / এডিট (যোগ+পরিবর্তন) / ডিলিট
