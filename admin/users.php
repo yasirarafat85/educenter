@@ -146,12 +146,13 @@ try {
                          WHERE success = 0 AND attempted_at > (NOW() - INTERVAL 1 DAY) GROUP BY phone")->fetchAll() as $r) {
         $failCount[$r['phone']] = (int) $r['c'];
     }
-    // রেট-লিমিটের নিয়ম হুবহু user_login_rate_limited()-এর মতোই — ৫ ভুল / ১৫ মিনিট।
+    // "সবার জন্য লক" = user_login_rate_limited()-এর গেট B — এই ফোনে ২০ ভুল / ১৫ মিনিট (যেকোনো IP)।
+    // (গেট A — একই IP থেকে ৫ ভুল — শুধু ঐ ডিভাইসকে আটকায়; ওটা নিচের "ভুল চেষ্টা" সংখ্যায় দেখা যায়।)
     // ⚠️ সংখ্যা দুটো includes/user-auth.php-এর কনস্ট্যান্ট থেকে কপি করা (ঐ ফাইল অ্যাডমিন পেজে
     // ইচ্ছাকৃতভাবে লোড করা হয় না); ওখানে বদলালে এখানেও বদলান।
     foreach ($db->query("SELECT phone, COUNT(*) c FROM user_login_attempts
                          WHERE success = 0 AND attempted_at > (NOW() - INTERVAL 15 MINUTE)
-                         GROUP BY phone HAVING c >= 5")->fetchAll() as $r) {
+                         GROUP BY phone HAVING c >= 20")->fetchAll() as $r) {
         $lockedPhones[$r['phone']] = true;
     }
 } catch (Throwable $e) {

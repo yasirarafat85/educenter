@@ -51,8 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_verify()) {
             set_flash('error', 'ইউজারনেম, নাম ও পাসওয়ার্ড — সব দিন।');
         } elseif (!preg_match('/^[A-Za-z0-9_.]{3,50}$/', $username)) {
             set_flash('error', 'ইউজারনেম ৩-৫০ অক্ষর, শুধু ইংরেজি অক্ষর/সংখ্যা/_/. ব্যবহার করুন।');
-        } elseif (strlen($password) < 6) {
-            set_flash('error', 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।');
+        } elseif (strlen($password) < ADMIN_MIN_PASSWORD_LENGTH) {
+            set_flash('error', 'পাসওয়ার্ড কমপক্ষে ' . ADMIN_MIN_PASSWORD_LENGTH . ' অক্ষরের হতে হবে।');
         } else {
             $exists = $db->prepare('SELECT id FROM admin_users WHERE username = :u');
             $exists->execute(['u' => $username]);
@@ -89,8 +89,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_verify()) {
             set_flash('success', 'অ্যাকাউন্টের অবস্থা পরিবর্তন হয়েছে।');
         } elseif ($action === 'reset_password') {
             $np = $_POST['new_password'] ?? '';
-            if (strlen($np) < 6) {
-                set_flash('error', 'নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।');
+            if (strlen($np) < ADMIN_MIN_PASSWORD_LENGTH) {
+                set_flash('error', 'নতুন পাসওয়ার্ড কমপক্ষে ' . ADMIN_MIN_PASSWORD_LENGTH . ' অক্ষরের হতে হবে।');
             } else {
                 $db->prepare('UPDATE admin_users SET password_hash = :p WHERE id = :id AND role = "moderator"')
                     ->execute(['p' => password_hash($np, PASSWORD_DEFAULT), 'id' => $id]);
@@ -218,7 +218,7 @@ $renderCapGrid = function (array $currentMap) use ($sections, $renderCapRow): st
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-1">পাসওয়ার্ড</label>
                     <div class="pw-wrap" style="position:relative">
-                        <input type="password" name="password" required minlength="6" autocomplete="new-password" class="w-full border rounded-xl px-3 py-2.5" style="padding-right:2.6rem">
+                        <input type="password" name="password" required minlength="<?= ADMIN_MIN_PASSWORD_LENGTH ?>" autocomplete="new-password" class="w-full border rounded-xl px-3 py-2.5" style="padding-right:2.6rem">
                         <button type="button" class="pw-eye" tabindex="-1" aria-label="পাসওয়ার্ড দেখান" style="position:absolute;top:0;bottom:0;right:0;padding:0 .7rem;color:#9ca3af"><i data-lucide="eye" class="w-4 h-4"></i></button>
                     </div>
                 </div>
@@ -270,7 +270,7 @@ $renderCapGrid = function (array $currentMap) use ($sections, $renderCapRow): st
                             <input type="hidden" name="action" value="reset_password">
                             <input type="hidden" name="id" value="<?= (int) $m['id'] ?>">
                             <span class="pw-wrap" style="position:relative;display:inline-block">
-                                <input type="password" name="new_password" placeholder="নতুন পাসওয়ার্ড" minlength="6" class="border rounded-lg px-3 py-1.5 text-sm" style="width:11rem;padding-right:2.2rem">
+                                <input type="password" name="new_password" placeholder="নতুন পাসওয়ার্ড" minlength="<?= ADMIN_MIN_PASSWORD_LENGTH ?>" class="border rounded-lg px-3 py-1.5 text-sm" style="width:11rem;padding-right:2.2rem">
                                 <button type="button" class="pw-eye" tabindex="-1" aria-label="দেখান" style="position:absolute;top:0;bottom:0;right:0;padding:0 .5rem;color:#9ca3af"><i data-lucide="eye" class="w-4 h-4"></i></button>
                             </span>
                             <button type="submit" class="text-indigo-700 hover:text-indigo-900 font-semibold text-sm">রিসেট</button>

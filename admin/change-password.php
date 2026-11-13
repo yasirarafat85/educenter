@@ -16,8 +16,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_verify()) {
 
     if (!$admin || !password_verify($current, $admin['password_hash'])) {
         set_flash('error', 'বর্তমান পাসওয়ার্ড ভুল।');
-    } elseif (strlen($new) < 6) {
-        set_flash('error', 'নতুন পাসওয়ার্ড কমপক্ষে ৬ ক্যারেক্টারের হতে হবে।');
+    } elseif (strlen($new) < ADMIN_MIN_PASSWORD_LENGTH) {
+        set_flash('error', 'নতুন পাসওয়ার্ড কমপক্ষে ' . ADMIN_MIN_PASSWORD_LENGTH . ' ক্যারেক্টারের হতে হবে।');
     } elseif ($new !== $confirm) {
         set_flash('error', 'নতুন পাসওয়ার্ড ও কনফার্ম পাসওয়ার্ড মিলছে না।');
     } else {
@@ -40,7 +40,8 @@ require __DIR__ . '/includes/layout-top.php';
         </div>
         <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">নতুন পাসওয়ার্ড</label>
-            <input type="password" name="new_password" required class="w-full border rounded-xl px-4 py-2.5">
+            <input type="password" name="new_password" required minlength="<?= ADMIN_MIN_PASSWORD_LENGTH ?>" class="w-full border rounded-xl px-4 py-2.5">
+            <p class="text-xs text-gray-500 mt-1">কমপক্ষে <?= ADMIN_MIN_PASSWORD_LENGTH ?> অক্ষর।</p>
         </div>
         <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">নতুন পাসওয়ার্ড আবার লিখুন</label>

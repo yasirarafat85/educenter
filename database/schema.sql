@@ -86,7 +86,8 @@ CREATE TABLE login_attempts (
     method VARCHAR(20) NOT NULL DEFAULT 'password',  -- password / webauthn (2026-09-24)
     admin_id INT UNSIGNED DEFAULT NULL,
     attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_ip_time (ip_address, attempted_at)
+    INDEX idx_ip_time (ip_address, attempted_at),
+    INDEX idx_la_user_time (username, attempted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
@@ -729,7 +730,8 @@ CREATE TABLE user_login_attempts (
     phone        VARCHAR(20),
     success      TINYINT(1) DEFAULT 0,
     attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_phone_time (phone, attempted_at)
+    INDEX idx_phone_time (phone, attempted_at),
+    INDEX idx_ula_ip_time (ip_address, attempted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- পুরাতন শিক্ষার্থী — পুরনো Excel/CSV ডেটার রেফারেন্স তালিকা (আয়/কুরিয়ার থেকে সম্পূর্ণ আলাদা;

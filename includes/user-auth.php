@@ -7,18 +7,38 @@ require_once __DIR__ . '/functions.php';
 const USER_MAX_LOGIN_ATTEMPTS = 5;
 const USER_LOGIN_WINDOW_MINUTES = 15;
 
-// এই ফোনে সাম্প্রতিক সময়ে অনেক ভুল লগইন হয়েছে কিনা (per-phone, per-IP নয় — যাতে শেয়ার্ড IP
-// অন্য ইউজারকে ব্লক না করে)
-function user_login_rate_limited(string $phone): bool
+// 🔒 লগইনের তিন গেট (২০২৬-১১-১৩, অডিট S1) — সবই শেষ USER_LOGIN_WINDOW_MINUTES মিনিটের **ভুল** চেষ্টা গোনে:
+//   A. একই IP + একই ফোন  ≥ USER_MAX_LOGIN_ATTEMPTS (5)   — সাধারণ ভুল-পাসওয়ার্ডের সীমা
+//   B. একই ফোন, যেকোনো IP ≥ USER_MAX_PHONE_ATTEMPTS (20)  — অনেক IP থেকে এক অ্যাকাউন্টে আক্রমণ
+//   C. একই IP, যেকোনো ফোন ≥ USER_MAX_IP_ATTEMPTS (30)     — এক IP থেকে অনেক ফোনে একই পাসওয়ার্ড চেষ্টা
+// 🔴 আগে শুধু "ফোন-প্রতি 5" ছিল: (ক) যে কেউ 5 বার ভুল দিয়ে অন্যের অ্যাকাউন্ট 15 মিনিট লক করে
+//    রাখতে পারত, (খ) এক IP থেকে হাজার ফোনে চেষ্টা আটকাত না। এখন গেট A নিজের IP-তেই আটকায়,
+//    তাই এক জায়গা থেকে অন্য কাউকে লক করা যায় না (গেট B-তে পৌঁছাতে অনেক আলাদা IP লাগে)।
+// ⚠️ গেট C-র সীমা ইচ্ছাকৃতভাবে ঢিলা — মোবাইল নেটওয়ার্কে (CGNAT) অনেক অভিভাবক একই IP ভাগ করেন।
+const USER_MAX_PHONE_ATTEMPTS = 20;
+const USER_MAX_IP_ATTEMPTS = 30;
+
+function user_login_fail_count(string $where, array $params): int
 {
+    // $where কোডে লেখা ধ্রুবক (নিচের তিনটা কল), কখনো ইউজার-ইনপুট নয়
     $stmt = get_db()->prepare(
         'SELECT COUNT(*) c FROM user_login_attempts
-         WHERE phone = :p AND success = 0 AND attempted_at > (NOW() - INTERVAL :mins MINUTE)'
+         WHERE ' . $where . ' AND success = 0 AND attempted_at > (NOW() - INTERVAL ' . (int) USER_LOGIN_WINDOW_MINUTES . ' MINUTE)'
     );
-    $stmt->bindValue('p', $phone);
-    $stmt->bindValue('mins', USER_LOGIN_WINDOW_MINUTES, PDO::PARAM_INT);
-    $stmt->execute();
-    return (int) $stmt->fetch()['c'] >= USER_MAX_LOGIN_ATTEMPTS;
+    $stmt->execute($params);
+    return (int) $stmt->fetch()['c'];
+}
+
+function user_login_rate_limited(string $phone, ?string $ip = null): bool
+{
+    $ip = $ip ?? client_ip();
+    if (user_login_fail_count('ip_address = :ip AND phone = :p', ['ip' => $ip, 'p' => $phone]) >= USER_MAX_LOGIN_ATTEMPTS) {
+        return true;
+    }
+    if (user_login_fail_count('phone = :p', ['p' => $phone]) >= USER_MAX_PHONE_ATTEMPTS) {
+        return true;
+    }
+    return user_login_fail_count('ip_address = :ip', ['ip' => $ip]) >= USER_MAX_IP_ATTEMPTS;
 }
 
 function user_record_login_attempt(string $phone, bool $success): void

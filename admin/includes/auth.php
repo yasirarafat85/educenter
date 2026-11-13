@@ -15,6 +15,29 @@ function admin_client_ip(): string
     return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 }
 
+// 🔒 ইউজারনেম-ভিত্তিক সীমা (২০২৬-১১-১৩, অডিট S2): একই ইউজারনেমে **যেকোনো IP মিলিয়ে** এতগুলো ভুল
+// হলে ঐ ইউজারনেমের পাসওয়ার্ড-লগইন সাময়িক বন্ধ। আগে শুধু IP-প্রতি সীমা ছিল, তাই অনেক IP থেকে
+// ধীরে ধীরে চেষ্টা করলে আটকাত না। ⚠️ ফিঙ্গারপ্রিন্ট লগইন এই সীমায় পড়ে না (webauthn-login.php
+// শুধু IP দেখে) — তাই কেউ ইচ্ছে করে লক করালেও আসল অ্যাডমিন ফিঙ্গার দিয়ে ঢুকতে পারেন।
+const ADMIN_MAX_USERNAME_ATTEMPTS = 10;
+// অ্যাডমিন/মডারেটরের **নতুন** পাসওয়ার্ডের ন্যূনতম দৈর্ঘ্য (পুরনো পাসওয়ার্ড বদলানো পর্যন্ত চলবে)
+const ADMIN_MIN_PASSWORD_LENGTH = 10;
+
+function admin_username_rate_limited(string $username): bool
+{
+    if ($username === '') {
+        return false;
+    }
+    $stmt = get_db()->prepare(
+        'SELECT COUNT(*) c FROM login_attempts
+         WHERE username = :u AND success = 0 AND attempted_at > (NOW() - INTERVAL :mins MINUTE)'
+    );
+    $stmt->bindValue('u', $username);
+    $stmt->bindValue('mins', ADMIN_LOGIN_WINDOW_MINUTES, PDO::PARAM_INT);
+    $stmt->execute();
+    return (int) $stmt->fetch()['c'] >= ADMIN_MAX_USERNAME_ATTEMPTS;
+}
+
 // এই IP থেকে সাম্প্রতিক সময়ে অনেক বেশি ভুল লগইন চেষ্টা হয়েছে কিনা
 function admin_is_rate_limited(string $ip): bool
 {

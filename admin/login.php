@@ -21,6 +21,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($username === '' || $password === '') {
             $error = 'ইউজারনেম ও পাসওয়ার্ড দিন।';
+        } elseif (admin_username_rate_limited($username)) {
+            // 🔴 বার্তা IP-সীমার বার্তার হুবহু এক — ইউজারনেমটা আসল কিনা যেন বোঝা না যায়
+            $error = 'অনেকবার ভুল লগইন চেষ্টা হয়েছে। নিরাপত্তার জন্য ' . ADMIN_LOGIN_WINDOW_MINUTES . ' মিনিট পর আবার চেষ্টা করুন।';
         } else {
             $ok = admin_attempt_login($username, $password);
             // সফল হলে সেশনে admin_id বসে গেছে — লগে ঐ id-টাও রাখি (কে ঢুকল স্পষ্ট হয়)
