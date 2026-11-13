@@ -47,6 +47,14 @@ body {
 
 .stats-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
 .glass-effect { background: rgba(255, 255, 255, 0.25); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.18); }
+/* হেডারের আইকন-বোতাম (খোঁজা · যোগাযোগ · কার্ট · মেনু) — ৪৪px ছোঁয়ার জায়গা। সাধারণ CSS-এ, Tailwind রিবিল্ড লাগে না। */
+.hd-ic { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0;
+         border-radius: 12px; background: rgba(15, 23, 42, 0.05); border: 1px solid rgba(15, 23, 42, 0.06);
+         cursor: pointer; transition: background-color .15s; }
+.hd-ic:hover, .hd-ic:focus-visible { background: rgb(var(--c-tint)); }
+@media (max-width: 359px) { .hd-ic { width: 38px; height: 38px; } }
+/* 🔴 style.css Tailwind-এর পরে লোড হয়, তাই উপরের `display` মেনু-বোতামের `lg:hidden`-কে হারিয়ে দিত */
+@media (min-width: 1024px) { #mobile-menu-btn.hd-ic { display: none; } }
 .header-glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255, 255, 255, 0.3); }
 /* মোবাইল মেনু খোলা থাকলে হেডার প্রায় পুরো স্বচ্ছ গ্লাস — পেছনের সব দেখা যায় (blur দিয়ে লেখা পড়া যায়) */
 body.mobile-menu-open .header-glass { background: rgba(255, 255, 255, 0.18); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }

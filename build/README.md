@@ -32,6 +32,6 @@ npx tailwindcss@3.4.17 -c build/tailwind.admin.js -i build/input.css -o admin/as
 ভালো (এই কোডবেসে লাইভ ভিজ্যুয়াল প্রিভিউ নেই বলে এটাই প্রধান সেফটি-চেক)।
 
 ## সেল্ফ-হোস্টেড JS লাইব্রেরি (CDN থেকে সরানো)
-- `assets/js/lucide.js` (আইকন, পাবলিক+অ্যাডমিন)
+- `assets/js/lucide.js` (আইকন, পাবলিক+অ্যাডমিন) — ব্যবহৃত আইকনের ছোট সাবসেট; `node build/lucide-subset.js` দিয়ে `assets/js/lucide-full.js` থেকে তৈরি (নতুন আইকন ব্যবহার করলে আবার চালান)
 - `assets/js/html2canvas.min.js` (register-thanks.php)
 - `admin/assets/chart.js` (admin/index.php ড্যাশবোর্ড)
