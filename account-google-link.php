@@ -42,6 +42,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $db->prepare('INSERT INTO users (phone, google_id, email, full_name, status) VALUES (:p, :g, :e, :n, "pending")')
        ->execute(['p' => $phone, 'g' => $pending['google_id'], 'e' => $pending['email'] ?: null, 'n' => $pending['name'] ?: null]);
 
+    // 🪪 শিশুর জন্ম তারিখ (ঐচ্ছিক) — account-signup-submit.php-এর হুবহু একই নিয়ম
+    $verifyDob = signup_dob_clean($_POST['child_dob'] ?? '');
+    if ($verifyDob !== null && db_has_column($db, 'users', 'verify_dob')) {
+        try {
+            $db->prepare('UPDATE users SET verify_dob = :d WHERE phone = :p')->execute(['d' => $verifyDob, 'p' => $phone]);
+        } catch (Throwable $e) { /* চুপচাপ বাদ */ }
+    }
+
     unset($_SESSION['google_pending']);
     set_flash('success', 'অ্যাকাউন্ট তৈরি হয়েছে! অ্যাডমিন approve করলে Google দিয়ে লগইন করতে পারবেন।');
     redirect('account-login');
@@ -69,6 +77,12 @@ require __DIR__ . '/includes/site-header.php';
                     <label class="block text-white font-semibold mb-1.5 text-sm">মোবাইল নাম্বার (রেজিস্ট্রেশনের) *</label>
                     <input type="text" inputmode="numeric" name="phone" required placeholder="01XXXXXXXXX"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none">
+                </div>
+                <div>
+                    <label class="block text-white font-semibold mb-1.5 text-sm">শিশুর জন্ম তারিখ</label>
+                    <input type="date" name="child_dob" max="<?= e(date('Y-m-d')) ?>" value="<?= e('') ?>"
+                        class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none" style="min-width:0;color-scheme:dark;">
+                    <p class="text-fuchsia-100 text-xs mt-1">কোর্সে রেজিস্ট্রেশনের সময় যে তারিখ দিয়েছিলেন। দিলে অ্যাকাউন্ট দ্রুত approve হয়।</p>
                 </div>
                 <button type="submit" class="w-full py-3.5 rounded-xl font-bold text-base text-white shadow-lg active:scale-[0.98] transition-transform" style="background: linear-gradient(135deg, rgb(var(--c-primary-2)) 0%, rgb(var(--c-primary)) 100%);">
                     সম্পন্ন করুন

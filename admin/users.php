@@ -116,14 +116,16 @@ $rows = $stmt->fetchAll();
 // ---------------- কে কোন কোর্সে (bulk — সারিপ্রতি কোয়েরি নয়) ----------------
 // 🔴 এই পেজের ফোনগুলোর জন্য **একটাই** কোয়েরি (N+1 এড়াতে); ফোন মিলিয়ে জোড়া লাগে, তাই
 // রেজিস্ট্রেশন যদি অন্য নম্বরে করা থাকে সেটা এখানে দেখাবে না (ইচ্ছাকৃত, নিচে ইঙ্গিত দেওয়া আছে)।
-$userCourses = $userOtherOrders = [];
+$userCourses = $userOtherOrders = $userRegDobs = [];
+$hasVerifyDob = db_has_column($db, 'users', 'verify_dob');   // migrate-user-verify-dob.sql
 $pagePhones = array_values(array_unique(array_filter(array_column($rows, 'phone'))));
 if ($pagePhones) {
     try {
         $ph = implode(',', array_fill(0, count($pagePhones), '?'));
-        $q = $db->prepare("SELECT phone, type, item_title, batch FROM registrations WHERE phone IN ($ph) ORDER BY created_at DESC");
+        $q = $db->prepare("SELECT phone, type, item_title, batch, date_of_birth FROM registrations WHERE phone IN ($ph) ORDER BY created_at DESC");
         $q->execute($pagePhones);
         foreach ($q->fetchAll() as $r) {
+            $userRegDobs[$r['phone']][] = (string) ($r['date_of_birth'] ?? '');   // 🪪 signup-এর জন্ম তারিখ মেলাতে
             if ($r['type'] === 'course') {
                 $key = $r['item_title'] . '|' . ($r['batch'] ?? '');
                 $userCourses[$r['phone']][$key] = ['title' => $r['item_title'], 'batch' => $r['batch'] ?? ''];
@@ -131,7 +133,7 @@ if ($pagePhones) {
                 $userOtherOrders[$r['phone']] = ($userOtherOrders[$r['phone']] ?? 0) + 1;
             }
         }
-    } catch (Throwable $e) { $userCourses = $userOtherOrders = []; }
+    } catch (Throwable $e) { $userCourses = $userOtherOrders = $userRegDobs = []; }
 }
 
 // ---------------- লগইন-অবস্থা (user_login_attempts থেকে, ফোন মিলিয়ে) ----------------
@@ -253,7 +255,29 @@ require __DIR__ . '/includes/layout-top.php';
                         <span class="block text-xs text-amber-600" title="রেজিস্ট্রেশন হয়তো অন্য মোবাইল নম্বরে করা">🔍 এই নম্বরে কোনো অর্ডার নেই</span>
                     <?php endif; ?>
                 </td>
-                <td class="py-2.5 px-4"><span class="text-xs font-bold px-2.5 py-1 rounded-lg <?= $sc ?>"><?= e($sl) ?></span></td>
+                <td class="py-2.5 px-4">
+                    <div class="min-w-0">
+                    <span class="text-xs font-bold px-2.5 py-1 rounded-lg <?= $sc ?>"><?= e($sl) ?></span>
+                    <?php // 🪪 signup-এ দেওয়া শিশুর জন্ম তারিখ রেজিস্ট্রেশনের সাথে মিলেছে কিনা (শুধু approve-এর আগে দরকার)
+                          $dobV = ''; $approveWarn = null;
+                          if ($hasVerifyDob && $u['status'] !== 'approved') {
+                              $dobV = signup_dob_verdict($u['verify_dob'] ?? null, $userRegDobs[$u['phone']] ?? []);
+                              $dobMeta = [
+                                  'match'    => ['✓ জন্ম তারিখ মিলেছে', 'text-green-700', 'আবেদনকারীর দেওয়া শিশুর জন্ম তারিখ রেজিস্ট্রেশনের সাথে মিলেছে'],
+                                  'mismatch' => ['⚠ জন্ম তারিখ মেলেনি', 'text-red-600', 'approve করার আগে ফোনে যাচাই করুন'],
+                                  'none'     => ['জন্ম তারিখ দেননি', 'text-amber-600', 'আবেদনকারী শিশুর জন্ম তারিখ দেননি — approve করার আগে যাচাই করুন'],
+                                  'nodata'   => ['মেলানো যায়নি', 'text-gray-400', 'এই নম্বরের রেজিস্ট্রেশনে জন্ম তারিখ নেই'],
+                              ][$dobV];
+                              if ($dobV === 'mismatch') {
+                                  $approveWarn = 'সাবধান — এই আবেদনকারীর দেওয়া শিশুর জন্ম তারিখ রেজিস্ট্রেশনের সাথে মেলেনি। অন্য কেউ এই নম্বর ব্যবহার করে থাকতে পারে। ফোনে যাচাই করেছেন তো? approve করবেন?';
+                              } elseif ($dobV === 'none') {
+                                  $approveWarn = 'এই আবেদনকারী শিশুর জন্ম তারিখ দেননি, তাই নম্বরটা সত্যিই তাঁর কিনা মেলানো যায়নি। approve করবেন?';
+                              }
+                    ?>
+                        <span class="block text-xs font-semibold mt-1 <?= $dobMeta[1] ?>" title="<?= e($dobMeta[2]) ?>"><?= e($dobMeta[0]) ?></span>
+                    <?php } ?>
+                    </div>
+                </td>
                 <td class="py-2.5 px-4 text-xs whitespace-nowrap">
                     <?php $lg = $lastLogin[$u['phone']] ?? null; $fc = $failCount[$u['phone']] ?? 0; ?>
                     <?php if ($lg): ?>
@@ -268,9 +292,12 @@ require __DIR__ . '/includes/layout-top.php';
                     <?php endif; ?>
                 </td>
                 <td class="py-2.5 px-4 text-gray-500 text-xs whitespace-nowrap"><?= e(date('Y-m-d', strtotime($u['created_at']))) ?></td>
-                <td class="py-2.5 px-4 space-x-2 whitespace-nowrap">
+                <td class="py-2.5 px-4">
+                    <?php // 🔴 বোতামগুলো মোড়কে — মোবাইল কার্ডে td flex হয়; আগে `whitespace-nowrap` থাকায় অপেক্ষমাণ সারিতে
+                          //    (approve · বাতিল · দেখুন · ডিলিট) ৩৯০px-এ পাতা ১৪px উপচে পড়ত (২০২৬-১১-১৩ মেপে ধরা) ?>
+                    <div style="display:flex;flex-wrap:wrap;gap:4px 10px;min-width:0;">
                     <?php if ($u['status'] !== 'approved'): ?>
-                        <?= status_btn($u['id'], 'approved', '✓ approve', 'text-green-600', $curReturn) ?>
+                        <?= status_btn($u['id'], 'approved', '✓ approve', 'text-green-600', $curReturn, $u['status'] === 'pending' ? $approveWarn : null) ?>
                     <?php endif; ?>
                     <?php if ($u['status'] === 'pending'): ?>
                         <?= status_btn($u['id'], 'rejected', 'বাতিল', 'text-gray-500', $curReturn, 'এই signup বাতিল করতে চান?') ?>
@@ -293,6 +320,7 @@ require __DIR__ . '/includes/layout-top.php';
                         <?= csrf_field() ?><input type="hidden" name="id" value="<?= $u['id'] ?>"><input type="hidden" name="return" value="<?= e($curReturn) ?>">
                         <button type="submit" class="text-red-600 font-semibold">ডিলিট</button>
                     </form>
+                    </div>
                 </td>
             </tr>
         <?php endforeach; ?>

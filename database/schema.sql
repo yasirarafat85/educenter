@@ -715,6 +715,7 @@ CREATE TABLE users (
     google_id     VARCHAR(64)  DEFAULT NULL,          -- ধাপ ২ (Google) — এখন NULL
     email         VARCHAR(150) DEFAULT NULL,
     full_name     VARCHAR(100) DEFAULT NULL,
+    verify_dob    DATE         NULL DEFAULT NULL,         -- signup-এ দেওয়া শিশুর জন্ম তারিখ (অ্যাডমিনকে মিল/অমিল দেখাতে, 2026-11-13)
     status        VARCHAR(20)  NOT NULL DEFAULT 'pending', -- pending/approved/rejected/blocked
     created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
     approved_at   TIMESTAMP    NULL DEFAULT NULL,

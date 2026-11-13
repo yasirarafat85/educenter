@@ -71,6 +71,15 @@ if ($password !== $confirm) {
 $db->prepare('INSERT INTO users (phone, password_hash, full_name, status) VALUES (:p, :h, :n, "pending")')
    ->execute(['p' => $phone, 'h' => password_hash($password, PASSWORD_DEFAULT), 'n' => $fullName ?: null]);
 
+// 🪪 শিশুর জন্ম তারিখ (ঐচ্ছিক) — আলাদা UPDATE, try/catch-এ: মাইগ্রেশন (migrate-user-verify-dob.sql)
+//    না চললেও অ্যাকাউন্ট তৈরি কখনো ভাঙে না। 🔴 মিল/অমিল এখানে যাচাই বা জানানো হয় না (functions.php-এর ঘর)।
+$verifyDob = signup_dob_clean($_POST['child_dob'] ?? '');
+if ($verifyDob !== null && db_has_column($db, 'users', 'verify_dob')) {
+    try {
+        $db->prepare('UPDATE users SET verify_dob = :d WHERE phone = :p')->execute(['d' => $verifyDob, 'p' => $phone]);
+    } catch (Throwable $e) { /* চুপচাপ বাদ */ }
+}
+
 form_record_submit($db, $ip);
 unset($_SESSION['account_signup_old']);
 

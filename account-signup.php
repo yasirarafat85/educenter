@@ -43,6 +43,12 @@ require __DIR__ . '/includes/site-header.php';
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none">
                 </div>
                 <div>
+                    <label class="block text-white font-semibold mb-1.5 text-sm">শিশুর জন্ম তারিখ</label>
+                    <input type="date" name="child_dob" max="<?= e(date('Y-m-d')) ?>" value="<?= e($old['child_dob'] ?? '') ?>"
+                        class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none" style="min-width:0;color-scheme:dark;">
+                    <p class="text-fuchsia-100 text-xs mt-1">কোর্সে রেজিস্ট্রেশনের সময় যে তারিখ দিয়েছিলেন। দিলে অ্যাকাউন্ট দ্রুত approve হয়।</p>
+                </div>
+                <div>
                     <label class="block text-white font-semibold mb-1.5 text-sm">পাসওয়ার্ড *</label>
                     <input type="password" name="password" required placeholder="কমপক্ষে 6 অক্ষর"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none">

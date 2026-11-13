@@ -731,6 +731,54 @@ function render_fee_box(?string $price, ?string $secLabel, ?string $secAmount, s
         . '</div>'
         . '</div>';
 }
+// ============================================================================
+//  🪪 Signup-এ শিশুর জন্ম তারিখ — ফোনের মালিকানার হালকা প্রমাণ (২০২৬-১১-১৩, অডিট S3)
+// ============================================================================
+//  গ্রাহকের নম্বর জানলেই অন্য কেউ ঐ নম্বরে অ্যাকাউন্টের আবেদন করতে পারে; একমাত্র বাধা
+//  অ্যাডমিনের approve। তাই আবেদনকারীর দেওয়া জন্ম তারিখ users.verify_dob-এ রাখা হয় আর
+//  admin/users.php রেজিস্ট্রেশনের তারিখের সাথে মিলিয়ে চিহ্ন দেখায়।
+//  🔴 এটা **শুধু অ্যাডমিনকে সতর্ক করে — আবেদন কখনো আটকায় না** (ইউজারের সিদ্ধান্ত: অনেকে
+//     রেজিস্ট্রেশনে ভুল তারিখ দিয়ে থাকতে পারেন)।
+//  🔴 মিল/অমিল **কখনো আবেদনকারীকে জানানো হয় না** — সব অবস্থায় একই সফল-বার্তা; নাহলে
+//     ফর্মটা "এই নম্বরের শিশুর জন্ম তারিখ কত" খোঁজার যন্ত্র হয়ে যেত।
+//  🔴 রায় জমানো হয় না, **পড়ার সময় হিসাব হয়** (রেজিস্ট্রেশনের তারিখ পরে ঠিক করলে সাথে সাথে বদলায়)।
+
+// ফর্মের লেখা → 'Y-m-d' অথবা null (খালি / অবৈধ / ভবিষ্যৎ / 30 বছরের বেশি পুরনো)
+function signup_dob_clean($raw): ?string
+{
+    $raw = trim((string) $raw);
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $raw, $m) || !checkdate((int) $m[2], (int) $m[3], (int) $m[1])) {
+        return null;
+    }
+    $ts = strtotime($raw);
+    if ($ts === false || $ts > time() || $ts < strtotime('-30 years')) {
+        return null;
+    }
+    return $raw;
+}
+
+// রায়: 'match' | 'mismatch' | 'nodata' (রেজিস্ট্রেশনে তারিখই নেই) | 'none' (আবেদনকারী দেননি)
+// $regDobs = ঐ ফোনের রেজিস্ট্রেশনগুলোর date_of_birth (যেকোনো একটার সাথে মিললেই match — একাধিক সন্তান থাকতে পারে)
+function signup_dob_verdict(?string $given, array $regDobs): string
+{
+    $given = substr(trim((string) $given), 0, 10);
+    if ($given === '' || $given === '0000-00-00') {
+        return 'none';
+    }
+    $known = [];
+    foreach ($regDobs as $d) {
+        $d = substr(trim((string) $d), 0, 10);
+        if ($d !== '' && $d !== '0000-00-00') {
+            $known[$d] = true;
+        }
+    }
+    if (!$known) {
+        return 'nodata';
+    }
+    return isset($known[$given]) ? 'match' : 'mismatch';
+}
+
+
 
 // কোর্স/ওয়ার্কশিট/প্রোডাক্ট কার্ড রেন্ডার — courses.php, worksheets.php, products.php, index.php এ ব্যবহার হয়
 // AI Master Bangladesh সাইটের মতো প্রাইসিং-কার্ড স্টাইল: প্রমিনেন্ট দাম, ✓ ফিচার লিস্ট, ফুল-উইডথ CTA

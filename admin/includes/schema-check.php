@@ -127,6 +127,7 @@ function sc_file_notes(): array
         'migrate-webauthn-synced.sql'            => 'পাসকি সিঙ্ক হওয়া কিনা (☁️/📱 ব্যাজ)',
         'migrate-phone-lookup-hash.sql'          => 'ফোন-লুকআপের রেট-লিমিট (IP ধরে)',
         'migrate-registrations-indexes.sql'      => 'অর্ডারের তালিকা ও পার্সেলের পাতা দ্রুত খোলা (শুধু গতি)',
+        'migrate-user-verify-dob.sql'            => 'অভিভাবক অ্যাকাউন্ট approve করার আগে "জন্ম তারিখ মিলেছে / মেলেনি" চিহ্ন',
         'migrate-login-attempt-indexes.sql'      => 'লগইনের সুরক্ষা-যাচাই দ্রুত চলা (শুধু গতি — না চালালেও সুরক্ষা কাজ করে)',
         'migrate-payment-methods.sql'            => 'থ্যাংক-ইউ পাতার বিকাশ/নগদ নাম্বার',
         'migrate-registration-tasks.sql'         => 'করণীয় / রিকোয়ারমেন্ট ইনবক্স (WhatsApp স্ক্রিনশটের বিকল্প)',
