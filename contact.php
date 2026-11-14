@@ -82,15 +82,15 @@ require __DIR__ . '/includes/site-header.php';
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-gray-600 text-sm font-semibold mb-1">আপনার নাম <span class="text-red-500">*</span></label>
-                        <input type="text" name="name" required maxlength="150" value="<?= e($old['name'] ?? '') ?>" class="ct-in" placeholder="আপনার নাম">
+                        <input type="text" autocomplete="name" name="name" required maxlength="150" value="<?= e($old['name'] ?? '') ?>" class="ct-in" placeholder="আপনার নাম">
                     </div>
                     <div>
                         <label class="block text-gray-600 text-sm font-semibold mb-1">মোবাইল নম্বর <span class="text-red-500">*</span></label>
-                        <input type="tel" name="phone" required maxlength="20" value="<?= e($old['phone'] ?? '') ?>" class="ct-in" placeholder="017XXXXXXXX" inputmode="numeric">
+                        <input type="tel" autocomplete="tel" name="phone" required maxlength="20" value="<?= e($old['phone'] ?? '') ?>" class="ct-in" placeholder="017XXXXXXXX" inputmode="numeric">
                     </div>
                     <div>
                         <label class="block text-gray-600 text-sm font-semibold mb-1">ইমেইল <span class="text-gray-400 font-normal">(ঐচ্ছিক)</span></label>
-                        <input type="email" name="email" maxlength="190" value="<?= e($old['email'] ?? '') ?>" class="ct-in" placeholder="you@example.com">
+                        <input type="email" autocomplete="email" name="email" maxlength="190" value="<?= e($old['email'] ?? '') ?>" class="ct-in" placeholder="you@example.com">
                     </div>
                     <div>
                         <label class="block text-gray-600 text-sm font-semibold mb-1">কী বিষয়ে?</label>

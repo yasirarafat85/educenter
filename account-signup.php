@@ -34,28 +34,28 @@ require __DIR__ . '/includes/site-header.php';
                 <?= spam_protection_fields() ?>
                 <div>
                     <label class="block text-white font-semibold mb-1.5 text-sm">মোবাইল নাম্বার (রেজিস্ট্রেশনের) *</label>
-                    <input type="text" inputmode="numeric" name="phone" required placeholder="01XXXXXXXXX" value="<?= e($old['phone'] ?? '') ?>"
+                    <input type="tel" inputmode="numeric" autocomplete="username" name="phone" required placeholder="01XXXXXXXXX" value="<?= e($old['phone'] ?? '') ?>"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none">
                 </div>
                 <div>
                     <label class="block text-white font-semibold mb-1.5 text-sm">আপনার নাম</label>
-                    <input type="text" name="full_name" placeholder="অভিভাবকের নাম" value="<?= e($old['full_name'] ?? '') ?>"
+                    <input type="text" autocomplete="name" name="full_name" placeholder="অভিভাবকের নাম" value="<?= e($old['full_name'] ?? '') ?>"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none">
                 </div>
                 <div>
                     <label class="block text-white font-semibold mb-1.5 text-sm">শিশুর জন্ম তারিখ</label>
-                    <input type="date" name="child_dob" max="<?= e(date('Y-m-d')) ?>" value="<?= e($old['child_dob'] ?? '') ?>"
+                    <input type="date" name="child_dob" data-dob-select max="<?= e(date('Y-m-d')) ?>" value="<?= e($old['child_dob'] ?? '') ?>"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none" style="min-width:0;color-scheme:dark;">
                     <p class="text-fuchsia-100 text-xs mt-1">কোর্সে রেজিস্ট্রেশনের সময় যে তারিখ দিয়েছিলেন। দিলে অ্যাকাউন্ট দ্রুত approve হয়।</p>
                 </div>
                 <div>
                     <label class="block text-white font-semibold mb-1.5 text-sm">পাসওয়ার্ড *</label>
-                    <input type="password" name="password" required placeholder="কমপক্ষে 6 অক্ষর"
+                    <input type="password" autocomplete="new-password" name="password" required placeholder="কমপক্ষে 6 অক্ষর"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none">
                 </div>
                 <div>
                     <label class="block text-white font-semibold mb-1.5 text-sm">পাসওয়ার্ড আবার দিন *</label>
-                    <input type="password" name="password_confirm" required placeholder="একই পাসওয়ার্ড"
+                    <input type="password" autocomplete="new-password" name="password_confirm" required placeholder="একই পাসওয়ার্ড"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none">
                 </div>
                 <button type="submit" class="w-full py-3.5 rounded-xl font-bold text-base text-white shadow-lg active:scale-[0.98] transition-transform" style="background: linear-gradient(135deg, rgb(var(--c-primary-2)) 0%, rgb(var(--c-primary)) 100%);">
@@ -63,6 +63,7 @@ require __DIR__ . '/includes/site-header.php';
                 </button>
                 <p class="text-fuchsia-100 text-xs text-center">তৈরির পর অ্যাডমিন approve করলে লগইন করতে পারবেন।</p>
             </form>
+            <?= dob_select_script() ?>
 
             <?php if (google_oauth_enabled()): ?>
             <div class="flex items-center gap-3 my-4"><span class="flex-1 h-px bg-white/25"></span><span class="text-white/70 text-xs">অথবা</span><span class="flex-1 h-px bg-white/25"></span></div>

@@ -813,7 +813,7 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
     color: #fff; font-variant-numeric: tabular-nums;
 }
 .ft-tr span {
-    display: block; margin-top: .15rem; font-size: .74rem; color: #8b94a3; line-height: 1.45;
+    display: block; margin-top: .15rem; font-size: .78rem; color: #8b94a3; line-height: 1.45; /* U6: ন্যূনতম ~12px */
 }
 /* ৪৮০px থেকেই চার কলাম — `.ft-grid`-এর একই ব্রেকপয়েন্ট, আর ফোনে ফুটার যত ছোট রাখা যায় */
 @media (min-width: 480px) {
@@ -851,7 +851,7 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
 .ft-about { margin-top: 1rem; font-size: .92rem; line-height: 1.85; color: #b8c0cd; }
 
 /* ── ৬ সোশ্যাল সারি + "আমাদের ফলো করুন" লেবেল ── */
-.ft-follow { margin-top: 1.2rem; font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; color: #8b94a3; }
+.ft-follow { margin-top: 1.2rem; font-size: .76rem; letter-spacing: .04em; text-transform: uppercase; color: #8b94a3; }
 .ft-socs { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .55rem; }
 /* সোশ্যাল আইকন — ডিফল্টে নিরপেক্ষ, হোভারে নিজের ব্র্যান্ড-রঙ (`--soc`, সার্ভারে inline) */
 .ft-soc {
@@ -905,7 +905,7 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
 }
 .ft-cic i, .ft-cic svg { width: 16px; height: 16px; }
 .ft-cmeta { min-width: 0; }
-.ft-cmeta small { display: block; font-size: .68rem; color: #8b94a3; }
+.ft-cmeta small { display: block; font-size: .76rem; color: #8b94a3; }
 /* 🔴 ইমেইল/ঠিকানা লম্বা হলে ৩২০px পর্দায় ফুটার উপচে পড়ত — `min-width:0`+`break-word` গার্ড, সরাবেন না */
 .ft-cmeta b { display: block; font-weight: 700; color: #e8edf4; font-size: .9rem; line-height: 1.4; word-break: break-word; }
 
@@ -1244,4 +1244,28 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
 @media (hover:hover){
   .rtx-home:hover{color:rgb(var(--c-deep));background:rgb(255 255 255 / .7)}
   .rtx-link>summary:hover{background:#fff}
+}
+
+
+/* ─── U4 (২০২৬-১১-১৪): কোর্স রেজিস্ট্রেশনের দুই ধাপ + জন্ম তারিখের ড্রপডাউন ─── */
+.dob-sel select option { color: #111827; background: #fff; }
+.cr-steps { display: flex; align-items: center; gap: .5rem; margin-bottom: .25rem; }
+.cr-step { display: inline-flex; align-items: center; gap: .4rem; font-size: .85rem; font-weight: 700; color: rgb(255 255 255 / .6); white-space: nowrap; }
+.cr-step b { display: inline-flex; width: 1.6rem; height: 1.6rem; align-items: center; justify-content: center; border-radius: 999px; border: 2px solid rgb(255 255 255 / .45); font-size: .8rem; }
+.cr-step.is-on { color: #fff; }
+.cr-step.is-on b { background: #fff; color: rgb(var(--c-deep)); border-color: #fff; }
+.cr-step-line { flex: 1; min-width: 1rem; height: 2px; background: rgb(255 255 255 / .35); }
+
+/* ─── U3 (২০২৬-১১-১৪): হোমপেজের ওয়ার্কশিট/প্রোডাক্ট — ফোনে পাশাপাশি সোয়াইপ-সারি ─── */
+.home-rail-hint { display: none; }
+@media screen and (max-width: 767px) {
+    .home-rail {
+        display: flex !important; gap: 14px !important;
+        overflow-x: auto; overscroll-behavior-x: contain;
+        scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+        padding: 4px 4px 12px; scrollbar-width: thin;
+    }
+    .home-rail > * { flex: 0 0 86%; min-width: 0; scroll-snap-align: center; }
+    .home-rail:has(> :only-child) > * { flex-basis: 100%; }
+    .home-rail-hint { display: block; text-align: center; font-size: .85rem; color: #6b7280; margin-top: .25rem; }
 }

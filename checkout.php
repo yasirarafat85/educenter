@@ -57,23 +57,23 @@ require __DIR__ . '/includes/site-header.php';
 
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">মোবাইল নম্বর *</label>
-                <input type="text" id="phone" name="phone" required placeholder="01XXXXXXXXX" class="form-input" value="<?= e($old['phone'] ?? '') ?>">
+                <input type="tel" inputmode="numeric" autocomplete="tel" id="phone" name="phone" required placeholder="01XXXXXXXXX" class="form-input" value="<?= e($old['phone'] ?? '') ?>">
                 <p class="text-xs text-gray-400 mt-1">আগে অর্ডার করে থাকলে নম্বর দিলে বাকি তথ্য স্বয়ংক্রিয়ভাবে চলে আসবে</p>
             </div>
 
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">আপনার নাম *</label>
-                <input type="text" id="customer_name" name="customer_name" required class="form-input" value="<?= e($old['customer_name'] ?? '') ?>">
+                <input type="text" autocomplete="name" id="customer_name" name="customer_name" required class="form-input" value="<?= e($old['customer_name'] ?? '') ?>">
             </div>
 
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">ইমেইল (ঐচ্ছিক)</label>
-                <input type="email" id="email" name="email" class="form-input" value="<?= e($old['email'] ?? '') ?>">
+                <input type="email" autocomplete="email" id="email" name="email" class="form-input" value="<?= e($old['email'] ?? '') ?>">
             </div>
 
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">সম্পূর্ণ ঠিকানা (থানা ও জেলাসহ) *</label>
-                <textarea id="address" name="address" required rows="2" class="form-input"><?= e($old['address'] ?? '') ?></textarea>
+                <textarea autocomplete="street-address" id="address" name="address" required rows="2" class="form-input"><?= e($old['address'] ?? '') ?></textarea>
             </div>
 
             <div>

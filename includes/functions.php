@@ -559,12 +559,15 @@ function format_date_bn(string $mysqlDate): string
 }
 
 // প্রতিটা পাবলিক পেজের উপরের শিরোনাম অংশ — eyebrow badge + টাইটেল + সাবটাইটেল, সব পেজে একই প্যাটার্ন
-function render_page_header(string $icon, string $eyebrow, string $title, string $subtitle, string $accentClass = 'text-gray-800'): string
+// 🔴 U6 (২০২৬-১১-১৪): `$tag` — পাতার মূল শিরোনাম হলে 'h1' (ডিফল্ট); অন্য পাতার ভেতরের
+//    সেকশন হলে (যেমন হোমপেজের ফেসবুক অংশ) 'h2', যাতে পাতায় একটাই <h1> থাকে।
+function render_page_header(string $icon, string $eyebrow, string $title, string $subtitle, string $accentClass = 'text-gray-800', string $tag = 'h1'): string
 {
+    $tag = $tag === 'h2' ? 'h2' : 'h1';
     return '
     <div class="text-center mt-3 sm:mt-6 mb-12 sm:mb-16 section-heading">
         <span class="eyebrow-badge"><i data-lucide="' . e($icon) . '" class="w-4 h-4"></i> ' . e($eyebrow) . '</span>
-        <h1 class="text-2xl sm:text-5xl font-black mb-3 sm:mb-4 ' . e($accentClass) . '">' . e($title) . '</h1>
+        <' . $tag . ' class="text-2xl sm:text-5xl font-black mb-3 sm:mb-4 ' . e($accentClass) . '">' . e($title) . '</' . $tag . '>
         <p class="text-base sm:text-2xl text-gray-600 max-w-3xl mx-auto">' . e($subtitle) . '</p>
     </div>';
 }
@@ -781,6 +784,21 @@ function render_fee_box(?string $price, ?string $secLabel, ?string $secAmount, s
 //  🔴 রায় জমানো হয় না, **পড়ার সময় হিসাব হয়** (রেজিস্ট্রেশনের তারিখ পরে ঠিক করলে সাথে সাথে বদলায়)।
 
 // ফর্মের লেখা → 'Y-m-d' অথবা null (খালি / অবৈধ / ভবিষ্যৎ / 30 বছরের বেশি পুরনো)
+/**
+ * 📅 জন্ম তারিখের দিন/মাস/বছর ড্রপডাউন (অডিট U4) — `<input type="date" data-dob-select>`
+ * ঘরগুলোকে বদলায় (assets/js/dob-select.js)। পাতায় একবারই বসে (static)।
+ */
+function dob_select_script(): string
+{
+    static $done = false;
+    if ($done) {
+        return '';
+    }
+    $done = true;
+    $v = @filemtime(dirname(__DIR__) . '/assets/js/dob-select.js') ?: '1';
+    return '<script src="assets/js/dob-select.js?v=' . e((string) $v) . '"></script>';
+}
+
 function signup_dob_clean($raw): ?string
 {
     $raw = trim((string) $raw);
@@ -2499,7 +2517,7 @@ function render_facebook_section(): string
     $title = get_setting('facebook_section_title') ?: 'আমাদের ফেসবুকে';
     $out  = '<section class="mb-4">';
     $out .= render_page_header('thumbs-up', 'সোশ্যাল মিডিয়া', $title,
-        'ফেসবুকে আমাদের সর্বশেষ খবর, ছবি ও ভিডিও', 'text-blue-700');
+        'ফেসবুকে আমাদের সর্বশেষ খবর, ছবি ও ভিডিও', 'text-blue-700', 'h2');
     $out .= '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">';
     $noImgIndex = 0; // ছবিহীন কার্ডের রঙ ঘোরানোর জন্য
 

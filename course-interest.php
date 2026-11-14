@@ -129,7 +129,7 @@ if (!$selectedCourse):
                 <label class="flex items-center gap-2 text-white font-semibold mb-1.5 text-sm">
                     <span class="inline-flex w-8 h-8 items-center justify-center rounded-full bg-white/20"><i data-lucide="phone" class="w-4 h-4 text-emerald-300"></i></span> যোগাযোগ নাম্বার *
                 </label>
-                <input type="text" inputmode="numeric" id="contact_phone" name="contact_phone" required placeholder="01XXXXXXXXX"
+                <input type="tel" inputmode="numeric" autocomplete="tel" id="contact_phone" name="contact_phone" required placeholder="01XXXXXXXXX"
                     class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none"
                     value="<?= e($old['contact_phone'] ?? '') ?>">
                 <p class="text-fuchsia-100 text-xs mt-1">আগে জানিয়ে রাখলে এই নাম্বারে তথ্য অটো লোড হবে</p>
@@ -151,7 +151,7 @@ if (!$selectedCourse):
                 <label class="flex items-center gap-2 text-white font-semibold mb-1.5 text-sm">
                     <span class="inline-flex w-8 h-8 items-center justify-center rounded-full bg-white/20"><i data-lucide="baby" class="w-4 h-4 text-sky-300"></i></span> শিশুর নাম *
                 </label>
-                <input type="text" id="child_name" name="child_name" required placeholder="শিশুর পূর্ণ নাম"
+                <input type="text" autocomplete="off" id="child_name" name="child_name" required placeholder="শিশুর পূর্ণ নাম"
                     class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none"
                     value="<?= e($old['child_name'] ?? '') ?>">
             </div>
@@ -163,7 +163,7 @@ if (!$selectedCourse):
                 <label class="flex items-center gap-2 text-white font-semibold mb-1.5 text-sm">
                     <span class="inline-flex w-8 h-8 items-center justify-center rounded-full bg-white/20"><i data-lucide="cake" class="w-4 h-4 text-amber-300"></i></span> শিশুর জন্ম তারিখ
                 </label>
-                <input type="date" id="child_dob" name="child_dob" max="<?= e(date('Y-m-d')) ?>"
+                <input type="date" id="child_dob" name="child_dob" data-dob-select max="<?= e(date('Y-m-d')) ?>"
                     style="color-scheme: dark;"
                     class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none"
                     value="<?= e($old['child_dob'] ?? '') ?>">
@@ -174,7 +174,7 @@ if (!$selectedCourse):
                 <label class="flex items-center gap-2 text-white font-semibold mb-1.5 text-sm">
                     <span class="inline-flex w-8 h-8 items-center justify-center rounded-full bg-white/20"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 text-blue-300"><path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z"/></svg></span> ফেসবুক আইডির নাম
                 </label>
-                <input type="text" id="facebook_name" name="facebook_name" placeholder="Facebook নাম"
+                <input type="text" autocomplete="off" id="facebook_name" name="facebook_name" placeholder="Facebook নাম"
                     class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none"
                     value="<?= e($old['facebook_name'] ?? '') ?>">
             </div>
@@ -224,6 +224,7 @@ if (!$selectedCourse):
                 আগ্রহ জানিয়ে রাখুন
             </button>
         </form>
+            <?= dob_select_script() ?>
         <?php endif; ?>
         </div>
     </div>

@@ -107,7 +107,7 @@ function pay_steps_html(array $methods, string $phone = '', float $due = 0.0, bo
 
     if ($askPhone || $phone === '') {
         $h .= '<label class="pay-lab">যে নম্বরে রেজিস্ট্রেশন করেছিলেন'
-            . '<input type="tel" name="phone" class="pay-in" inputmode="numeric" maxlength="14" placeholder="01XXXXXXXXX" required value="' . e($phone) . '"></label>';
+            . '<input type="tel" name="phone" class="pay-in" inputmode="numeric" autocomplete="tel" maxlength="14" placeholder="01XXXXXXXXX" required value="' . e($phone) . '"></label>';
     } else {
         $h .= '<input type="hidden" name="phone" value="' . e($phone) . '">';
     }

@@ -132,11 +132,24 @@ if (!$selectedCourse):
                   //    আর ফর্মে ভুল থাকলে ফেরত পাঠানোর লিংকেও এটা বয়ে যায় ?>
             <?php if ($regViaKey): ?><input type="hidden" name="k" value="<?= e($regKey) ?>"><?php endif; ?>
 
+            <?php // 🪜 U4 (২০২৬-১১-১৪): ফর্ম দুই ধাপে — শিশুর তথ্য → পার্সেলের ঠিকানা।
+                  // 🔴 একটাই <form>, একটাই সাবমিট (দুটো ফর্ম নয়) — JS শুধু দেখায়/লুকায়।
+                  //    JS না চললে, পার্সেল না গেলে, বা ভুল নিয়ে ফেরত এলে সব ঘর একসাথেই দেখায়।
+                  $crSteps = !$selectedCourse['hide_parcel'] && empty($old); ?>
+            <?php if ($crSteps): ?>
+            <div id="crStepBar" class="cr-steps" hidden>
+                <span class="cr-step is-on" data-s="1"><b>1</b> শিশুর তথ্য</span>
+                <span class="cr-step-line"></span>
+                <span class="cr-step" data-s="2"><b>2</b> পার্সেলের ঠিকানা</span>
+            </div>
+            <?php endif; ?>
+            <div id="crStep1" class="space-y-4">
+
             <div>
                 <label class="flex items-center gap-2 text-white font-semibold mb-1.5 text-sm">
                     <span class="inline-flex w-8 h-8 items-center justify-center rounded-full bg-white/20"><i data-lucide="phone" class="w-4 h-4 text-emerald-300"></i></span> মোবাইল নাম্বার (মা) *
                 </label>
-                <input type="text" inputmode="numeric" id="mother_mobile" name="mother_mobile" required placeholder="01XXXXXXXXX"
+                <input type="tel" inputmode="numeric" autocomplete="tel" id="mother_mobile" name="mother_mobile" required placeholder="01XXXXXXXXX"
                     class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none"
                     value="<?= e($old['mother_mobile'] ?? '') ?>">
                 <p class="text-fuchsia-100 text-xs mt-1">আগের তথ্য থাকলে অটো লোড হবে</p>
@@ -146,7 +159,7 @@ if (!$selectedCourse):
                 <label class="flex items-center gap-2 text-white font-semibold mb-1.5 text-sm">
                     <span class="inline-flex w-8 h-8 items-center justify-center rounded-full bg-white/20"><i data-lucide="baby" class="w-4 h-4 text-sky-300"></i></span> শিশুর নাম *
                 </label>
-                <input type="text" id="child_name" name="child_name" required placeholder="শিশুর পূর্ণ নাম"
+                <input type="text" autocomplete="off" id="child_name" name="child_name" required placeholder="শিশুর পূর্ণ নাম"
                     class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none"
                     value="<?= e($old['child_name'] ?? '') ?>">
             </div>
@@ -156,7 +169,7 @@ if (!$selectedCourse):
                     <label class="flex items-center gap-2 text-white font-semibold mb-1.5 text-sm">
                         <span class="inline-flex w-8 h-8 items-center justify-center rounded-full bg-white/20"><i data-lucide="calendar" class="w-4 h-4 text-amber-300"></i></span> জন্ম তারিখ *
                     </label>
-                    <input type="date" id="date_of_birth" name="date_of_birth" required
+                    <input type="date" id="date_of_birth" name="date_of_birth" required data-dob-select max="<?= e(date('Y-m-d')) ?>"
                         class="w-full bg-white/15 text-white border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none"
                         value="<?= e($old['date_of_birth'] ?? '') ?>">
                 </div>
@@ -164,7 +177,7 @@ if (!$selectedCourse):
                     <label class="flex items-center gap-2 text-white font-semibold mb-1.5 text-sm">
                         <span class="inline-flex w-8 h-8 items-center justify-center rounded-full bg-white/20"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 text-blue-300"><path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z"/></svg></span> ফেসবুক আইডি নাম *
                     </label>
-                    <input type="text" id="facebook_id" name="facebook_id" required placeholder="Facebook নাম"
+                    <input type="text" autocomplete="off" id="facebook_id" name="facebook_id" required placeholder="Facebook নাম"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none"
                         value="<?= e($old['facebook_id'] ?? '') ?>">
                 </div>
@@ -174,18 +187,26 @@ if (!$selectedCourse):
                 <label class="flex items-center gap-2 text-white font-semibold mb-1.5 text-sm">
                     <span class="inline-flex w-8 h-8 items-center justify-center rounded-full bg-white/20"><i data-lucide="phone" class="w-4 h-4 text-violet-300"></i></span> মোবাইল নাম্বার (বাবা)
                 </label>
-                <input type="text" inputmode="numeric" id="father_mobile" name="father_mobile" placeholder="01XXXXXXXXX"
+                <input type="tel" inputmode="numeric" autocomplete="off" id="father_mobile" name="father_mobile" placeholder="01XXXXXXXXX"
                     class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none"
                     value="<?= e($old['father_mobile'] ?? '') ?>">
             </div>
 
+            <?php if ($crSteps): ?>
+            <button type="button" id="crNext" hidden class="w-full py-3.5 rounded-xl font-bold text-base text-white" style="background: rgb(255 255 255 / .22); border: 1px solid rgb(255 255 255 / .4);">পরের ধাপ — পার্সেলের ঠিকানা →</button>
+            <?php endif; ?>
+            </div>
+            <div id="crStep2" class="space-y-4">
+            <?php if ($crSteps): ?>
+            <button type="button" id="crBack" hidden class="text-sm font-semibold text-white underline" style="background:none;border:0;padding:0">← আগের ধাপে ফিরুন</button>
+            <?php endif; ?>
             <?php if (!$selectedCourse['hide_parcel']): ?>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label class="flex items-center gap-2 text-white font-semibold mb-1.5 text-sm">
                         <span class="inline-flex w-8 h-8 items-center justify-center rounded-full bg-white/20"><i data-lucide="user" class="w-4 h-4 text-slate-200"></i></span> রিসিভার নাম *
                     </label>
-                    <input type="text" id="receiver_name" name="receiver_name" required placeholder="পার্সেল গ্রহণকারী"
+                    <input type="text" autocomplete="name" id="receiver_name" name="receiver_name" required placeholder="পার্সেল গ্রহণকারী"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none"
                         value="<?= e($old['receiver_name'] ?? '') ?>">
                 </div>
@@ -193,7 +214,7 @@ if (!$selectedCourse):
                     <label class="flex items-center gap-2 text-white font-semibold mb-1.5 text-sm">
                         <span class="inline-flex w-8 h-8 items-center justify-center rounded-full bg-white/20"><i data-lucide="phone-call" class="w-4 h-4 text-pink-300"></i></span> রিসিভার নাম্বার *
                     </label>
-                    <input type="text" inputmode="numeric" id="receiver_phone" name="receiver_phone" required placeholder="01XXXXXXXXX"
+                    <input type="tel" inputmode="numeric" autocomplete="tel" id="receiver_phone" name="receiver_phone" required placeholder="01XXXXXXXXX"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none"
                         value="<?= e($old['receiver_phone'] ?? '') ?>">
                 </div>
@@ -203,7 +224,7 @@ if (!$selectedCourse):
                 <label class="flex items-center gap-2 text-white font-semibold mb-1.5 text-sm">
                     <span class="inline-flex w-8 h-8 items-center justify-center rounded-full bg-white/20"><i data-lucide="map-pin" class="w-4 h-4 text-rose-300"></i></span> ঠিকানা *
                 </label>
-                <textarea id="address" name="address" required rows="2" placeholder="সম্পূর্ণ ঠিকানা লিখুন (বাড়ি, রোড, এলাকা, জেলা)"
+                <textarea autocomplete="street-address" id="address" name="address" required rows="2" placeholder="সম্পূর্ণ ঠিকানা লিখুন (বাড়ি, রোড, এলাকা, জেলা)"
                     class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none"><?= e($old['address'] ?? '') ?></textarea>
             </div>
             <?php endif; ?>
@@ -219,7 +240,56 @@ if (!$selectedCourse):
             <button type="submit" class="w-full py-3.5 sm:py-4 rounded-xl font-bold text-base sm:text-lg text-white shadow-lg active:scale-[0.98] transition-transform" style="background: linear-gradient(135deg, rgb(var(--c-primary-2)) 0%, rgb(var(--c-primary)) 100%); box-shadow: 0 10px 30px -8px rgb(var(--c-primary) / 0.6);">
                 রেজিস্ট্রেশন সম্পন্ন করুন
             </button>
+            </div>
         </form>
+        <?= dob_select_script() ?>
+        <?php if ($crSteps): ?>
+        <script>
+        // 🪜 দুই ধাপ (U4) — নিজের আলাদা ব্লকে, যাতে নিচের অটো-ফিল স্ক্রিপ্ট ভাঙলেও এটা চলে
+        (function () {
+            var f = document.getElementById('course-register-form');
+            var s1 = document.getElementById('crStep1'), s2 = document.getElementById('crStep2');
+            var bar = document.getElementById('crStepBar');
+            var next = document.getElementById('crNext'), back = document.getElementById('crBack');
+            if (!f || !s1 || !s2 || !bar || !next || !back) return;
+            function show(n) {
+                // 🔴 display:none (style), disabled নয় — লুকানো ঘরও সাবমিট হয়
+                s1.style.display = n === 1 ? '' : 'none';
+                s2.style.display = n === 2 ? '' : 'none';
+                bar.querySelectorAll('.cr-step').forEach(function (el) {
+                    el.classList.toggle('is-on', +el.getAttribute('data-s') <= n);
+                });
+                var top = bar.getBoundingClientRect().top + window.pageYOffset - 90;
+                if (window.pageYOffset > top) window.scrollTo(0, Math.max(0, top));
+            }
+            function step1Ok() {
+                var els = s1.querySelectorAll('input, select, textarea');
+                for (var i = 0; i < els.length; i++) {
+                    if (els[i].type === 'hidden' || els[i].disabled) continue;
+                    if (!els[i].checkValidity()) { els[i].reportValidity(); return false; }
+                }
+                return true;
+            }
+            bar.hidden = false; next.hidden = false; back.hidden = false;
+            next.addEventListener('click', function () {
+                if (!step1Ok()) return;
+                show(2);
+                var first = s2.querySelector('input:not([type=hidden]), textarea');
+                if (first && !first.value) { try { first.focus({ preventScroll: true }); } catch (e) { first.focus(); } }
+            });
+            back.addEventListener('click', function () { show(1); });
+            // ধাপ ১-এ Enter চাপলে লুকানো ধাপ ২-এর জরুরি ঘরে আটকে নীরব ব্যর্থতা হতো — তাই পরের ধাপে যাই
+            s1.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); next.click(); }
+            });
+            // ধাপ ২ লুকানো থাকা অবস্থায় কোনোভাবে সাবমিট হলে আগে ধাপ ২ দেখাই
+            f.addEventListener('invalid', function (e) {
+                if (s2.contains(e.target) && s2.style.display === 'none' && step1Ok()) show(2);
+            }, true);
+            show(1);
+        })();
+        </script>
+        <?php endif; ?>
         <?php endif; ?>
         </div>
     </div>

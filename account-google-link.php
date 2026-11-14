@@ -75,12 +75,12 @@ require __DIR__ . '/includes/site-header.php';
                 <?= csrf_field() ?>
                 <div>
                     <label class="block text-white font-semibold mb-1.5 text-sm">মোবাইল নাম্বার (রেজিস্ট্রেশনের) *</label>
-                    <input type="text" inputmode="numeric" name="phone" required placeholder="01XXXXXXXXX"
+                    <input type="tel" inputmode="numeric" autocomplete="tel" name="phone" required placeholder="01XXXXXXXXX"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none">
                 </div>
                 <div>
                     <label class="block text-white font-semibold mb-1.5 text-sm">শিশুর জন্ম তারিখ</label>
-                    <input type="date" name="child_dob" max="<?= e(date('Y-m-d')) ?>" value="<?= e('') ?>"
+                    <input type="date" name="child_dob" data-dob-select max="<?= e(date('Y-m-d')) ?>" value="<?= e('') ?>"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none" style="min-width:0;color-scheme:dark;">
                     <p class="text-fuchsia-100 text-xs mt-1">কোর্সে রেজিস্ট্রেশনের সময় যে তারিখ দিয়েছিলেন। দিলে অ্যাকাউন্ট দ্রুত approve হয়।</p>
                 </div>
@@ -89,6 +89,7 @@ require __DIR__ . '/includes/site-header.php';
                 </button>
                 <p class="text-fuchsia-100 text-xs text-center">এরপর অ্যাডমিন approve করলে লগইন করতে পারবেন।</p>
             </form>
+            <?= dob_select_script() ?>
         </div>
     </div>
 </div>

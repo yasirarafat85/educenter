@@ -170,7 +170,8 @@ $metaDescription = en_digits($metaDescription);
                 <a href="./" class="flex items-center space-x-2 sm:space-x-4 min-w-0">
                     <img src="<?= e($logoPath) ?>" alt="<?= e($siteName) ?> Logo" class="flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-xl shadow-lg object-cover">
                     <div class="min-w-0">
-                        <h1 class="text-lg sm:text-2xl font-black text-gray-800 truncate"><?= e($siteName) ?></h1>
+                        <?php // U6 (২০২৬-১১-১৪): লোগোর নাম <h1> নয় — প্রতি পাতার আসল শিরোনামই একমাত্র <h1> ?>
+                        <div class="text-lg sm:text-2xl font-black text-gray-800 truncate"><?= e($siteName) ?></div>
                         <p class="text-xs sm:text-sm text-gray-600 font-medium truncate hidden sm:block"><?= e($siteTagline) ?></p>
                     </div>
                 </a>

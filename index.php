@@ -165,10 +165,15 @@ require __DIR__ . '/includes/site-header.php';
             <h2 class="text-3xl sm:text-5xl font-black mb-4 text-gray-800"><?= e($hr['title']) ?></h2>
             <p class="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto"><?= e($hr['sub']) ?></p>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+        <?php // 📱 U3 (২০২৬-১১-১৪): ফোনে কার্ডগুলো নিচে-নিচে না সাজিয়ে পাশাপাশি সোয়াইপ-সারিতে
+              // (`.home-rail`, style.css) — হোমপেজ অনেক ছোট হয়, কার্ড সবই থাকে। ট্যাবলেট/ডেস্কটপে আগের গ্রিড। ?>
+        <div class="home-rail grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             <?= implode('', array_map(fn($it) => render_item_card($it, $hr['type']), $hr['items'])) ?>
         </div>
-        <div class="text-center mt-12">
+        <?php if (count($hr['items']) > 1): ?>
+            <p class="home-rail-hint">← পাশে সরিয়ে আরও দেখুন →</p>
+        <?php endif; ?>
+        <div class="text-center mt-8 sm:mt-12">
             <a href="<?= e($hr['url']) ?>" class="inline-flex items-center gap-2 text-indigo-600 font-bold text-lg hover:gap-3 transition-all">
                 <?= e($hr['more']) ?> <i data-lucide="arrow-right" class="w-5 h-5"></i>
             </a>

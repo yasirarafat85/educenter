@@ -32,12 +32,12 @@ require __DIR__ . '/includes/site-header.php';
                 <?= csrf_field() ?>
                 <div>
                     <label class="block text-white font-semibold mb-1.5 text-sm">মোবাইল নাম্বার *</label>
-                    <input type="text" inputmode="numeric" name="phone" required placeholder="01XXXXXXXXX" value="<?= e($old['phone'] ?? '') ?>"
+                    <input type="tel" inputmode="numeric" autocomplete="username" name="phone" required placeholder="01XXXXXXXXX" value="<?= e($old['phone'] ?? '') ?>"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none">
                 </div>
                 <div>
                     <label class="block text-white font-semibold mb-1.5 text-sm">পাসওয়ার্ড *</label>
-                    <input type="password" name="password" required placeholder="আপনার পাসওয়ার্ড"
+                    <input type="password" autocomplete="current-password" name="password" required placeholder="আপনার পাসওয়ার্ড"
                         class="w-full bg-white/15 text-white placeholder-white/60 border border-white/30 rounded-xl px-4 py-3 text-base focus:bg-white/25 focus:ring-2 focus:ring-fuchsia-300 outline-none">
                 </div>
                 <label class="flex items-center gap-2.5 text-white text-sm font-semibold cursor-pointer">
