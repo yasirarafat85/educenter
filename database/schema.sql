@@ -449,7 +449,9 @@ CREATE TABLE income (
     income_date DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES finance_categories(id),
-    FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE SET NULL
+    FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE SET NULL,
+    -- 🔴 এক অর্ডারে একটাই আয়ের সারি (অডিট D2) — হাতে লেখা আয়ে registration_id NULL, তাই একাধিক চলে
+    UNIQUE KEY uq_income_reg (registration_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
@@ -468,8 +470,8 @@ CREATE TABLE expenses (
 -- ------------------------------------------------------------
 -- courier_batches : একটা registration থেকে একাধিক স্বতন্ত্র কুরিয়ার "ব্যাচ"/চালান (যেমন প্রতি মাসে
 -- ওয়ার্কশিট পাঠানো একটা চলমান কোর্সের জন্য) — প্রতিটা ব্যাচ নিজের item/amount/স্ট্যাটাস/consignment
--- নিয়ে স্বাধীনভাবে ট্র্যাক হয়। এটাই এখন courier_order_data এর জায়গা নিয়েছে (নিচে দ্রষ্টব্য — সেই
--- টেবিল legacy/অব্যবহৃত রাখা হয়েছে, ডেটা মাইগ্রেট করা হয়েছে)।
+-- নিয়ে স্বাধীনভাবে ট্র্যাক হয়। পুরনো courier_order_data টেবিলের জায়গা এটাই নিয়েছে (সেই অব্যবহৃত
+-- টেবিলটা ২০২৬-১১-১৪-এ সরানো হয়েছে — migrate-drop-courier-order-data.sql)।
 -- ------------------------------------------------------------
 CREATE TABLE courier_batches (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -517,28 +519,6 @@ CREATE TABLE courier_shipments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE,
     FOREIGN KEY (batch_id) REFERENCES courier_batches(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ------------------------------------------------------------
--- courier_order_data : [LEGACY/অব্যবহৃত, courier_batches দিয়ে প্রতিস্থাপিত] — একটা registration এ
--- সর্বোচ্চ একটা "মূল কুরিয়ার ডেটা" রাখতে পারত, একাধিক মাসিক চালান সাপোর্ট করত না। কোড থেকে আর লেখা/পড়া
--- হয় না, শুধু পুরনো ডেটা সংরক্ষণের জন্য টেবিলটা রাখা আছে (ড্রপ করা হয়নি)।
--- ------------------------------------------------------------
-CREATE TABLE courier_order_data (
-    registration_id INT UNSIGNED PRIMARY KEY,
-    recipient_name VARCHAR(150),
-    recipient_phone VARCHAR(30),
-    recipient_secondary_phone VARCHAR(30),
-    recipient_address VARCHAR(500),
-    item_description VARCHAR(255),
-    item_quantity INT UNSIGNED,
-    item_weight DECIMAL(5,2),
-    item_type TINYINT UNSIGNED, -- 1 = Document, 2 = Parcel
-    delivery_type TINYINT UNSIGNED, -- 48 = Normal Delivery, 12 = On Demand Delivery
-    special_instruction VARCHAR(500),
-    amount_to_collect DECIMAL(10,2),
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------

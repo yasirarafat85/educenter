@@ -42,14 +42,24 @@ function pay_write_income(PDO $db, array $reg, string $newStatus, float $paid): 
         $db->prepare('UPDATE income SET amount = :amt WHERE id = :iid')
             ->execute(['amt' => $amount, 'iid' => $incomeId]);
     } else {
-        $db->prepare(
-            'INSERT INTO income (category_id, registration_id, amount, description, income_date) VALUES (:cat, :reg, :amt, :desc, CURDATE())'
-        )->execute([
-            'cat'  => find_or_create_finance_category('income', registration_type_to_category_name($reg['type'])),
-            'reg'  => $id,
-            'amt'  => $amount,
-            'desc' => $reg['item_title'] . ' - ' . $reg['customer_name'],
-        ]);
+        try {
+            $db->prepare(
+                'INSERT INTO income (category_id, registration_id, amount, description, income_date) VALUES (:cat, :reg, :amt, :desc, CURDATE())'
+            )->execute([
+                'cat'  => find_or_create_finance_category('income', registration_type_to_category_name($reg['type'])),
+                'reg'  => $id,
+                'amt'  => $amount,
+                'desc' => $reg['item_title'] . ' - ' . $reg['customer_name'],
+            ]);
+        } catch (PDOException $e) {
+            // 🔒 অডিট D2: `uq_income_reg` চাবি (migrate-unique-income.sql) থাকলে একই অর্ডারের
+            //    দ্বিতীয় সারি ডাটাবেসই আটকায় — মানে এই মুহূর্তে অন্য একটা সেভ সারিটা বসিয়ে ফেলেছে।
+            //    তখন নতুন সারি নয়, সেটাই হালনাগাদ (অঙ্ক সবসময় খাতার মোট জমা, তাই দুই সেভে একই)।
+            //    অন্য যেকোনো এরর আগের মতোই উপরে যায় (কলারের ট্রানজ্যাকশন rollback করে)।
+            if ($e->getCode() !== '23000') { throw $e; }
+            $db->prepare('UPDATE income SET amount = :amt WHERE registration_id = :reg')
+                ->execute(['amt' => $amount, 'reg' => $id]);
+        }
     }
     $db->prepare('UPDATE registrations SET income_approved = 1, income_amount = :amt, approved_at = NOW() WHERE id = :id')
         ->execute(['amt' => $amount, 'id' => $id]);

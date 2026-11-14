@@ -1100,6 +1100,14 @@ Brute-force protection (login_attempts, ৫/১৫মিন), CSRF সব ফর
   (পুরনো JSON-এ থাকলেও অকেজো)। কারণ: ডাম্পে `settings`-এর গোপন চাবি, "app" জিপে `config.php`।
   🔴 মডারেটরকে আবার দেবেন না। (চাবিগুলো DB-তে এনক্রিপ্ট করা হয়নি — শেয়ার্ড হোস্টে কী রাখার নিরাপদ জায়গা নেই।)
 
+## 🔒 ডুপ্লিকেট ঠেকানো — পার্সেল-তালা ও আয়ের UNIQUE (২০২৬-১১-১৪, অডিট D1·D2·D4)
+
+- **D1 — `course-parcel.php` `round-save`-এ `GET_LOCK`**: নাম `edu_cp_<md5(DB_NAME) ১০ অক্ষর>_<item_id>` (🔴 শেয়ার্ড সার্ভারে তালা সার্ভার-জুড়ে, তাই ডাটাবেসের নাম দিয়ে আলাদা), টাইমআউট ২০s, না পেলে flash + redirect (কিছুই বদলায় না); try/catch — `GET_LOCK` না থাকলে আগের মতো চলে। সংযোগ বন্ধ হলে তালা খোলে (persistent connection নেই — **`ATTR_PERSISTENT` কখনো চালু করবেন না**, করলে তালা পরের অনুরোধে থেকে যাবে)। 🔴🔴 **`courier_batches`-এ UNIQUE(registration_id, period_label) দেবেন না** — `courier.php`/`send-to-courier.php` এক অর্ডারে খালি লেবেলে একাধিক চালান বৈধভাবে বানায়। Generated column + UNIQUE-ও নয় — `db-dump.php` ও `archive.php` `SELECT *` দিয়ে সব কলাম INSERT করে, generated column-এ লিখতে গেলে ব্যাকআপ-রিস্টোর ও আর্কাইভ-রিস্টোর ভাঙত।
+- **D2 — `income.uq_income_reg (registration_id)`** (`migrate-unique-income.sql`, schema.sql-এও)। NULL একাধিক চলে, তাই হাতে লেখা আয় অক্ষত। `pay_write_income()`-এর INSERT SQLSTATE `23000`-এ আগের সারিটাই UPDATE করে। 🔴 **নতুন কোথাও registration_id-ওয়ালা আয়ের সারি বসাবেন না** — একমাত্র পথ `pay_write_income()`।
+- **`database/check-duplicates.sql`** — শুধু SELECT, `migrate-*` নয় বলে সিস্টেম চেক এটা পড়ে না। ডুপ্লিকেট পেলে কোন সারি রাখা হবে সেটা অনুমান করে মুছবেন না (টাকা) — ইউজারের ফলাফল দেখে ঠিক করুন।
+- **D4**: `courier_order_data` schema.sql থেকে বাদ; ড্রপ ঐচ্ছিক (`migrate-drop-courier-order-data.sql`)।
+- যাচাই: আসল MariaDB, `PHP_CLI_SERVER_WORKERS=4` (🔴 নাহলে PHP-র বিল্ট-ইন সার্ভার অনুরোধ এক-এক করে চালায় আর race কখনো ধরা পড়ে না), দুই আলাদা লগইন থেকে একসাথে আসল ফর্ম POST — পুরনো কোডে ৬-এ ৩ ডুপ্লিকেট, নতুনে ০; আয়ে দুই প্রসেস সমান্তরাল ট্রানজ্যাকশন — চাবি ছাড়া ২ সারি, চাবিসহ ১।
+
 ## 🔒 লগইনের সীমা — অভিভাবক তিন গেট + অ্যাডমিন ইউজারনেম-গেট (২০২৬-১১-১৩, অডিট S1+S2+D3)
 
 - **অভিভাবক (`user_login_rate_limited($phone, $ip = null)`, `includes/user-auth.php`)** — শেষ ১৫ মিনিটের **ভুল** চেষ্টা:
