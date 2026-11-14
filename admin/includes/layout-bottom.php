@@ -542,11 +542,18 @@
         function openSidebar() {
             sidebar.classList.remove('-translate-x-full');
             backdrop.classList.remove('hidden');
+            openBtn.setAttribute('aria-expanded', 'true');
+            if (closeBtn) closeBtn.focus();
         }
         function closeSidebar() {
             sidebar.classList.add('-translate-x-full');
             backdrop.classList.add('hidden');
+            openBtn.setAttribute('aria-expanded', 'false');
         }
+        // ♿ Esc চাপলে মোবাইলের খোলা মেনু বন্ধ (অডিট A5)
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !sidebar.classList.contains('-translate-x-full') && window.matchMedia('(max-width: 767px)').matches) { closeSidebar(); openBtn.focus(); }
+        });
 
         openBtn.addEventListener('click', openSidebar);
         if (closeBtn) closeBtn.addEventListener('click', closeSidebar);

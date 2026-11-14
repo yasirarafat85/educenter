@@ -1808,14 +1808,30 @@ require __DIR__ . '/includes/layout-top.php';
 </style>
 
 <?php if ($action === 'list'): ?>
-    <div class="flex flex-wrap gap-2 mb-3">
+    <style>
+    /* 📱 অডিট A3 (২০২৬-১১-১৪): ফোনে প্রথম নামে পৌঁছাতে ১০টা পিল + ৫টা কার্ড পার হতে হতো।
+       পিলের দুই সারি আর সারাংশ কার্ড এখন **এক সারিতে আড়াআড়ি সোয়াইপ** — কিছুই লুকানো হয়নি,
+       সব লিংক আগের মতোই। 🔴 `screen and` রাখুন (ছাপার পাতায় যেন না বসে)। */
+    @media screen and (max-width: 767px) {
+        .reg-pills { flex-wrap: nowrap !important; overflow-x: auto; -webkit-overflow-scrolling: touch;
+                     scrollbar-width: none; margin-left: -4px; margin-right: -4px; padding: 0 4px 2px; }
+        .reg-pills::-webkit-scrollbar { display: none; }
+        .reg-pills > a { flex-shrink: 0; white-space: nowrap; padding: .4rem .8rem !important; }
+        .reg-sum { display: flex !important; overflow-x: auto; scrollbar-width: none; gap: .5rem !important;
+                   margin-left: -4px; margin-right: -4px; padding: 0 4px 4px; }
+        .reg-sum::-webkit-scrollbar { display: none; }
+        .reg-sum > * { flex: 0 0 auto; min-width: 118px; padding: .5rem .7rem !important; }
+        .reg-sum .text-2xl { font-size: 1.25rem; }
+    }
+    </style>
+    <div class="reg-pills flex flex-wrap gap-2 mb-3">
         <a href="<?= e(reg_url(['status' => null])) ?>" class="px-4 py-2 rounded-xl text-sm font-semibold <?= $filterStatus === '' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600' ?>">সব স্ট্যাটাস</a>
         <?php foreach ($statusLabels as $key => $s): ?>
             <a href="<?= e(reg_url(['status' => $key])) ?>" class="px-4 py-2 rounded-xl text-sm font-semibold <?= $filterStatus === $key ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600' ?>"><?= e($s[0]) ?></a>
         <?php endforeach; ?>
     </div>
 
-    <div class="flex flex-wrap gap-2 mb-4">
+    <div class="reg-pills flex flex-wrap gap-2 mb-4">
         <a href="<?= e(reg_url(['type' => null, 'item' => null, 'batch' => null])) ?>" class="px-4 py-2 rounded-xl text-sm font-semibold <?= $filterType === '' ? 'bg-teal-600 text-white' : 'bg-white text-gray-600' ?>">সব টাইপ</a>
         <?php foreach ($typeLabels as $key => $label): ?>
             <a href="<?= e(reg_url(['type' => $key, 'item' => null, 'batch' => null])) ?>" class="px-4 py-2 rounded-xl text-sm font-semibold <?= $filterType === $key ? 'bg-teal-600 text-white' : 'bg-white text-gray-600' ?>"><?= e($label) ?></a>
@@ -1902,7 +1918,7 @@ require __DIR__ . '/includes/layout-top.php';
     })();
     </script>
 
-    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+    <div class="reg-sum grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
         <?php foreach ($sumCards as $card): $isOn = ($filterStatus === $card['key']); ?>
             <a href="<?= e(reg_url(['status' => $card['key'] !== '' ? $card['key'] : null])) ?>"
                class="block bg-white rounded-2xl shadow p-3 <?= $isOn ? 'border border-indigo-400' : '' ?>">

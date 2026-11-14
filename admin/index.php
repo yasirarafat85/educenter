@@ -337,9 +337,8 @@ require __DIR__ . '/includes/layout-top.php';
         <h2 class="text-2xl sm:text-3xl font-black mb-1.5" style="font-family: var(--font-head);"><?= e(current_admin_name()) ?></h2>
         <p class="text-white/85 text-sm mb-5">আজকে <?= $todayRegistrations ?> টি নতুন রেজিস্ট্রেশন · <?= $pendingRegistrations ?> টি অপেক্ষমাণ অর্ডার<?= $hasVisitorStats ? ' · ' . $todayVisits . ' টি ভিজিট' : '' ?></p>
         <div class="flex flex-wrap gap-2.5">
-            <a href="manage.php?entity=courses&action=form" class="inline-flex items-center gap-2 bg-white text-gray-800 font-bold px-4 py-2.5 rounded-xl text-sm shadow-sm hover:shadow-md"><i data-lucide="plus" class="w-4 h-4"></i> নতুন কোর্স</a>
-            <a href="registrations.php" class="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 border border-white/30 text-white font-bold px-4 py-2.5 rounded-xl text-sm"><i data-lucide="clipboard-list" class="w-4 h-4"></i> রেজিস্ট্রেশন</a>
-            <a href="courier.php" class="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 border border-white/30 text-white font-bold px-4 py-2.5 rounded-xl text-sm"><i data-lucide="truck" class="w-4 h-4"></i> কুরিয়ার</a>
+            <?php /* 🧭 অডিট A2: একই গন্তব্যের তিন সেট লিংক ছিল (হিরো · "কী করতে চান" · সাইডবার) — এখন হিরোতে শুধু একটা, সব পাতা এক জায়গায় */ ?>
+            <a href="menu.php" class="inline-flex items-center gap-2 bg-white text-gray-800 font-bold px-4 py-2.5 rounded-xl text-sm shadow-sm hover:shadow-md"><i data-lucide="layout-grid" class="w-4 h-4"></i> সব মেনু</a>
         </div>
     </div>
 </div>
@@ -363,35 +362,17 @@ require __DIR__ . '/includes/layout-top.php';
 </div>
 <?php endif; ?>
 
-<!-- কাজের লঞ্চার — দরকারি কাজ এক ট্যাপে (সাইডবার হাতড়াতে হয় না)। রঙ-ক্লাস পূর্ণ লিটারাল (ডাইনামিক না) যাতে Tailwind স্ক্যানার ধরে -->
-<?php
-$quickTasks = [
-    ['url' => 'manage.php?entity=courses',      'icon' => 'book-open',       'label' => 'কোর্স',           'desc' => 'কোর্স/ব্যাচ যোগ-এডিট', 'cls' => 'bg-indigo-100 text-indigo-600'],
-    ['url' => 'registrations.php',               'icon' => 'clipboard-list',  'label' => 'অর্ডার',          'desc' => 'রেজিস্ট্রেশন দেখুন',    'cls' => 'bg-blue-100 text-blue-600'],
-    ['url' => 'users.php',                       'icon' => 'users',           'label' => 'অভিভাবক',         'desc' => 'অ্যাকাউন্ট approve',    'cls' => 'bg-green-100 text-green-600'],
-    ['url' => 'course-interests.php',            'icon' => 'heart-handshake', 'label' => 'আগ্রহ তালিকা',     'desc' => 'ওয়েটিং লিস্ট',         'cls' => 'bg-pink-100 text-pink-600'],
-    ['url' => 'course-parcel.php',              'icon' => 'package-check',   'label' => 'কোর্স পার্সেল',    'desc' => 'গ্রুপ+পার্সেল ট্র্যাক', 'cls' => 'bg-amber-100 text-amber-600'],
-    ['url' => 'courier.php',                     'icon' => 'truck',           'label' => 'কুরিয়ার',         'desc' => 'পাঠান ও ট্র্যাক',       'cls' => 'bg-purple-100 text-purple-600'],
-    ['url' => 'finance.php',                     'icon' => 'pie-chart',       'label' => 'আয়-ব্যয়',         'desc' => 'হিসাব দেখুন',           'cls' => 'bg-emerald-100 text-emerald-600'],
-    ['url' => 'guide.php',                       'icon' => 'help-circle',     'label' => 'গাইড / সাহায্য',   'desc' => 'কোনটা কীসের কাজ',      'cls' => 'bg-fuchsia-100 text-fuchsia-600'],
-];
-?>
-<div class="mb-6">
-    <h3 class="text-sm font-bold text-gray-500 mb-3 flex items-center gap-2"><i data-lucide="zap" class="w-4 h-4"></i> কী করতে চান?</h3>
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        <?php foreach ($quickTasks as $t): ?>
-        <a href="<?= e($t['url']) ?>" class="bg-white rounded-2xl shadow p-4 flex items-start gap-3 hover:shadow-lg hover:-translate-y-0.5 transition-all">
-            <span class="inline-flex w-10 h-10 items-center justify-center rounded-xl flex-shrink-0 <?= $t['cls'] ?>"><i data-lucide="<?= e($t['icon']) ?>" class="w-5 h-5"></i></span>
-            <div class="min-w-0">
-                <p class="font-bold text-gray-800 text-base leading-tight"><?= e($t['label']) ?></p>
-                <p class="text-gray-500 text-sm mt-0.5 leading-tight"><?= e($t['desc']) ?></p>
-            </div>
-        </a>
-        <?php endforeach; ?>
-    </div>
-</div>
-
-<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
+<!-- 🧭 অডিট A2 (২০২৬-১১-১৪): "কী করতে চান?" লঞ্চার সরানো হয়েছে — একই লিংক সাইডবার ও "সব মেনু" পাতায় আছে;
+     "আজ কী করতে হবে" এখন হিরোর ঠিক নিচে। স্ট্যাট কার্ড ৫ → ৪ (পেন্ডিং অর্ডার উপরের কাজের তালিকাতেই আছে),
+     গ্রিড পাতার নিজের CSS-এ (Tailwind রিবিল্ড এড়াতে) — চওড়া পর্দাতেই কেবল ৪ কলাম, তাই লেখা তিন লাইনে ভাঙে না। -->
+<style>
+    .dash-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    @media (max-width: 479px) { .dash-stats { grid-template-columns: minmax(0, 1fr); } }
+    @media (min-width: 1280px) { .dash-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .dash-stats > * { min-width: 0; }
+    .dash-stats > * > div { min-width: 0; }
+</style>
+<div class="dash-stats">
     <div class="bg-white rounded-2xl shadow p-5 flex items-center gap-4">
         <span class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-100 text-indigo-600"><i data-lucide="calendar-check" class="w-6 h-6"></i></span>
         <div>
@@ -416,14 +397,6 @@ $quickTasks = [
             <div class="text-3xl font-black text-blue-600 leading-none"><?= $weekRegistrations ?></div>
             <p class="text-gray-500 text-sm mt-1">গত ৭ দিনে</p>
             <p class="text-xs mt-1.5"><?= trend_chip($weekRegistrations, $prevWeekReg) ?> <span class="text-gray-400">আগের সপ্তাহের তুলনায়</span></p>
-        </div>
-    </div>
-    <div class="bg-white rounded-2xl shadow p-5 flex items-center gap-4">
-        <span class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-orange-100 text-orange-500"><i data-lucide="clock" class="w-6 h-6"></i></span>
-        <div>
-            <div class="text-3xl font-black text-orange-500 leading-none"><?= $pendingRegistrations ?></div>
-            <p class="text-gray-500 text-sm mt-1">পেন্ডিং অর্ডার</p>
-            <p class="text-xs mt-1.5 text-gray-400">অ্যাকশন প্রয়োজন</p>
         </div>
     </div>
     <div class="bg-white rounded-2xl shadow p-5 flex items-center gap-4">

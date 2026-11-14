@@ -215,14 +215,31 @@ require __DIR__ . '/includes/layout-top.php';
 $short_label = fn(string $s): string => trim(preg_replace('/\s*\(.*$/u', '', $s));
 ?>
 
-<!-- উপরে জাম্প-মেনু — সেকশনে দ্রুত যেতে (মোবাইল+ডেস্কটপ), স্ক্রল করলেও উপরে আটকে থাকে -->
+<!-- 🗂️ অডিট A1 (২০২৬-১১-১৪): পাতাটা ১৬,০০০px লম্বা ছিল (৮৮ ঘর, ২৩ গ্রুপ এক পাতায়)।
+     এখন উপরে ট্যাব — একবারে একটা গ্রুপ — আর "ঘর খুঁজুন" বাক্স (সব গ্রুপ জুড়ে নাম/ব্যাখ্যা দিয়ে খোঁজে)।
+     🔴 প্রগ্রেসিভ: JS না চললে সব গ্রুপ আগের মতোই একসাথে দেখা যায় (লুকানো হয় শুধু JS দিয়ে)।
+     🔴 লুকানো `display:none` দিয়ে — প্রতিটা গ্রুপ নিজের ফর্ম, তাই কিছু সাবমিট থেকে বাদ পড়ার প্রশ্ন নেই। -->
+<style>
+    #settings-jump .st-tabs { display: flex; flex-wrap: wrap; gap: .5rem; }
+    #settings-jump .st-tab.on { background: rgb(var(--c-primary)); color: #fff; }
+    #settings-jump .st-search { width: 100%; border: 1px solid rgb(var(--c-border)); border-radius: .75rem; padding: .5rem .85rem; margin-bottom: .6rem; background: transparent; }
+    .st-mark { box-shadow: inset 3px 0 0 rgb(var(--c-primary)); padding-left: .6rem; border-radius: .25rem; }
+    @media screen and (max-width: 767px) {
+        #settings-jump .st-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+        #settings-jump .st-tabs::-webkit-scrollbar { display: none; }
+        #settings-jump .st-search { font-size: 16px; }
+    }
+</style>
 <div id="settings-jump" class="bg-white rounded-2xl shadow p-3 mb-6 max-w-3xl" style="position:sticky;top:64px;z-index:20;">
-    <div class="flex flex-wrap gap-2">
-        <a href="#sec-logo" class="whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700">লোগো</a>
+    <input type="search" id="stSearch" class="st-search" placeholder="🔎 ঘর খুঁজুন — যেমন: WhatsApp, পেমেন্ট, ফুটার" autocomplete="off" hidden>
+    <div class="st-tabs">
+        <a href="#sec-logo" data-sec="sec-logo" class="st-tab whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700">লোগো</a>
         <?php $gi = 0; foreach ($groups as $groupLabel => $fields): $gi++; ?>
-            <a href="#sec-<?= $gi ?>" class="whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"><?= e($short_label($groupLabel)) ?></a>
+            <a href="#sec-<?= $gi ?>" data-sec="sec-<?= $gi ?>" class="st-tab whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"><?= e($short_label($groupLabel)) ?></a>
         <?php endforeach; ?>
+        <a href="#all" data-sec="all" class="st-tab whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700" hidden>সব দেখুন</a>
     </div>
+    <p id="stEmpty" class="text-xs text-gray-500 mt-2" hidden>এই লেখায় কোনো ঘর পাওয়া যায়নি।</p>
 </div>
 
 <div id="settings-sections" class="space-y-6 max-w-3xl">
@@ -232,6 +249,7 @@ $short_label = fn(string $s): string => trim(preg_replace('/\s*\(.*$/u', '', $s)
         <?= csrf_field() ?>
         <input type="hidden" name="_section" value="sec-logo">
         <h3 class="font-bold text-gray-800 mb-4">লোগো</h3>
+        <div class="st-field" data-s="লোগো logo ছবি">
         <?php if (!empty($settings['logo_path'])):
             // DB-তে সাইট-রুট-রিলেটিভ path সেভ থাকে; admin/ সাবফোল্ডার থেকে দেখাতে '../' যোগ করতে হয়
             // (নাহলে ব্রাউজার admin/uploads/... খুঁজে 404 দেখায়)। এক্সটার্নাল URL হলে অপরিবর্তিত।
@@ -241,6 +259,7 @@ $short_label = fn(string $s): string => trim(preg_replace('/\s*\(.*$/u', '', $s)
         <?php endif; ?>
         <input type="text" name="logo_path" value="<?= e($settings['logo_path'] ?? '') ?>" placeholder="লোগোর URL" class="w-full border rounded-xl px-4 py-2.5 mb-2">
         <input type="file" name="logo_path_file" accept="image/*" class="w-full text-sm mb-4">
+        </div>
         <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2.5 rounded-xl">সেভ করুন</button>
     </form>
 
@@ -255,8 +274,9 @@ $short_label = fn(string $s): string => trim(preg_replace('/\s*\(.*$/u', '', $s)
                 $label = is_array($field) ? $field['label'] : $field;
                 $type = is_array($field) ? ($field['type'] ?? 'text') : 'text';
                 $val = $settings[$key] ?? '';
+                $stHay = mb_strtolower($label . ' ' . (is_array($field) ? (string) ($field['help'] ?? '') : '') . ' ' . $key . ' ' . $groupLabel);
             ?>
-                <div>
+                <div class="st-field" data-s="<?= e($stHay) ?>">
                     <label class="block text-sm font-semibold text-gray-700 mb-1"><?= e($label) ?></label>
                     <?php if ($type === 'textarea'): ?>
                         <textarea name="<?= e($key) ?>" rows="3" class="w-full border rounded-xl px-4 py-2.5"><?= e($val) ?></textarea>
@@ -269,7 +289,7 @@ $short_label = fn(string $s): string => trim(preg_replace('/\s*\(.*$/u', '', $s)
                     <?php elseif ($type === 'color'): ?>
                         <div class="flex items-center gap-2">
                             <input type="color" value="<?= e(preg_match('/^#?[0-9a-fA-F]{6}$/', $val) ? '#' . ltrim($val, '#') : '#16a34a') ?>" oninput="this.nextElementSibling.value=this.value" class="w-11 h-11 rounded-lg border cursor-pointer flex-shrink-0">
-                            <input type="text" name="<?= e($key) ?>" value="<?= e($val) ?>" placeholder="#RRGGBB — খালি রাখলে রেডিমেড থিম" class="flex-1 border rounded-xl px-4 py-2.5">
+                            <input type="text" name="<?= e($key) ?>" value="<?= e($val) ?>" placeholder="#RRGGBB — খালি রাখলে রেডিমেড থিম" class="flex-1 min-w-0 border rounded-xl px-4 py-2.5">
                             <button type="button" onclick="this.previousElementSibling.value=''" class="text-sm text-gray-500 hover:text-red-600 font-semibold px-2 flex-shrink-0">মুছুন</button>
                         </div>
                     <?php else: ?>
@@ -311,6 +331,73 @@ document.addEventListener('click', function (e) {
     var inp = b.closest('div').parentElement.querySelector('input[name="footer_text"]');
     if (inp) { inp.value = b.getAttribute('data-fix-year'); inp.focus(); b.closest('div').remove(); }
 });
+
+// 🗂️ ট্যাব + ঘর খোঁজা (অডিট A1) — একবারে একটা গ্রুপ; খুঁজলে সব গ্রুপ জুড়ে শুধু মেলা ঘর
+(function () {
+    var secs = Array.prototype.slice.call(document.querySelectorAll('#settings-sections > form'));
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('#settings-jump .st-tab'));
+    var box = document.getElementById('stSearch');
+    var empty = document.getElementById('stEmpty');
+    if (!secs.length || !tabs.length) { return; }
+    if (box) { box.hidden = false; }
+    tabs.forEach(function (t) { if (t.getAttribute('data-sec') === 'all') { t.hidden = false; } });
+
+    function show(id, scroll) {
+        secs.forEach(function (f) { f.style.display = (id === 'all' || f.id === id) ? '' : 'none'; });
+        tabs.forEach(function (t) {
+            var on = t.getAttribute('data-sec') === id;
+            t.classList.toggle('on', on);
+            if (on && t.scrollIntoView && t.parentNode.scrollWidth > t.parentNode.clientWidth) {
+                try { t.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch (e) {}
+            }
+        });
+        try { sessionStorage.setItem('admin_settings_tab', id); } catch (e) {}
+        if (scroll) { window.scrollTo(0, 0); }
+    }
+    function clearSearch() {
+        document.querySelectorAll('#settings-sections .st-field').forEach(function (r) { r.style.display = ''; r.classList.remove('st-mark'); });
+        if (empty) { empty.hidden = true; }
+    }
+    tabs.forEach(function (t) {
+        t.addEventListener('click', function (e) {
+            e.preventDefault();
+            if (box && box.value) { box.value = ''; clearSearch(); }
+            var id = t.getAttribute('data-sec');
+            show(id, true);
+            if (history.replaceState) { history.replaceState(null, '', id === 'all' ? 'settings.php' : '#' + id); }
+        });
+    });
+    if (box) {
+        box.addEventListener('input', function () {
+            var q = box.value.trim().toLowerCase();
+            if (!q) { var last = null; try { last = sessionStorage.getItem('admin_settings_tab'); } catch (e) {} clearSearch(); show(last || (secs[1] ? secs[1].id : secs[0].id), false); return; }
+            var any = false;
+            secs.forEach(function (f) {
+                var hit = false;
+                f.querySelectorAll('.st-field').forEach(function (r) {
+                    var m = (r.getAttribute('data-s') || '').indexOf(q) !== -1;
+                    r.style.display = m ? '' : 'none';
+                    r.classList.toggle('st-mark', m);
+                    if (m) { hit = true; }
+                });
+                f.style.display = hit ? '' : 'none';
+                if (hit) { any = true; }
+            });
+            tabs.forEach(function (t) { t.classList.remove('on'); });
+            if (empty) { empty.hidden = any; }
+        });
+        box.addEventListener('keydown', function (e) { if (e.key === 'Escape') { box.value = ''; box.dispatchEvent(new Event('input')); } });
+    }
+    // শুরুর ট্যাব: সেভের পরের #sec-N → আগের বার খোলা ট্যাব → প্রথম গ্রুপ
+    var start = (location.hash || '').replace('#', '');
+    var known = secs.some(function (f) { return f.id === start; });
+    if (!known) {
+        var saved = null;
+        try { saved = sessionStorage.getItem('admin_settings_tab'); } catch (e) {}
+        start = (saved && (saved === 'all' || secs.some(function (f) { return f.id === saved; }))) ? saved : secs[1] ? secs[1].id : secs[0].id;
+    }
+    show(start, false);
+})();
 
 // জাম্প-মেনু ও সেকশন অফসেট হেডারের প্রকৃত উচ্চতার সাথে সিঙ্ক করা হয় (hardcode px না) —
 // মেনু হেডারের ঠিক নিচে ফ্লাশ বসে (মাঝে ফাঁক থাকে না, পেছনের বাটন উঁকি দেয় না), আর অ্যাংকর জাম্পে

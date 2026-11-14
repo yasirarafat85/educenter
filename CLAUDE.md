@@ -1100,6 +1100,14 @@ Brute-force protection (login_attempts, ৫/১৫মিন), CSRF সব ফর
   (পুরনো JSON-এ থাকলেও অকেজো)। কারণ: ডাম্পে `settings`-এর গোপন চাবি, "app" জিপে `config.php`।
   🔴 মডারেটরকে আবার দেবেন না। (চাবিগুলো DB-তে এনক্রিপ্ট করা হয়নি — শেয়ার্ড হোস্টে কী রাখার নিরাপদ জায়গা নেই।)
 
+## 🖥️ অ্যাডমিন প্যানেল — অডিট A1–A5 (২০২৬-১১-১৪)
+
+- **A1 সেটিংস ট্যাব + খোঁজা (`admin/settings.php`)**: প্রতিটা গ্রুপ আগের মতোই নিজের `<form id="sec-N">`; JS শুধু `display:none` দিয়ে একটা দেখায় (`.st-tab[data-sec]`, শেষ ট্যাব `sessionStorage['admin_settings_tab']`, সেভের পর `#sec-N` হ্যাশ জেতে)। প্রতিটা ঘর `.st-field[data-s]` (লেবেল+help+key+গ্রুপ, ছোট হাতের) — 🔴 **নতুন ঘর যোগ করলে কিছু করতে হয় না** (গ্রুপ-লুপ নিজেই বসায়); লুপের বাইরে হাতে লেখা ঘর বানালে `.st-field` দিন। JS না চললে সব দেখা যায় (সার্চ বাক্স `hidden`, JS খোলে)।
+- **A2 ড্যাশবোর্ড**: "কী করতে চান" লঞ্চার আর নেই, ফিরিয়ে আনবেন না (সাইডবার + `menu.php`-এ একই লিংক)। স্ট্যাট গ্রিড `.dash-stats` (পাতার নিজের `<style>`): ২ কলাম, <৪৮০px ১, ≥১২৮০px ৪।
+- **A3 অর্ডার তালিকা (ফোন)**: `.reg-pills` / `.reg-sum` — `screen and (max-width:767px)`-এ এক সারি আড়াআড়ি স্ক্রল (registrations.php-এর নিজের `<style>`)।
+- **A4 ফন্ট**: অ্যাডমিন ও লগইন পাতা `../assets/fonts/noto.css` + `../assets/fonts/admin-latin.css` (`?v=filemtime`) — গুগল ফন্ট আর নেই। admin-latin = Inter + Plus Jakarta Sans, শুধু latin/latin-ext subset (variable woff2, এক ফাইলে সব ওজন)। 🔴 অ্যাডমিন ফন্ট বদলালে এই দুটো লিংক + `build/tailwind.admin.js` + `--font-*` ভ্যারিয়েবল।
+- **A5**: `.adm-tap` (coarse pointer-এ ৪৪px — 🔴 `display` ছোঁয় না, নাহলে `md:hidden` ভাঙত), `.adm-help::after` ছোঁয়ার জায়গা বাড়ায়; মেনু বোতামে `aria-label`/`aria-controls`/`aria-expanded` (layout-bottom-এর open/close সেটা হালনাগাদ করে), Esc-এ বন্ধ।
+
 ## 🔒 ডুপ্লিকেট ঠেকানো — পার্সেল-তালা ও আয়ের UNIQUE (২০২৬-১১-১৪, অডিট D1·D2·D4)
 
 - **D1 — `course-parcel.php` `round-save`-এ `GET_LOCK`**: নাম `edu_cp_<md5(DB_NAME) ১০ অক্ষর>_<item_id>` (🔴 শেয়ার্ড সার্ভারে তালা সার্ভার-জুড়ে, তাই ডাটাবেসের নাম দিয়ে আলাদা), টাইমআউট ২০s, না পেলে flash + redirect (কিছুই বদলায় না); try/catch — `GET_LOCK` না থাকলে আগের মতো চলে। সংযোগ বন্ধ হলে তালা খোলে (persistent connection নেই — **`ATTR_PERSISTENT` কখনো চালু করবেন না**, করলে তালা পরের অনুরোধে থেকে যাবে)। 🔴🔴 **`courier_batches`-এ UNIQUE(registration_id, period_label) দেবেন না** — `courier.php`/`send-to-courier.php` এক অর্ডারে খালি লেবেলে একাধিক চালান বৈধভাবে বানায়। Generated column + UNIQUE-ও নয় — `db-dump.php` ও `archive.php` `SELECT *` দিয়ে সব কলাম INSERT করে, generated column-এ লিখতে গেলে ব্যাকআপ-রিস্টোর ও আর্কাইভ-রিস্টোর ভাঙত।

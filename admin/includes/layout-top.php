@@ -52,8 +52,9 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     };
     try { document.documentElement.setAttribute('data-skin', window.adminSkin()); } catch (e) {}
 </script>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+<?php /* 🔤 অডিট A4: ফন্ট নিজের সার্ভার থেকে (পাবলিক সাইটের assets/fonts/ শেয়ার করে) — গুগলে নির্ভরতা নেই */ $admFontDir = dirname(__DIR__, 2) . '/assets/fonts/'; ?>
+<link href="../assets/fonts/noto.css?v=<?= @filemtime($admFontDir . 'noto.css') ?: 1 ?>" rel="stylesheet">
+<link href="../assets/fonts/admin-latin.css?v=<?= @filemtime($admFontDir . 'admin-latin.css') ?: 1 ?>" rel="stylesheet">
 <!-- সেল্ফ-হোস্টেড কম্পাইলড Tailwind (indigo/gray → CSS ভ্যারিয়েবল ম্যাপিং কম্পাইলের সময়ই বেক করা,
      আগের ইনলাইন tailwind.config আর CDN JIT স্ক্রিপ্ট বাদ — এখন স্ট্যাটিক CSS, দ্রুত ও ঝলকমুক্ত) -->
 <link rel="stylesheet" href="assets/tailwind.css?v=<?= @filemtime(__DIR__ . '/../assets/tailwind.css') ?: '1' ?>">
@@ -472,10 +473,14 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
        🔴 প্রস্থ (`max-width`) দেখে নয়, **pointer** দেখে — তাহলে টাচ-ল্যাপটপ ও ট্যাবলেটও পায়,
        আর মাউসওয়ালা ছোট উইন্ডোতে অযথা বড় হয় না। */
     @media (pointer: coarse) {
-        .nav-pin > button { min-width: 34px; min-height: 34px; }
+        /* ♿ অডিট A5: ছোঁয়া-পর্দায় মূল বোতাম ৪৪px (মেনু খোলা/বন্ধ · লগআউট · সাহায্য) */
+        .adm-tap { min-width: 44px; min-height: 44px; } /* display ছোঁয়া হয়নি — md:hidden যেন না ভাঙে */
+        .adm-help { position: relative; }
+        .adm-help::after { content: ''; position: absolute; inset: -10px; } /* দেখতে ছোট, ছোঁয়ার জায়গা ৪৪px */
+        .nav-pin > button { min-width: 40px; min-height: 40px; }
         .fp-clear { min-width: 32px; min-height: 32px; }
         .fp-opt { padding: .7rem .75rem; }
-        .theme-dot { width: 28px; height: 28px; }
+        .theme-dot { width: 32px; height: 32px; }
         main .overflow-x-auto > table.mcard td:last-child a,
         main .overflow-x-auto > table.mcard td:last-child button { padding: 9px 16px; }
     }
@@ -550,7 +555,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                     <p class="text-xs text-gray-500">Admin Panel</p>
                 </div>
             </div>
-            <button id="admin-sidebar-close" class="md:hidden p-1.5 rounded-lg hover:bg-gray-100 text-gray-600">
+            <button type="button" id="admin-sidebar-close" class="adm-tap md:hidden p-1.5 rounded-lg hover:bg-gray-100 text-gray-600" aria-label="মেনু বন্ধ করুন" aria-controls="admin-sidebar">
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </div>
@@ -621,15 +626,15 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
         <div class="p-3 border-t border-gray-200 md:hidden">
             <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2 px-1.5">থিম</p>
             <div class="theme-picker flex-wrap gap-2 px-1.5" data-theme-picker title="থিম বেছে নিন">
-                <button type="button" class="theme-dot" data-theme-id="indigo"   style="background:#4F46E5" title="Indigo"></button>
-                <button type="button" class="theme-dot" data-theme-id="emerald"  style="background:#059669" title="Emerald"></button>
-                <button type="button" class="theme-dot" data-theme-id="amber"    style="background:#C2410C" title="Amber"></button>
-                <button type="button" class="theme-dot" data-theme-id="plum"     style="background:#9333EA" title="Plum"></button>
-                <button type="button" class="theme-dot" data-theme-id="kids"     style="background:#F97316" title="Kids"></button>
+                <button type="button" class="theme-dot" data-theme-id="indigo"   style="background:#4F46E5" title="Indigo" aria-label="রঙ: Indigo"></button>
+                <button type="button" class="theme-dot" data-theme-id="emerald"  style="background:#059669" title="Emerald" aria-label="রঙ: Emerald"></button>
+                <button type="button" class="theme-dot" data-theme-id="amber"    style="background:#C2410C" title="Amber" aria-label="রঙ: Amber"></button>
+                <button type="button" class="theme-dot" data-theme-id="plum"     style="background:#9333EA" title="Plum" aria-label="রঙ: Plum"></button>
+                <button type="button" class="theme-dot" data-theme-id="kids"     style="background:#F97316" title="Kids" aria-label="রঙ: Kids"></button>
                 <span class="w-px h-4 bg-gray-300 mx-0.5"></span>
-                <button type="button" class="theme-dot" data-theme-id="midnight" style="background:#818CF8" title="Midnight (dark)"></button>
-                <button type="button" class="theme-dot" data-theme-id="teal"     style="background:#2DD4BF" title="Teal (dark)"></button>
-                <button type="button" class="theme-dot" data-theme-id="carbon"   style="background:#F59E0B" title="Carbon (dark)"></button>
+                <button type="button" class="theme-dot" data-theme-id="midnight" style="background:#818CF8" title="Midnight (dark)" aria-label="রঙ: Midnight (dark)"></button>
+                <button type="button" class="theme-dot" data-theme-id="teal"     style="background:#2DD4BF" title="Teal (dark)" aria-label="রঙ: Teal (dark)"></button>
+                <button type="button" class="theme-dot" data-theme-id="carbon"   style="background:#F59E0B" title="Carbon (dark)" aria-label="রঙ: Carbon (dark)"></button>
             </div>
             <div class="px-1.5 mt-2"><?php // 🎨 চেহারা পিকার — `[data-skin-picker]` দিয়ে চিহ্নিত, দুটো ইনস্ট্যান্স layout-bottom-এর JS একসাথে সিঙ্কে রাখে ?>
 <div class="skin-picker" data-skin-picker title="চেহারা বেছে নিন">
@@ -648,7 +653,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                 <?php // 🔴 লগআউট এখন POST + CSRF (অডিট S5) — লিংক নয়, ছোট ফর্ম ?>
                 <form method="post" action="logout.php" class="flex-shrink-0" style="margin:0">
                     <?= csrf_field() ?>
-                    <button type="submit" title="লগআউট" aria-label="লগআউট" class="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50">
+                    <button type="submit" title="লগআউট" aria-label="লগআউট" class="adm-tap p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50">
                         <i data-lucide="log-out" class="w-4 h-4"></i>
                     </button>
                 </form>
@@ -660,7 +665,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     <div class="flex-1 flex flex-col min-w-0">
         <header class="bg-white border-b border-gray-200 px-4 md:px-6 py-3 flex items-center justify-between gap-3">
             <div class="flex items-center gap-3 min-w-0">
-                <button id="admin-sidebar-open" class="md:hidden p-2 rounded-lg hover:bg-gray-100 flex-shrink-0">
+                <button type="button" id="admin-sidebar-open" class="adm-tap md:hidden p-2 rounded-lg hover:bg-gray-100 flex-shrink-0" aria-label="মেনু খুলুন" aria-controls="admin-sidebar" aria-expanded="false">
                     <i data-lucide="menu" class="w-5 h-5 text-gray-700"></i>
                 </button>
                 <div class="min-w-0">
@@ -675,7 +680,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                         <h2 class="font-bold text-gray-800 text-lg sm:text-xl truncate leading-tight"><?= isset($pageTitle) ? e($pageTitle) : '' ?></h2>
                         <?php $pageHelp = admin_page_help($currentFile); if ($pageHelp): ?>
                         <button type="button" onclick="showPageHelp(this)" data-help-title="<?= e($pageHelp[0]) ?>" data-help-text="<?= e($pageHelp[1]) ?>"
-                            class="flex-shrink-0 w-6 h-6 inline-flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 font-bold text-sm leading-none" title="এই পেজ সম্পর্কে সাহায্য" aria-label="সাহায্য">?</button>
+                            class="adm-help flex-shrink-0 w-6 h-6 inline-flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 font-bold text-sm leading-none" title="এই পেজ সম্পর্কে সাহায্য" aria-label="সাহায্য">?</button>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -691,15 +696,15 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                     <button type="button" class="skin-btn" data-skin-id="compact" title="ঘন — এক পর্দায় বেশি সারি">ঘন</button>
                 </div>
                 <div class="theme-picker" id="admin-theme-picker" data-theme-picker title="থিম বেছে নিন">
-                    <button type="button" class="theme-dot" data-theme-id="indigo"  style="background:#4F46E5" title="Indigo"></button>
-                    <button type="button" class="theme-dot" data-theme-id="emerald" style="background:#059669" title="Emerald"></button>
-                    <button type="button" class="theme-dot" data-theme-id="amber"   style="background:#C2410C" title="Amber"></button>
-                    <button type="button" class="theme-dot" data-theme-id="plum"    style="background:#9333EA" title="Plum"></button>
-                    <button type="button" class="theme-dot" data-theme-id="kids"    style="background:#F97316" title="Kids"></button>
+                    <button type="button" class="theme-dot" data-theme-id="indigo"  style="background:#4F46E5" title="Indigo" aria-label="রঙ: Indigo"></button>
+                    <button type="button" class="theme-dot" data-theme-id="emerald" style="background:#059669" title="Emerald" aria-label="রঙ: Emerald"></button>
+                    <button type="button" class="theme-dot" data-theme-id="amber"   style="background:#C2410C" title="Amber" aria-label="রঙ: Amber"></button>
+                    <button type="button" class="theme-dot" data-theme-id="plum"    style="background:#9333EA" title="Plum" aria-label="রঙ: Plum"></button>
+                    <button type="button" class="theme-dot" data-theme-id="kids"    style="background:#F97316" title="Kids" aria-label="রঙ: Kids"></button>
                     <span class="w-px h-4 bg-gray-300 mx-0.5"></span>
-                    <button type="button" class="theme-dot" data-theme-id="midnight" style="background:#818CF8" title="Midnight (dark)"></button>
-                    <button type="button" class="theme-dot" data-theme-id="teal"     style="background:#2DD4BF" title="Teal (dark)"></button>
-                    <button type="button" class="theme-dot" data-theme-id="carbon"   style="background:#F59E0B" title="Carbon (dark)"></button>
+                    <button type="button" class="theme-dot" data-theme-id="midnight" style="background:#818CF8" title="Midnight (dark)" aria-label="রঙ: Midnight (dark)"></button>
+                    <button type="button" class="theme-dot" data-theme-id="teal"     style="background:#2DD4BF" title="Teal (dark)" aria-label="রঙ: Teal (dark)"></button>
+                    <button type="button" class="theme-dot" data-theme-id="carbon"   style="background:#F59E0B" title="Carbon (dark)" aria-label="রঙ: Carbon (dark)"></button>
                 </div>
                 <span class="text-sm text-gray-600 hidden sm:inline"><?= e(current_admin_name()) ?></span>
             </div>
