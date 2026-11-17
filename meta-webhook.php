@@ -12,10 +12,12 @@
  * 🔴 CSRF নয় (কল আসে মেটার সার্ভার থেকে) — **সই-ই একমাত্র গার্ড**।
  * 🔴 জমা হওয়ার পর শুধু "অটো" চিহ্নিত নিয়ম মিললে, আর অটো-সুইচ চালু থাকলে, উত্তর যায়
  *    (ধাপ ২, `mkb_auto_respond()`)। অটো ব্যর্থ হলেও জমা করা তথ্য অক্ষত থাকে।
+ * 🔴 এরপর AI (ধাপ ৩, `mai_handle_fresh()`) — AI-র ডাকে কয়েক সেকেন্ড লাগে, তাই আগে মেটাকে
+ *    "ok" জানিয়ে সংযোগ ছেড়ে দেওয়া হয় (`meta_wh_finish()`), তারপর কাজ।
  * 🔴 উত্তরে কোনো তথ্য ফেরত যায় না।
  * ════════════════════════════════════════════════════════════════════════════ */
 
-require_once __DIR__ . '/includes/meta-kb.php'; // meta.php-ও এর ভেতরে লোড হয়
+require_once __DIR__ . '/includes/meta-ai.php'; // meta-kb.php ও meta.php-ও এর ভেতরে লোড হয়
 
 header('X-Robots-Tag: noindex, nofollow');
 
@@ -25,6 +27,22 @@ function meta_wh_out(int $code, string $body = 'ok'): never
     header('Content-Type: text/plain; charset=utf-8');
     echo $body;
     exit;
+}
+
+/** মেটাকে "ok" পাঠিয়ে সংযোগ ছেড়ে দেওয়া — তারপর পেছনে কাজ চলতে থাকে */
+function meta_wh_finish(): void
+{
+    ignore_user_abort(true);
+    @set_time_limit(180);
+    http_response_code(200);
+    header('Content-Type: text/plain; charset=utf-8');
+    header('Content-Length: 2');
+    header('Connection: close');
+    echo 'ok';
+    if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); return; }
+    if (function_exists('litespeed_finish_request')) { litespeed_finish_request(); return; }
+    while (ob_get_level() > 0) { @ob_end_flush(); }
+    flush();
 }
 
 $cfg = meta_cfg();
@@ -85,5 +103,17 @@ try {
     mkb_auto_respond($db, $got['fresh'] ?? []);
 } catch (Throwable $e) {
     error_log('meta-webhook auto: ' . $e->getMessage());
+}
+// 🤖 AI — কাজ থাকলে আগে মেটাকে উত্তর দিয়ে দেওয়া (মেটা দ্রুত উত্তর চায়, AI-র কয়েক সেকেন্ড লাগে)
+$fresh = $got['fresh'] ?? [];
+try {
+    if (mai_has_work($db, $fresh)) {
+        meta_wh_finish();
+        mai_handle_fresh($db, $fresh);
+        exit;
+    }
+} catch (Throwable $e) {
+    error_log('meta-webhook ai: ' . $e->getMessage());
+    if (headers_sent()) { exit; }
 }
 meta_wh_out(200, 'ok');

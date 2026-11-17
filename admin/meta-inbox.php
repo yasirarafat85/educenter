@@ -4,12 +4,13 @@
  *
  * তিন ট্যাব: মেসেজ · কমেন্ট · সংযোগ।
  * 🔴 ধাপ ২ থেকে "💡 প্রস্তাবিত উত্তর" দেখায় (চাপলে শুধু ঘরে বসে); অটো-উত্তর হয় শুধু ওয়েবহুকে, meta-knowledge.php-র সুইচে।
+ * 🔴 ধাপ ৩: "🤖 AI-র খসড়া" — বসানো মাত্র, পাঠান অ্যাডমিন; "🤖 AI দিয়ে লিখুন" চাপলে একটা ডাক (খরচ হয়)।
  * 🔴 গোপন চাবি বদলানো শুধু মূল অ্যাডমিন পারেন; চাবি কখনো পর্দায় দেখানো হয় না।
  * 🔴 টাকা/খাতা/আয় কিছুই ছোঁয় না।
  * ════════════════════════════════════════════════════════════════════════════ */
 require_once __DIR__ . '/includes/auth.php';
 admin_require_login();
-require_once __DIR__ . '/../includes/meta-kb.php'; // meta.php-ও এর ভেতরে লোড হয় (ধাপ ২: প্রস্তাবিত উত্তর)
+require_once __DIR__ . '/../includes/meta-ai.php'; // meta-kb.php ও meta.php-ও এর ভেতরে লোড হয় (ধাপ ২: প্রস্তাব, ধাপ ৩: AI)
 
 $db = get_db();
 $pageTitle = 'ফেসবুক ইনবক্স';
@@ -105,6 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         $r = meta_send_message($db, $contact, (string) ($_POST['text'] ?? ''), $me);
         if ($r['ok']) {
             $db->prepare("UPDATE meta_contacts SET unread = 0 WHERE id = :id")->execute(['id' => $cid]);
+            mai_close_drafts($db, 'message', (string) $contact['psid']);
             set_flash('success', '✅ উত্তর পাঠানো হয়েছে।');
         } else {
             $_SESSION['mi_draft'][$cid] = (string) ($_POST['text'] ?? ''); // লেখা হারায় না
@@ -132,8 +134,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         if (!$cm) { set_flash('error', 'কমেন্টটা পাওয়া যায়নি।'); redirect(mi_back('comments')); }
         $r = meta_reply_comment($db, $cm, (string) ($_POST['text'] ?? ''), $me);
         if (!$r['ok']) { $_SESSION['mi_cdraft'][$id] = (string) ($_POST['text'] ?? ''); }
+        else { mai_close_drafts($db, 'comment', (string) $cm['comment_id']); }
         set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? '✅ কমেন্টে উত্তর বসানো হয়েছে।' : $r['error']);
         redirect(mi_back('comments', array_filter(['st' => $_POST['st'] ?? ''])) . '#cm-' . $id);
+    }
+
+    // ── 🤖 AI দিয়ে খসড়া লেখানো (একটা ডাক — খরচ হয়) ──
+    if ($action === 'ai-draft') {
+        $isC = ($_POST['channel'] ?? '') === 'comment';
+        $back = $isC ? mi_back('comments', array_filter(['st' => $_POST['st'] ?? ''])) . '#cm-' . (int) ($_POST['id'] ?? 0)
+                     : mi_back('messages', ['c' => (int) ($_POST['contact_id'] ?? 0)]) . '#mi-reply';
+        if (!mai_ready($db) || !mai_has_key()) { set_flash('error', 'AI এখনো চালু হয়নি — উত্তর-ভান্ডার → 🤖 AI ট্যাবে চাবি বসান (আর migrate-meta-ai.sql চালান)।'); redirect($back); }
+        @set_time_limit(120);
+        if ($isC) {
+            $st = $db->prepare('SELECT * FROM meta_comments WHERE id = :id AND is_page = 0');
+            $st->execute(['id' => (int) ($_POST['id'] ?? 0)]);
+            $row = $st->fetch();
+            if (!$row) { set_flash('error', 'কমেন্টটা পাওয়া যায়নি।'); redirect($back); }
+            $in = mai_comment_input($db, $row);
+            $target = (string) $row['comment_id'];
+        } else {
+            $st = $db->prepare('SELECT * FROM meta_contacts WHERE id = :id');
+            $st->execute(['id' => (int) ($_POST['contact_id'] ?? 0)]);
+            $row = $st->fetch();
+            if (!$row) { set_flash('error', 'কথোপকথনটা পাওয়া যায়নি।'); redirect($back); }
+            $in = mai_message_input($db, $row);
+            $target = (string) $row['psid'];
+        }
+        $ch = $isC ? 'comment' : 'message';
+        $g = mai_generate($db, $in['messages'], $ch, $target, $in['ref'], 'manual');
+        if (!$g['ok']) { set_flash('error', '❌ AI উত্তর লিখতে পারেনি: ' . $g['error']); redirect($back); }
+        mai_save_draft($db, $ch, $target, $in['ref'], $in['question'], $g['text'], $g['human']);
+        set_flash('success', $g['human'] ? '🤖 AI বলছে এটার উত্তর তার জানা নেই — আপনি নিজে উত্তর দিন (দরকার হলে জ্ঞানভান্ডারে যোগ করুন)।' : '🤖 AI খসড়া লিখেছে — দেখে নিয়ে "বসান" চাপুন, তারপর পাঠান।');
+        redirect($back);
+    }
+
+    // ── 🤖 AI-র খসড়া বাদ ──
+    if ($action === 'ai-dismiss') {
+        $isC = ($_POST['channel'] ?? '') === 'comment';
+        mai_close_drafts($db, $isC ? 'comment' : 'message', (string) ($_POST['target'] ?? ''), 'dismissed');
+        redirect($isC ? mi_back('comments', array_filter(['st' => $_POST['st'] ?? ''])) . '#cm-' . (int) ($_POST['id'] ?? 0)
+                      : mi_back('messages', ['c' => (int) ($_POST['contact_id'] ?? 0)]) . '#mi-reply');
     }
 
     // ── কমেন্ট দেখা হয়েছে / আবার নতুন ──
@@ -251,6 +292,41 @@ function mi_suggest_box(array $sugs, string $targetId): void
     echo '</div>';
 }
 
+/**
+ * 🤖 AI বাক্স — সর্বশেষ খসড়া (থাকলে) + "AI দিয়ে লিখুন" বোতাম। $hidden = ফর্মে যাওয়ার ঘর।
+ * 🔴 নিজের আলাদা ফর্ম — উত্তরের ফর্মের ভেতরে কখনো নয় (নেস্টেড ফর্ম চলে না)।
+ */
+function mi_ai_box(?array $draft, string $fillTarget, string $channel, string $target, array $hidden, bool $canGen): void
+{
+    if (!$draft && !$canGen) { return; }
+    echo '<div class="mi-ai">';
+    if ($draft) {
+        if ((int) $draft['needs_human'] === 1) {
+            echo '<p class="mi-ai-h">🤖 AI এর উত্তর জানে না <span>— আপনি নিজে উত্তর দিন। একই প্রশ্ন বারবার এলে জ্ঞানভান্ডারে উত্তরটা যোগ করে দিন।</span></p>';
+        } else {
+            echo '<p class="mi-ai-h">🤖 AI-র খসড়া <span>— চাপলে নিচের ঘরে বসবে, দেখে নিয়ে পাঠান</span></p>';
+            echo '<button type="button" class="mi-sug-b mi-ai-b" data-mi-fill="' . e($fillTarget) . '" data-text="' . e($draft['draft']) . '">' . e($draft['draft']) . '</button>';
+        }
+        if (!empty($draft['note'])) { echo '<p class="mi-ai-n">ℹ️ ' . e($draft['note']) . '</p>'; }
+    }
+    echo '<div class="mi-ai-row">';
+    if ($canGen) {
+        echo '<form method="post" action="' . e(mi_back($channel === 'comment' ? 'comments' : 'messages', ['action' => 'ai-draft'])) . '" class="mi-ai-gen">' . csrf_field()
+           . '<input type="hidden" name="channel" value="' . e($channel) . '">';
+        foreach ($hidden as $k => $v) { echo '<input type="hidden" name="' . e($k) . '" value="' . e((string) $v) . '">'; }
+        echo '<button type="submit" class="mi-ai-btn">🤖 ' . ($draft ? 'AI দিয়ে আবার লিখুন' : 'AI দিয়ে উত্তর লিখুন') . '</button></form>';
+    }
+    if ($draft) {
+        echo '<form method="post" action="' . e(mi_back($channel === 'comment' ? 'comments' : 'messages', ['action' => 'ai-dismiss'])) . '">' . csrf_field()
+           . '<input type="hidden" name="channel" value="' . e($channel) . '"><input type="hidden" name="target" value="' . e($target) . '">';
+        foreach ($hidden as $k => $v) { echo '<input type="hidden" name="' . e($k) . '" value="' . e((string) $v) . '">'; }
+        echo '<button type="submit" class="mi-ai-x">✕ খসড়া বাদ</button></form>';
+    }
+    echo '</div></div>';
+}
+
+$aiOn = mai_ready($db) && mai_has_key();
+
 require __DIR__ . '/includes/layout-top.php';
 ?>
 <style>
@@ -281,6 +357,16 @@ require __DIR__ . '/includes/layout-top.php';
 .mi-sug-b{display:block;width:100%;text-align:left;padding:.5rem .7rem;margin-top:.35rem;border-radius:.6rem;background:#fff;border:1px solid #FDE68A;font-size:.86rem;line-height:1.55;color:#1F2937;overflow-wrap:anywhere}
 .mi-sug-b:hover{border-color:#F59E0B}
 .mi-sug-l{display:block;font-size:.72rem;color:#92400E;font-weight:600}
+.mi-ai{margin:.25rem 0 .6rem;padding:.6rem;border-radius:.8rem;background:#F5F3FF;border:1px solid #DDD6FE}
+.mi-ai-h{font-size:.8rem;font-weight:700;color:#5B21B6}
+.mi-ai-h span{font-weight:400;color:#6D28D9}
+.mi-ai-b{border-color:#DDD6FE;white-space:pre-wrap}
+.mi-ai-b:hover{border-color:#8B5CF6}
+.mi-ai-n{font-size:.75rem;color:#6B7280;margin-top:.35rem;overflow-wrap:anywhere}
+.mi-ai-row{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.45rem}
+.mi-ai-btn{padding:.4rem .8rem;border-radius:.6rem;background:#7C3AED;color:#fff;font-size:.82rem;font-weight:700}
+.mi-ai-x{padding:.4rem .8rem;border-radius:.6rem;background:#fff;border:1px solid #DDD6FE;color:#6B7280;font-size:.82rem;font-weight:600}
+.mi-ai-gen button[disabled]{opacity:.6}
 </style>
 
 <?php if (!$ready): ?>
@@ -362,7 +448,7 @@ require __DIR__ . '/includes/layout-top.php';
                 <?php foreach ($thread as $m):
                     $out = $m['direction'] === 'out';
                     $txt = trim((string) $m['text']) !== '' ? (string) $m['text'] : meta_attach_label((array) json_decode((string) $m['attach_json'], true));
-                    $who = $out ? ($m['source'] === 'admin' ? ('আপনি' . ($m['sent_by'] ? ' (' . $m['sent_by'] . ')' : '')) : ($m['source'] === 'auto' ? '🤖 অটো-উত্তর' : 'পেইজ থেকে')) : '';
+                    $who = $out ? ($m['source'] === 'admin' ? ('আপনি' . ($m['sent_by'] ? ' (' . $m['sent_by'] . ')' : '')) : ($m['source'] === 'auto' ? '🤖 অটো-উত্তর' : ($m['source'] === 'ai' ? '🤖 AI' : 'পেইজ থেকে'))) : '';
                 ?>
                     <div class="mi-b <?= $out ? 'out' : 'in' ?>"><?= e($txt !== '' ? $txt : '(খালি)') ?><div class="mi-meta"><?= e(trim($who . ' · ' . mi_time($m['sent_at']), ' ·')) ?></div></div>
                 <?php endforeach; ?>
@@ -378,6 +464,8 @@ require __DIR__ . '/includes/layout-top.php';
                     foreach (array_reverse($thread) as $tm) { if ($tm['direction'] === 'in' && trim((string) $tm['text']) !== '') { $lastIn = (string) $tm['text']; break; } }
                     $sugs = $lastIn !== '' ? mkb_suggest($db, $lastIn, 'message', $openContact['name'] ?? null) : [];
                     mi_suggest_box($sugs, 'mi-reply');
+                    mi_ai_box(mai_latest_draft($db, 'message', (string) $openContact['psid']), 'mi-reply', 'message', (string) $openContact['psid'],
+                              ['contact_id' => (int) $openContact['id']], $aiOn && $lastIn !== '');
                 ?>
                 <form method="post" action="<?= e(mi_back('messages', ['action' => 'send'])) ?>">
                     <?= csrf_field() ?>
@@ -441,7 +529,11 @@ require __DIR__ . '/includes/layout-top.php';
                     <?php endforeach; ?>
 
                     <?php if ($cm['status'] !== 'removed' && meta_configured()): ?>
-                    <?php if ($cm['status'] === 'new') { mi_suggest_box(mkb_suggest($db, (string) $cm['message'], 'comment', $cm['from_name'] ?? null), 'cmf-' . (int) $cm['id']); } ?>
+                    <?php if ($cm['status'] === 'new') {
+                        mi_suggest_box(mkb_suggest($db, (string) $cm['message'], 'comment', $cm['from_name'] ?? null), 'cmf-' . (int) $cm['id']);
+                        mi_ai_box(mai_latest_draft($db, 'comment', (string) $cm['comment_id']), 'cmf-' . (int) $cm['id'], 'comment', (string) $cm['comment_id'],
+                                  ['id' => (int) $cm['id'], 'st' => $cStatus], $aiOn && trim((string) $cm['message']) !== '');
+                    } ?>
                     <form method="post" action="<?= e(mi_back('comments', ['action' => 'c-reply'])) ?>" class="mi-cform mt-3" id="cmf-<?= (int) $cm['id'] ?>">
                         <?= csrf_field() ?>
                         <input type="hidden" name="id" value="<?= (int) $cm['id'] ?>">
@@ -582,6 +674,12 @@ require __DIR__ . '/includes/layout-top.php';
 
 <script>
 (function () {
+    document.querySelectorAll('form.mi-ai-gen').forEach(function (f) {
+        f.addEventListener('submit', function () {
+            var b = f.querySelector('button');
+            if (b) { setTimeout(function () { b.disabled = true; b.textContent = '🤖 লিখছে… একটু অপেক্ষা করুন'; }, 0); }
+        });
+    });
     document.querySelectorAll('[data-mi-fill]').forEach(function (b) {
         b.addEventListener('click', function () {
             var box = document.getElementById(b.getAttribute('data-mi-fill'));

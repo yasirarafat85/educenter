@@ -383,7 +383,7 @@ function mkb_scan_history(PDO $db): int
         $reps = $db->query("SELECT r.comment_id, r.message, r.sent_by, p.message AS q FROM meta_comments r
                             JOIN meta_comments p ON p.comment_id = r.parent_id AND p.is_page = 0
                             LEFT JOIN meta_kb k ON k.source_ref = CONCAT('cmt:', r.comment_id)
-                            WHERE r.is_page = 1 AND r.source <> 'auto' AND r.message IS NOT NULL AND r.message <> '' AND k.id IS NULL
+                            WHERE r.is_page = 1 AND r.source NOT IN ('auto','ai') AND r.message IS NOT NULL AND r.message <> '' AND k.id IS NULL
                             ORDER BY r.id DESC LIMIT " . (int) MKB_SCAN_LIMIT)->fetchAll();
         foreach ($reps as $r) {
             if (mkb_propose($db, (string) $r['q'], (string) $r['message'], 'comment', 'cmt:' . $r['comment_id'], $r['sent_by'])) { $new++; }

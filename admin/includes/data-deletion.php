@@ -195,7 +195,8 @@ function dd_scan(PDO $db, string $phone): array
     // কথোপকথন মুছলে তার সব মেসেজও মোছে (FK CASCADE)। 🔴 নম্বর ছাড়া ফেসবুক-পরিচয়ে মেলানো যায় না।
     foreach (['meta_contacts' => ['SELECT DISTINCT c.id, c.name FROM meta_contacts c JOIN meta_messages m ON m.contact_id = c.id WHERE m.text LIKE :p', 'ফেসবুক মেসেঞ্জারের কথোপকথন'],
               'meta_comments' => ['SELECT id, from_name FROM meta_comments WHERE message LIKE :p', 'ফেসবুক পেইজের কমেন্ট'],
-              'meta_kb'       => ["SELECT id, LEFT(COALESCE(question, title), 60) AS q FROM meta_kb WHERE CONCAT_WS(' ', title, question, answer) LIKE :p", 'ফেসবুক উত্তর-ভান্ডার (শেখা/প্রস্তাবিত লেখা)']] as $mt => [$sql, $lbl]) {
+              'meta_kb'       => ["SELECT id, LEFT(COALESCE(question, title), 60) AS q FROM meta_kb WHERE CONCAT_WS(' ', title, question, answer) LIKE :p", 'ফেসবুক উত্তর-ভান্ডার (শেখা/প্রস্তাবিত লেখা)'],
+              'meta_ai_drafts' => ["SELECT id, LEFT(question, 60) AS q FROM meta_ai_drafts WHERE CONCAT_WS(' ', question, draft) LIKE :p", 'ফেসবুকের AI খসড়া']] as $mt => [$sql, $lbl]) {
         if (!db_has_table($db, $mt)) { continue; }
         try {
             $st = $db->prepare($sql);

@@ -2,20 +2,21 @@
 /* ════════════════════════════════════════════════════════════════════════════
  * 📚 ফেসবুক উত্তর-ভান্ডার (ধাপ ২, ২০২৬-১১-১৭)
  *
- * তিন ট্যাব: ⚡ নির্দিষ্ট শব্দে উত্তর · 📚 জ্ঞানভান্ডার · 💡 শেখার প্রস্তাব
+ * চার ট্যাব: ⚡ নির্দিষ্ট শব্দে উত্তর · 📚 জ্ঞানভান্ডার · 💡 শেখার প্রস্তাব · 🤖 AI (ধাপ ৩)
+ * 🔴 AI-র চাবি, মডেল, অবস্থা ও খরচের সীমা বদলানো শুধু মূল অ্যাডমিন পারেন; চাবি কখনো পর্দায় দেখানো হয় না।
  * 🔴 অটো-উত্তর চালু/বন্ধ শুধু মূল অ্যাডমিন পারেন (ডিফল্টে বন্ধ)।
  * 🔴 প্রস্তাব অনুমোদন না করা পর্যন্ত কিছুই শেখা হয় না।
  * 🔴 টাকা/খাতা/আয় কিছুই ছোঁয় না।
  * ════════════════════════════════════════════════════════════════════════════ */
 require_once __DIR__ . '/includes/auth.php';
 admin_require_login();
-require_once __DIR__ . '/../includes/meta-kb.php';
+require_once __DIR__ . '/../includes/meta-ai.php'; // meta-kb.php-ও এর ভেতরে
 
 $db = get_db();
 $pageTitle = 'ফেসবুক উত্তর-ভান্ডার';
 $me = (string) ($_SESSION['admin_username'] ?? '');
 $ready = mkb_ready($db);
-$tab = in_array($_GET['tab'] ?? '', ['rules', 'kb', 'learn'], true) ? $_GET['tab'] : 'rules';
+$tab = in_array($_GET['tab'] ?? '', ['rules', 'kb', 'learn', 'ai'], true) ? $_GET['tab'] : 'rules';
 $action = (string) ($_GET['action'] ?? '');
 
 function mk_back(string $tab, array $extra = []): string
@@ -166,6 +167,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         redirect(mk_back('learn'));
     }
 
+    // ── 🤖 AI-র সেটিংস (শুধু মূল অ্যাডমিন) ──
+    if ($action === 'ai-save') {
+        if (!admin_is_super()) { set_flash('error', 'AI-র সেটিংস বদলানো শুধু মূল অ্যাডমিন পারেন।'); redirect(mk_back('ai')); }
+        if (!empty($_POST['clear_key'])) {
+            update_setting('meta_ai_key', '');
+            update_setting('meta_ai_mode_message', 'off');
+            update_setting('meta_ai_mode_comment', 'off');
+            set_flash('success', '🗑️ AI-র চাবি মুছে ফেলা হলো — AI এখন সম্পূর্ণ বন্ধ।');
+            redirect(mk_back('ai'));
+        }
+        $key = trim((string) ($_POST['ai_key'] ?? ''));
+        if ($key !== '') {
+            if (!preg_match('/^sk-ant-[A-Za-z0-9_\-]{20,300}$/', $key)) { set_flash('error', 'চাবিটা দেখতে ঠিক নয় — console.anthropic.com → API Keys থেকে পুরোটা কপি করুন (sk-ant- দিয়ে শুরু)।'); redirect(mk_back('ai')); }
+            update_setting('meta_ai_key', $key);
+        }
+        $model = (string) ($_POST['ai_model'] ?? '');
+        if (isset(mai_models()[$model])) { update_setting('meta_ai_model', $model); }
+        foreach (['message', 'comment'] as $ch) {
+            $m = (string) ($_POST['mode_' . $ch] ?? 'off');
+            update_setting('meta_ai_mode_' . $ch, isset(mai_modes()[$m]) ? $m : 'off');
+        }
+        $cap = (float) str_replace(',', '.', (string) ($_POST['ai_cap'] ?? MAI_DEFAULT_CAP));
+        update_setting('meta_ai_cap_usd', (string) round(max(0, min(1000, $cap)), 2));
+        $persona = trim(str_replace("\r\n", "\n", (string) ($_POST['ai_persona'] ?? '')));
+        update_setting('meta_ai_persona', mb_substr($persona, 0, 3000));
+        set_flash('success', '🤖 AI-র সেটিংস সংরক্ষণ হয়েছে।' . (mai_has_key() ? '' : ' চাবি না বসালে AI কাজ করবে না।'));
+        redirect(mk_back('ai'));
+    }
+
+    // ── 🧪 AI-কে প্রশ্ন করে দেখা (কিছুই পাঠানো হয় না, শুধু খরচ হয়) ──
+    if ($action === 'ai-test') {
+        $qt = trim((string) ($_POST['q'] ?? ''));
+        $ch = ($_POST['ch'] ?? '') === 'comment' ? 'comment' : 'message';
+        if ($qt === '' || mb_strlen($qt) > 1000) { set_flash('error', 'প্রশ্নটা লিখুন (১০০০ অক্ষরের মধ্যে)।'); redirect(mk_back('ai')); }
+        if (!mai_ready($db) || !mai_has_key()) { set_flash('error', 'আগে migrate-meta-ai.sql চালান আর চাবি বসান।'); redirect(mk_back('ai')); }
+        @set_time_limit(120);
+        $g = mai_generate($db, [['role' => 'user', 'content' => $ch === 'comment' ? "কমেন্ট:\n" . $qt : $qt]], $ch, 'test', '', 'test');
+        $_SESSION['mk_ai_test'] = ['q' => $qt, 'ch' => $ch] + $g;
+        redirect(mk_back('ai') . '#mk-ai-test');
+    }
+
     if ($action === 'scan') {
         $n = mkb_scan_history($db);
         set_flash('success', $n ? "💡 নতুন {$n}টি প্রস্তাব পাওয়া গেছে।" : 'নতুন কোনো প্রস্তাব পাওয়া যায়নি — হাতে উত্তর দিলে বা পুরনো মেসেজ/কমেন্ট আনলে প্রস্তাব তৈরি হয়।');
@@ -223,6 +265,14 @@ if ($ready) {
 }
 $isSuper = admin_is_super();
 $autoOn = mkb_auto_on();
+$aiReady = $ready && mai_ready($db);
+$aiCfg = mai_cfg();
+$aiStats = $aiReady ? mai_month_stats($db) : null;
+$aiLog = [];
+if ($aiReady && $tab === 'ai') {
+    try { $aiLog = $db->query('SELECT * FROM meta_ai_log ORDER BY id DESC LIMIT 15')->fetchAll(); } catch (Throwable $e) {}
+}
+$aiTest = $_SESSION['mk_ai_test'] ?? null; unset($_SESSION['mk_ai_test']);
 $ruleOld = $_SESSION['mk_rule_old'] ?? null; unset($_SESSION['mk_rule_old']);
 $qaOld = $_SESSION['mk_qa_old'] ?? null; unset($_SESSION['mk_qa_old']);
 
@@ -256,6 +306,7 @@ require __DIR__ . '/includes/layout-top.php';
     <a href="<?= e(mk_back('rules')) ?>" class="mk-tab <?= $tab === 'rules' ? 'on' : '' ?>">⚡ নির্দিষ্ট শব্দে উত্তর <span class="text-xs" style="opacity:.75">(<?= $counts['rules'] ?>)</span></a>
     <a href="<?= e(mk_back('kb')) ?>" class="mk-tab <?= $tab === 'kb' ? 'on' : '' ?>">📚 জ্ঞানভান্ডার <span class="text-xs" style="opacity:.75">(<?= $counts['qa'] + $counts['doc'] ?>)</span></a>
     <a href="<?= e(mk_back('learn')) ?>" class="mk-tab <?= $tab === 'learn' ? 'on' : '' ?>">💡 শেখার প্রস্তাব <?php if ($counts['learn']): ?><span class="mk-badge"><?= $counts['learn'] ?></span><?php endif; ?></a>
+    <a href="<?= e(mk_back('ai')) ?>" class="mk-tab <?= $tab === 'ai' ? 'on' : '' ?>">🤖 AI <?= $aiReady && mai_has_key() ? '' : '<span class="text-xs" style="opacity:.75">(বন্ধ)</span>' ?></a>
 </div>
 
 <?php if ($ready && $tab === 'rules'): ?>
@@ -432,6 +483,150 @@ require __DIR__ . '/includes/layout-top.php';
         </div>
     <?php endforeach; ?>
 </div>
+
+<?php elseif ($ready && $tab === 'ai'): /* ── 🤖 AI ── */
+    $bdt = fn(float $usd) => '৳' . number_format($usd * MAI_BDT_PER_USD, $usd * MAI_BDT_PER_USD < 10 ? 2 : 0);
+?>
+<div class="grid gap-4" style="max-width:900px">
+    <?php if (!$aiReady): ?>
+    <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-4 text-sm">
+        <p class="font-bold mb-1">⚠️ একটা SQL চালানো বাকি</p>
+        <p>phpMyAdmin-এ <code class="bg-white px-1.5 py-0.5 rounded">database/migrate-meta-ai.sql</code> চালান — তার আগ পর্যন্ত AI কাজ করবে না (বাকি সব আগের মতোই চলে)।</p>
+    </div>
+    <?php endif; ?>
+
+    <div class="mk-card" style="border-left:4px solid <?= $aiReady && mai_has_key() ? '#7C3AED' : '#9CA3AF' ?>">
+        <p class="font-bold text-gray-800">🤖 AI দিয়ে উত্তর — কীভাবে কাজ করে</p>
+        <ul class="text-sm text-gray-600 mt-2 space-y-1" style="list-style:disc;padding-inline-start:1.2rem">
+            <li>নতুন মেসেজ/কমেন্ট এলে AI আপনার <b>জ্ঞানভান্ডার</b> (প্রশ্নোত্তর + ডকুমেন্ট) আর সাইটের <b>টাটকা কোর্স-তথ্য</b> (দাম, ভর্তির শেষ সময়) দেখে উত্তর লেখে।</li>
+            <li><b>📝 শুধু খসড়া</b> — উত্তরটা ইনবক্সে "🤖 AI-র খসড়া" হয়ে থাকে, আপনি দেখে এক চাপে বসিয়ে পাঠান। <b>শুরুতে এটাই রাখুন।</b></li>
+            <li><b>🤖 নিজে থেকে পাঠাবে</b> — খসড়ায় সন্তুষ্ট হলে চালু করুন। আপনি নিজে উত্তর দিলে <?= MKB_HUMAN_QUIET_MIN ?> মিনিট AI চুপ থাকে, ঘণ্টায় <?= MKB_MAX_AUTO_PER_HOUR ?>টার বেশি নয়।</li>
+            <li>AI উত্তর না জানলে, বা অভিযোগ/পেমেন্ট সমস্যা হলে কিছুই পাঠায় না — ইনবক্সে "🤖 AI এর উত্তর জানে না" চিহ্ন থাকে। শুধু ধন্যবাদ/ইমোজি কমেন্টে AI ডাকা হয় না (খরচ বাঁচাতে)।</li>
+            <li>🔴 মাসের খরচ সীমা পেরোলে AI নিজে থেকে থেমে যায়।</li>
+        </ul>
+    </div>
+
+    <?php if ($aiStats !== null): ?>
+    <div class="mk-card">
+        <p class="font-bold text-gray-800">📊 এই মাস (<?= e(date('F Y')) ?>)</p>
+        <div class="mk-row mt-2" style="gap:1rem">
+            <div><p class="text-xs text-gray-500">খরচ</p><p class="text-lg font-bold text-gray-800">$<?= number_format($aiStats['cost'], 3) ?> <span class="text-sm font-normal text-gray-500">(≈ <?= e($bdt($aiStats['cost'])) ?>)</span></p></div>
+            <div><p class="text-xs text-gray-500">সীমা</p><p class="text-lg font-bold text-gray-800">$<?= number_format($aiCfg['cap'], 2) ?></p></div>
+            <div><p class="text-xs text-gray-500">AI ডাক</p><p class="text-lg font-bold text-gray-800"><?= (int) $aiStats['calls'] ?></p></div>
+            <div><p class="text-xs text-gray-500">নিজে পাঠিয়েছে</p><p class="text-lg font-bold text-gray-800"><?= (int) $aiStats['sent'] ?></p></div>
+            <div><p class="text-xs text-gray-500">জানত না</p><p class="text-lg font-bold text-gray-800"><?= (int) $aiStats['human'] ?></p></div>
+            <div><p class="text-xs text-gray-500">সমস্যা</p><p class="text-lg font-bold <?= $aiStats['error'] ? 'text-red-600' : 'text-gray-800' ?>"><?= (int) $aiStats['error'] ?></p></div>
+        </div>
+        <?php if ($aiStats['cost'] >= $aiCfg['cap']): ?><p class="text-sm font-semibold text-red-700 mt-2">⛔ এই মাসের সীমা শেষ — AI আর ডাকা হচ্ছে না। সীমা বাড়ালে আবার চলবে।</p><?php endif; ?>
+        <p class="mk-hint mt-2">টাকার অঙ্ক আনুমানিক (১ ডলার ≈ ৳<?= MAI_BDT_PER_USD ?>)। আসল বিল console.anthropic.com-এ।</p>
+    </div>
+    <?php endif; ?>
+
+    <div class="mk-card mk-f">
+        <p class="font-bold text-gray-800">⚙️ সেটিংস</p>
+        <?php if ($isSuper): ?>
+        <form method="post" action="<?= e(mk_back('ai', ['action' => 'ai-save'])) ?>" autocomplete="off" id="mkAiForm">
+            <?= csrf_field() ?>
+            <label>Anthropic API key <?= $aiCfg['key'] !== '' ? '<span class="text-green-700">— ✅ বসানো আছে (…' . e(substr($aiCfg['key'], -4)) . ')</span>' : '' ?></label>
+            <input type="password" name="ai_key" placeholder="<?= $aiCfg['key'] !== '' ? '•••••••• (খালি রাখলে আগেরটাই থাকবে)' : 'sk-ant-…' ?>" autocomplete="new-password">
+            <p class="mk-hint">console.anthropic.com → API Keys → Create Key। 🔴 কাউকে (চ্যাটেও) পাঠাবেন না — শুধু এখানে বসান। সেখানে Billing-এ অল্প টাকা রিচার্জ ও মাসিক Limit দিয়ে রাখুন।</p>
+            <label>মডেল</label>
+            <select name="ai_model">
+                <?php foreach (mai_models() as $id => $m): ?>
+                    <option value="<?= e($id) ?>" <?= $aiCfg['model'] === $id ? 'selected' : '' ?>><?= e($m[0]) ?> — $<?= rtrim(rtrim(number_format($m[1], 2), '0'), '.') ?>/$<?= rtrim(rtrim(number_format($m[2], 2), '0'), '.') ?> প্রতি ১০ লাখ টোকেন</option>
+                <?php endforeach; ?>
+            </select>
+            <div class="grid gap-3 sm:grid-cols-2">
+                <div><label>💬 মেসেজে</label>
+                    <select name="mode_message" data-ai-mode><?php foreach (mai_modes() as $k => $lb): ?><option value="<?= $k ?>" <?= mai_mode('message') === $k ? 'selected' : '' ?>><?= e($lb) ?></option><?php endforeach; ?></select></div>
+                <div><label>🗨️ কমেন্টে</label>
+                    <select name="mode_comment" data-ai-mode><?php foreach (mai_modes() as $k => $lb): ?><option value="<?= $k ?>" <?= mai_mode('comment') === $k ? 'selected' : '' ?>><?= e($lb) ?></option><?php endforeach; ?></select></div>
+            </div>
+            <label>মাসে সর্বোচ্চ খরচ (ডলার)</label>
+            <input type="number" name="ai_cap" min="0" max="1000" step="0.5" value="<?= e((string) $aiCfg['cap']) ?>">
+            <p class="mk-hint">≈ <?= e($bdt($aiCfg['cap'])) ?>। সীমা পেরোলে AI নিজে থেকে থেমে যায়, মাস বদলালে আবার চলে।</p>
+            <label>AI-কে নির্দেশনা (কীভাবে কথা বলবে)</label>
+            <textarea name="ai_persona" rows="4" placeholder="<?= e(mai_default_persona()) ?>"><?= e((string) get_setting('meta_ai_persona')) ?></textarea>
+            <p class="mk-hint">খালি রাখলে ধূসর লেখাটাই ব্যবহার হবে। দাম/তারিখ এখানে লিখবেন না — ওগুলো সবসময় সাইট থেকে টাটকা নেওয়া হয়। "না জানলে চুপ থাকা", "দাম বানিয়ে না বলা" নিয়মগুলো আগে থেকেই বসানো, বদলানো যায় না।</p>
+            <div class="mk-row mt-3">
+                <button type="submit" class="mk-btn bg-indigo-600 text-white">💾 সংরক্ষণ করুন</button>
+            </div>
+        </form>
+        <?php if ($aiCfg['key'] !== ''): ?>
+        <form method="post" action="<?= e(mk_back('ai', ['action' => 'ai-save'])) ?>" class="mt-3" onsubmit="return confirmSubmit(this, 'চাবি মুছলে AI সম্পূর্ণ বন্ধ হয়ে যাবে। মুছবেন?', 'চাবি মুছুন');">
+            <?= csrf_field() ?><input type="hidden" name="clear_key" value="1">
+            <button type="submit" class="mk-btn bg-red-50 text-red-700">🗑️ চাবি মুছে AI বন্ধ করুন</button>
+        </form>
+        <?php endif; ?>
+        <?php else: ?>
+            <ul class="text-sm text-gray-700 mt-2 space-y-1">
+                <li>চাবি: <?= $aiCfg['key'] !== '' ? '✅ বসানো আছে' : '⬜ বসানো হয়নি' ?></li>
+                <li>মডেল: <?= e(mai_models()[$aiCfg['model']][0]) ?></li>
+                <li>💬 মেসেজে: <?= e(mai_modes()[mai_mode('message')]) ?> · 🗨️ কমেন্টে: <?= e(mai_modes()[mai_mode('comment')]) ?></li>
+            </ul>
+            <p class="text-xs text-gray-500 mt-2">এই সেটিংস বদলানো শুধু মূল অ্যাডমিন পারেন।</p>
+        <?php endif; ?>
+    </div>
+
+    <form method="post" action="<?= e(mk_back('ai', ['action' => 'ai-test'])) ?>" class="mk-card mk-f" id="mk-ai-test">
+        <?= csrf_field() ?>
+        <p class="font-bold text-gray-800">🧪 AI-কে প্রশ্ন করে দেখুন <span class="text-xs font-normal text-gray-500">(ফেসবুকে কিছুই যায় না — শুধু একটা ডাকের খরচ হয়)</span></p>
+        <div class="mk-row mt-2">
+            <input type="text" name="q" value="<?= e((string) ($aiTest['q'] ?? '')) ?>" placeholder="যেমন: ৪ বছরের বাচ্চার জন্য কোন কোর্স?" style="flex:1;min-width:180px" required maxlength="1000">
+            <select name="ch" style="width:auto"><option value="message">মেসেজ হিসেবে</option><option value="comment" <?= ($aiTest['ch'] ?? '') === 'comment' ? 'selected' : '' ?>>কমেন্ট হিসেবে</option></select>
+            <button type="submit" class="mk-btn bg-indigo-600 text-white" <?= $aiReady && mai_has_key() ? '' : 'disabled style="opacity:.5"' ?>>জিজ্ঞেস করুন</button>
+        </div>
+        <?php if ($aiTest): ?>
+            <div class="mt-3 p-3 rounded-xl bg-gray-50 text-sm">
+                <?php if (!$aiTest['ok']): ?>
+                    <p class="font-semibold text-red-700">❌ <?= e($aiTest['error']) ?></p>
+                <?php elseif ($aiTest['human']): ?>
+                    <p class="font-semibold text-amber-700">🤖 AI বলছে এর উত্তর তার জানা নেই — এখানে হলে ইনবক্সে "আপনি নিজে উত্তর দিন" চিহ্ন থাকত, কিছুই পাঠানো হতো না।</p>
+                <?php else: ?>
+                    <p class="text-xs text-gray-500 mb-1">AI-র উত্তর:</p>
+                    <div class="mk-pre"><?= e($aiTest['text']) ?></div>
+                <?php endif; ?>
+                <p class="text-xs text-gray-500 mt-2">এই ডাকের খরচ: $<?= number_format((float) $aiTest['cost'], 4) ?> (≈ <?= e($bdt((float) $aiTest['cost'])) ?>)</p>
+            </div>
+        <?php endif; ?>
+    </form>
+
+    <?php if ($aiLog): ?>
+    <div class="mk-card">
+        <p class="font-bold text-gray-800 mb-2">🕘 সাম্প্রতিক AI ডাক</p>
+        <div class="grid gap-2">
+        <?php foreach ($aiLog as $l):
+            $ol = ['ok' => ['✅ উত্তর লিখেছে', 'text-green-700'], 'human' => ['🙋 জানত না', 'text-amber-700'], 'refusal' => ['🙋 জানত না', 'text-amber-700'], 'error' => ['❌ সমস্যা', 'text-red-700']][$l['outcome']] ?? [$l['outcome'], 'text-gray-700'];
+            $kl = ['draft' => 'খসড়া', 'auto' => 'নিজে থেকে', 'manual' => 'বোতাম চেপে', 'test' => 'পরীক্ষা'][$l['kind']] ?? $l['kind'];
+        ?>
+            <div class="text-sm" style="border-bottom:1px solid #F3F4F6;padding-bottom:.4rem;overflow-wrap:anywhere">
+                <span class="<?= $ol[1] ?> font-semibold"><?= e($ol[0]) ?></span>
+                <span class="text-gray-500"> · <?= $l['channel'] === 'comment' ? 'কমেন্ট' : 'মেসেজ' ?> · <?= e($kl) ?> · <?= e(date('d M, h:i A', strtotime((string) $l['created_at']))) ?> · $<?= number_format((float) $l['cost_usd'], 4) ?></span>
+                <?php if ($l['error']): ?><div class="text-xs text-red-600"><?= e($l['error']) ?></div><?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+        </div>
+    </div>
+    <?php endif; ?>
+</div>
+<script>
+(function () {
+    var f = document.getElementById('mkAiForm');
+    if (!f) { return; }
+    var orig = {};
+    f.querySelectorAll('select[data-ai-mode]').forEach(function (s) { orig[s.name] = s.value; });
+    f.addEventListener('submit', function (ev) {
+        if (f.dataset.ok === '1') { return; }
+        var turnsAuto = false;
+        f.querySelectorAll('select[data-ai-mode]').forEach(function (s) { if (s.value === 'auto' && orig[s.name] !== 'auto') { turnsAuto = true; } });
+        if (!turnsAuto) { return; }
+        ev.preventDefault();
+        showConfirmModal('"নিজে থেকে পাঠাবে" চালু করলে AI আপনার দেখা ছাড়াই ফেসবুকে উত্তর পাঠাবে। কয়েকদিন খসড়া দেখে সন্তুষ্ট হয়েছেন তো?', function () { f.dataset.ok = '1'; f.submit(); }, 'AI নিজে থেকে পাঠাবে');
+    });
+    var t = document.getElementById('mk-ai-test');
+    if (t) { t.addEventListener('submit', function () { var b = t.querySelector('button[type=submit]'); setTimeout(function () { b.disabled = true; b.textContent = 'লিখছে…'; }, 0); }); }
+})();
+</script>
 
 <?php elseif ($ready): /* ── শেখার প্রস্তাব ── */ ?>
 <div class="grid gap-4" style="max-width:900px">

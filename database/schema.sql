@@ -1150,3 +1150,39 @@ CREATE TABLE IF NOT EXISTS meta_auto_log (
     sent_at   DATETIME     NOT NULL,
     KEY idx_meta_auto (channel, target, sent_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 🤖 ফেসবুক ইনবক্সে AI উত্তর (ধাপ ৩) — migrate-meta-ai.sql
+
+CREATE TABLE IF NOT EXISTS meta_ai_log (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    channel    VARCHAR(8)    NOT NULL,
+    target     VARCHAR(190)  NOT NULL,
+    ref        VARCHAR(190)  NULL,
+    kind       VARCHAR(8)    NOT NULL,
+    model      VARCHAR(60)   NULL,
+    in_tok     INT           NOT NULL DEFAULT 0,
+    out_tok    INT           NOT NULL DEFAULT 0,
+    cache_w    INT           NOT NULL DEFAULT 0,
+    cache_r    INT           NOT NULL DEFAULT 0,
+    cost_usd   DECIMAL(10,6) NOT NULL DEFAULT 0,
+    outcome    VARCHAR(10)   NOT NULL,
+    error      VARCHAR(255)  NULL,
+    created_at DATETIME      NOT NULL,
+    KEY idx_mai_time (created_at),
+    KEY idx_mai_ref (channel, ref),
+    KEY idx_mai_target (channel, target, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS meta_ai_drafts (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    channel     VARCHAR(8)   NOT NULL,
+    target      VARCHAR(190) NOT NULL,
+    ref         VARCHAR(190) NULL,
+    question    TEXT         NULL,
+    draft       TEXT         NULL,
+    needs_human TINYINT      NOT NULL DEFAULT 0,
+    note        VARCHAR(255) NULL,
+    status      VARCHAR(10)  NOT NULL DEFAULT 'new',
+    created_at  DATETIME     NOT NULL,
+    KEY idx_maid (channel, target, status, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
