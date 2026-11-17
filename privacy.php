@@ -126,7 +126,9 @@ require __DIR__ . '/includes/site-header.php';
         <p>আপনার তথ্য (ফেসবুক/মেসেঞ্জার থেকে পাওয়া তথ্যসহ) মুছে ফেলতে চাইলে:</p>
         <ul class="pv-list">
             <li>নিচের যেকোনো মাধ্যমে <strong>"আমার তথ্য মুছে দিন"</strong> লিখে পাঠান, সাথে রেজিস্ট্রেশনের মোবাইল নম্বর (আর ফেসবুকের হলে আপনার ফেসবুক নাম)।</li>
+            <li>অনুরোধ পেলে আমরা একটা <strong>রেফারেন্স নম্বর</strong> (যেমন DEL-0007) জানিয়ে দেব।</li>
             <li>আমরা পরিচয় যাচাই করে <strong>30 দিনের মধ্যে</strong> তথ্য মুছে দিয়ে জানিয়ে দেব।</li>
+            <li>সাইটের স্বয়ংক্রিয় ব্যাকআপে পুরনো কপি থাকলে সেটা সর্বোচ্চ 7 দিনের মধ্যে নিজে থেকেই মুছে যায়।</li>
             <li>আইন বা হিসাবের জন্য যেটুকু রাখা বাধ্যতামূলক (যেমন টাকার লেনদেনের রেকর্ড), শুধু সেটুকু রাখা হতে পারে — সেটাও আমরা জানিয়ে দেব।</li>
             <li>ফেসবুক থেকে আমাদের অ্যাপের অনুমতি সরাতে: Facebook → Settings &amp; privacy → Settings → Apps and websites → আমাদের অ্যাপ → Remove।</li>
         </ul>
@@ -149,7 +151,7 @@ require __DIR__ . '/includes/site-header.php';
         <p><strong>Cookies.</strong> Only essential cookies (login session, "remember me", form security token). No advertising or tracking cookies.</p>
         <p><strong>Retention and security.</strong> Registration, order and payment records are kept as long as needed for accounting and legal purposes. Visitor logs are deleted after about 180 days and login-attempt logs after about 90 days. The site runs entirely over HTTPS, and the admin area is restricted to authorised staff.</p>
         <p><strong>Children.</strong> Our courses are for children, but information is provided by parents or guardians. Children cannot create accounts or submit information themselves.</p>
-        <p><strong>Your rights and data deletion.</strong> You may ask to access, correct or delete your data, including data received from Facebook/Messenger. Send "Please delete my data" with your registered mobile number (and your Facebook name, if relevant) via any channel below. We will verify your identity and delete your data within <strong>30 days</strong>, except records we are legally required to keep (such as payment transactions), and confirm to you. To remove our app's access on Facebook: Settings &amp; privacy → Settings → Apps and websites → select our app → Remove.</p>
+        <p><strong>Your rights and data deletion.</strong> You may ask to access, correct or delete your data, including data received from Facebook/Messenger. Send "Please delete my data" with your registered mobile number (and your Facebook name, if relevant) via any channel below. We will send you a reference number (e.g. DEL-0007), verify your identity and delete your data within <strong>30 days</strong>, except records we are legally required to keep (such as payment transactions), and confirm to you. Copies in automatic backups are removed within 7 days. To remove our app's access on Facebook: Settings &amp; privacy → Settings → Apps and websites → select our app → Remove.</p>
         <p><strong>Contact.</strong></p>
         <?= $pvContact(true) ?>
     </div>

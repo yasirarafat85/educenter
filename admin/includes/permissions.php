@@ -128,7 +128,7 @@ function admin_super_only_pages(): array
     // 🔴 backup.php (অডিট S7, ২০২৬-১১-১৩): ব্যাকআপ ফাইলে কুরিয়ার/গুগল/SMS-এর গোপন চাবি
     //    (settings টেবিল) আর "পুরো সাইট" জিপে config.php (DB পাসওয়ার্ড) থাকে — তাই এটা আর
     //    মডারেটরকে দেওয়া যায় না। আগে দেওয়া `backup` অনুমতি থাকলেও এখন কাজ করে না।
-    return ['team.php', 'backup.php'];
+    return ['team.php', 'backup.php', 'data-requests.php'];
 }
 
 // প্রতি সেকশনে যে ৩ ধরনের ক্ষমতা: দেখা / এডিট (যোগ+পরিবর্তন) / ডিলিট

@@ -137,5 +137,6 @@ function sc_file_notes(): array
         'migrate-moderator-group-track.sql'      => 'মডারেটর গ্রুপ-টিক দিলে কে/কখন দিল সারিতে দেখানো',
         'migrate-student-reports.sql'            => 'শিক্ষার্থীর রিপোর্ট কার্ড / ফলাফল — অ্যাডমিন PDF আপলোড, অভিভাবক লগইন করে দেখা',
         'migrate-contact-messages.sql'           => 'যোগাযোগ বার্তা (Get in touch) — ভিজিটর সাইট থেকে লিখে পাঠানো বার্তা',
+        'migrate-data-deletion.sql'              => 'তথ্য মুছে ফেলার অনুরোধ — অনুরোধের রেকর্ড, রেফারেন্স নম্বর ও মোছার প্রমাণ',
     ];
 }

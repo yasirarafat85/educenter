@@ -204,6 +204,9 @@ function admin_nav_groups(): array
     if (admin_is_super()) { // 🔴 ব্যাকআপ শুধু মূল অ্যাডমিন (অডিট S7)
         $settings[] = ['key' => 'backup', 'href' => 'backup.php', 'file' => 'backup.php', 'icon' => 'hard-drive-download', 'label' => 'ব্যাকআপ ও ডাউনলোড'];
     }
+    if (admin_is_super()) { // 🔴 তথ্য মুছে ফেলা ফেরানো যায় না — শুধু মূল অ্যাডমিন
+        $settings[] = ['key' => 'data-requests', 'href' => 'data-requests.php', 'file' => 'data-requests.php', 'icon' => 'user-x', 'label' => 'তথ্য মুছে ফেলার অনুরোধ'];
+    }
     if (admin_can('archive')) {
         $settings[] = ['key' => 'archive', 'href' => 'archive.php', 'file' => 'archive.php', 'icon' => 'archive', 'label' => 'আর্কাইভ (রিস্টোর)'];
     }
