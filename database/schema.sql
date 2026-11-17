@@ -1136,6 +1136,7 @@ CREATE TABLE IF NOT EXISTS meta_rules (
     hits         INT          NOT NULL DEFAULT 0,
     last_hit_at  DATETIME     NULL,
     created_at   DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    image_id     INT          NULL,
     KEY idx_meta_rules (is_active, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -1184,5 +1185,20 @@ CREATE TABLE IF NOT EXISTS meta_ai_drafts (
     note        VARCHAR(255) NULL,
     status      VARCHAR(10)  NOT NULL DEFAULT 'new',
     created_at  DATETIME     NOT NULL,
+    image_id    INT          NULL,
     KEY idx_maid (channel, target, status, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 🖼️ ছবির সংগ্রহ — migrate-meta-images.sql
+CREATE TABLE IF NOT EXISTS meta_images (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    title       VARCHAR(190) NOT NULL,
+    when_text   TEXT         NULL,
+    file_path   VARCHAR(255) NOT NULL,
+    is_active   TINYINT      NOT NULL DEFAULT 1,
+    sort_order  INT          NOT NULL DEFAULT 0,
+    uses        INT          NOT NULL DEFAULT 0,
+    created_by  VARCHAR(100) NULL,
+    created_at  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_meta_images (is_active, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

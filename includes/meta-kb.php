@@ -236,7 +236,9 @@ function mkb_suggest(PDO $db, string $text, string $channel, ?string $name = nul
     $vars = mkb_vars($db, $name);
     $rule = mkb_rule_pick(mkb_rules($db), $text, $channel);
     if ($rule) {
-        $out[] = ['from' => 'rule', 'label' => '⚡ নির্দিষ্ট শব্দ: ' . meta_snippet((string) $rule['keywords'], 40), 'text' => mkb_fill((string) $rule['reply'], $vars)];
+        $img = mkb_rule_image($db, $rule);
+        $out[] = ['from' => 'rule', 'label' => '⚡ নির্দিষ্ট শব্দ: ' . meta_snippet((string) $rule['keywords'], 40), 'text' => mkb_fill((string) $rule['reply'], $vars),
+                  'image_id' => $img ? (int) $img['id'] : 0];
     }
     $q = mkb_tokens($text);
     if ($q) {
@@ -292,6 +294,13 @@ function mkb_auto_message_allowed(PDO $db, int $contactId, string $psid, int $ru
  * ওয়েবহুকে এইমাত্র আসা মেসেজ/কমেন্টে অটো-উত্তর। $items = meta_ingest()-এর 'fresh'।
  * ফেরত: পাঠানো উত্তরের সংখ্যা। 🔴 সুইচ বন্ধ বা নিয়ম "অটো" না হলে কিছুই পাঠায় না।
  */
+/** নিয়মের সাথে জোড়া ছবি (চালু থাকলে), নাহলে null */
+function mkb_rule_image(PDO $db, array $rule): ?array
+{
+    $id = (int) ($rule['image_id'] ?? 0);
+    return $id > 0 && function_exists('mimg_get') ? mimg_get($db, $id) : null;
+}
+
 function mkb_auto_respond(PDO $db, array $items): int
 {
     if (!$items || !mkb_auto_on() || !meta_configured() || !mkb_ready($db)) { return 0; }
@@ -310,9 +319,12 @@ function mkb_auto_respond(PDO $db, array $items): int
                 $contact = $st->fetch();
                 if (!$contact || !mkb_auto_message_allowed($db, (int) $contact['id'], (string) $contact['psid'], (int) $rule['id'])) { continue; }
                 $reply = mkb_fill((string) $rule['reply'], mkb_vars($db, $contact['name'] ?? null));
-                $r = meta_send_message($db, $contact, $reply, '🤖 অটো', 'auto');
-                mkb_log($db, (int) $rule['id'], 'message', (string) $contact['psid'], $r['ok'], $r['error']);
-                if ($r['ok']) { $sent++; }
+                $img = mkb_rule_image($db, $rule);
+                $r = meta_send_reply($db, $contact, $reply, $img ? mimg_url((string) $img['file_path']) : '', '🤖 অটো', 'auto');
+                // লেখা চলে গেলে সফল ধরা হয় (ছবি না গেলেও) — নাহলে একই উত্তর আবার যেত
+                mkb_log($db, (int) $rule['id'], 'message', (string) $contact['psid'], $r['ok'] || $r['text_ok'], $r['error']);
+                if ($img && $r['ok']) { mimg_used($db, (int) $img['id']); }
+                if ($r['ok'] || $r['text_ok']) { $sent++; }
             } elseif (($it['type'] ?? '') === 'comment') {
                 $rule = mkb_rule_pick($rules, $text, 'comment', 'auto');
                 if (!$rule) { continue; }
@@ -325,7 +337,9 @@ function mkb_auto_respond(PDO $db, array $items): int
                 $cm = $st->fetch();
                 if (!$cm) { continue; }
                 $reply = mkb_fill((string) $rule['reply'], mkb_vars($db, $cm['from_name'] ?? null));
-                $r = meta_reply_comment($db, $cm, $reply, '🤖 অটো', 'auto');
+                $img = mkb_rule_image($db, $rule);
+                $r = meta_reply_comment($db, $cm, $reply, '🤖 অটো', 'auto', $img ? mimg_url((string) $img['file_path']) : '');
+                if ($img && $r['ok']) { mimg_used($db, (int) $img['id']); }
                 mkb_log($db, (int) $rule['id'], 'comment', $cid, $r['ok'], $r['error']);
                 if ($r['ok']) { $sent++; }
             }

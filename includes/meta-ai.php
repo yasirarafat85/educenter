@@ -188,14 +188,15 @@ function mai_parse_reply(string $raw): array
 {
     $t = trim(str_replace("\r\n", "\n", $raw));
     if ($t === '' || stripos($t, MAI_HUMAN_TAG) !== false) {
-        return ['text' => '', 'human' => true];
+        return ['text' => '', 'human' => true, 'image_id' => 0];
     }
     $t = trim(str_replace([MAI_READY_START, MAI_READY_END], '', $t));
+    [$t, $img] = mimg_parse_tag($t);
     // মেসেঞ্জারে মার্কডাউন দেখায় না — **মোটা** / # শিরোনাম চিহ্ন ছাঁটা
     $t = preg_replace('/\*\*(.+?)\*\*/u', '$1', $t);
     $t = preg_replace('/^#{1,6}\s+/mu', '', $t);
     if (mb_strlen($t) > 1990) { $t = mb_substr($t, 0, 1990); }
-    return ['text' => trim($t), 'human' => false];
+    return ['text' => trim($t), 'human' => false, 'image_id' => $img];
 }
 
 /** কথোপকথনের সারি → API-র messages (একই দিকের পরপর মেসেজ জোড়া, শুরু ও শেষ অভিভাবকের) */
@@ -455,6 +456,8 @@ function mai_stable_prompt(PDO $db): string
     }
     if ($docs) { $parts[] = "জ্ঞানভান্ডার — ডকুমেন্ট (প্রতিষ্ঠানের নিজের লেখা কোর্সের তথ্য ও নিয়ম):\n\n" . implode("\n\n", $docs); }
     if ($plan['qa']) { $parts[] = "জ্ঞানভান্ডার — আগের প্রশ্নোত্তর (একই ধরনের প্রশ্নে এভাবেই উত্তর দিন):\n\n" . implode("\n\n", $plan['qa']); }
+    $imgs = mimg_prompt_text($db);
+    if ($imgs !== '') { $parts[] = $imgs; }
     return implode("\n\n---\n\n", $parts);
 }
 
@@ -647,25 +650,28 @@ function mai_log(PDO $db, string $channel, string $target, string $ref, string $
  */
 function mai_generate(PDO $db, array $messages, string $channel, string $target, string $ref, string $kind): array
 {
-    if (!mai_ready($db)) { return ['ok' => false, 'text' => '', 'human' => false, 'error' => 'আগে database/migrate-meta-ai.sql চালাতে হবে।', 'cost' => 0]; }
-    if (!$messages) { return ['ok' => false, 'text' => '', 'human' => false, 'error' => 'উত্তর দেওয়ার মতো কোনো প্রশ্ন পাওয়া যায়নি।', 'cost' => 0]; }
+    if (!mai_ready($db)) { return ['ok' => false, 'text' => '', 'human' => false, 'image_id' => 0, 'error' => 'আগে database/migrate-meta-ai.sql চালাতে হবে।', 'cost' => 0]; }
+    if (!$messages) { return ['ok' => false, 'text' => '', 'human' => false, 'image_id' => 0, 'error' => 'উত্তর দেওয়ার মতো কোনো প্রশ্ন পাওয়া যায়নি।', 'cost' => 0]; }
     if (mai_cap_reached($db)) {
-        return ['ok' => false, 'text' => '', 'human' => false, 'error' => 'এই মাসের AI খরচের সীমা শেষ — উত্তর-ভান্ডার → 🤖 AI ট্যাবে সীমা বাড়াতে পারেন।', 'cost' => 0];
+        return ['ok' => false, 'text' => '', 'human' => false, 'image_id' => 0, 'error' => 'এই মাসের AI খরচের সীমা শেষ — উত্তর-ভান্ডার → 🤖 AI ট্যাবে সীমা বাড়াতে পারেন।', 'cost' => 0];
     }
     $r = mai_call($db, $messages, $channel);
     $model = isset(mai_models()[$r['model']]) ? $r['model'] : mai_cfg()['model'];
     $cost = mai_cost($model, $r['usage']);
     if (!$r['ok']) {
         mai_log($db, $channel, $target, $ref, $kind, $r, 'error');
-        return ['ok' => false, 'text' => '', 'human' => false, 'error' => $r['error'], 'cost' => $cost];
+        return ['ok' => false, 'text' => '', 'human' => false, 'image_id' => 0, 'error' => $r['error'], 'cost' => $cost];
     }
     if ($r['stop'] === 'refusal') {
         mai_log($db, $channel, $target, $ref, $kind, $r, 'refusal');
-        return ['ok' => true, 'text' => '', 'human' => true, 'error' => '', 'cost' => $cost];
+        return ['ok' => true, 'text' => '', 'human' => true, 'image_id' => 0, 'error' => '', 'cost' => $cost];
     }
     $p = mai_parse_reply($r['text']);
+    // 🔴 শুধু সংগ্রহে সত্যিই থাকা চালু ছবি — AI ভুল নম্বর লিখলে বাদ
+    $img = $p['image_id'] > 0 && mimg_get($db, (int) $p['image_id']) ? (int) $p['image_id'] : 0;
+    if (!$p['human'] && $p['text'] === '' && !$img) { $p['human'] = true; }
     mai_log($db, $channel, $target, $ref, $kind, $r, $p['human'] ? 'human' : 'ok');
-    return ['ok' => true, 'text' => $p['text'], 'human' => $p['human'], 'error' => '', 'cost' => $cost];
+    return ['ok' => true, 'text' => $p['text'], 'human' => $p['human'], 'image_id' => $p['human'] ? 0 : $img, 'error' => '', 'cost' => $cost];
 }
 
 /* ───────────────────────── প্রশ্ন তৈরি ───────────────────────── */
@@ -700,15 +706,20 @@ function mai_comment_input(PDO $db, array $cm): array
 
 /* ───────────────────────── খসড়া ───────────────────────── */
 
-function mai_save_draft(PDO $db, string $channel, string $target, string $ref, string $question, string $draft, bool $human, string $note = ''): void
+function mai_save_draft(PDO $db, string $channel, string $target, string $ref, string $question, string $draft, bool $human, string $note = '', int $imageId = 0): void
 {
     try {
         $db->prepare("UPDATE meta_ai_drafts SET status = 'old' WHERE channel = :c AND target = :t AND status = 'new'")
            ->execute(['c' => $channel, 't' => $target]);
+        $p = ['c' => $channel, 't' => mb_substr($target, 0, 190), 'r' => mb_substr($ref, 0, 190), 'q' => mb_substr($question, 0, 2000),
+              'd' => $draft, 'h' => $human ? 1 : 0, 'n' => $note !== '' ? mb_substr($note, 0, 250) : null, 'at' => date('Y-m-d H:i:s')];
+        if ($imageId > 0 && mimg_col($db, 'meta_ai_drafts')) {
+            $db->prepare("INSERT INTO meta_ai_drafts (channel, target, ref, question, draft, needs_human, note, status, created_at, image_id)
+                          VALUES (:c, :t, :r, :q, :d, :h, :n, 'new', :at, :img)")->execute($p + ['img' => $imageId]);
+            return;
+        }
         $db->prepare("INSERT INTO meta_ai_drafts (channel, target, ref, question, draft, needs_human, note, status, created_at)
-                      VALUES (:c, :t, :r, :q, :d, :h, :n, 'new', :at)")
-           ->execute(['c' => $channel, 't' => mb_substr($target, 0, 190), 'r' => mb_substr($ref, 0, 190), 'q' => mb_substr($question, 0, 2000),
-                      'd' => $draft, 'h' => $human ? 1 : 0, 'n' => $note !== '' ? mb_substr($note, 0, 250) : null, 'at' => date('Y-m-d H:i:s')]);
+                      VALUES (:c, :t, :r, :q, :d, :h, :n, 'new', :at)")->execute($p);
     } catch (Throwable $e) {
         error_log('mai draft: ' . $e->getMessage());
     }
@@ -861,12 +872,14 @@ function mai_handle_fresh(PDO $db, array $items): array
                 $calls++;
                 $g = mai_generate($db, $in['messages'], 'comment', $cid, $in['ref'], $mode === 'auto' ? 'auto' : 'draft');
                 if (!$g['ok']) { continue; }
+                $gImg = (int) ($g['image_id'] ?? 0);
                 if ($mode === 'auto' && !$g['human'] && meta_configured()) {
-                    $r = meta_reply_comment($db, $cm, $g['text'], '🤖 AI', 'ai');
-                    if ($r['ok']) { $out['sent']++; continue; }
-                    mai_save_draft($db, 'comment', $cid, $in['ref'], $in['question'], $g['text'], false, 'নিজে পাঠানো যায়নি: ' . $r['error']);
+                    $im = $gImg ? mimg_get($db, $gImg) : null;
+                    $r = meta_reply_comment($db, $cm, $g['text'], '🤖 AI', 'ai', $im ? mimg_url((string) $im['file_path']) : '');
+                    if ($r['ok']) { if ($im) { mimg_used($db, $gImg); } $out['sent']++; continue; }
+                    mai_save_draft($db, 'comment', $cid, $in['ref'], $in['question'], $g['text'], false, 'নিজে পাঠানো যায়নি: ' . $r['error'], $gImg);
                 } else {
-                    mai_save_draft($db, 'comment', $cid, $in['ref'], $in['question'], $g['text'], $g['human']);
+                    mai_save_draft($db, 'comment', $cid, $in['ref'], $in['question'], $g['text'], $g['human'], '', $gImg);
                 }
                 $out['drafts']++;
             } else {
@@ -895,16 +908,19 @@ function mai_handle_fresh(PDO $db, array $items): array
                 $g = mai_generate($db, $in['messages'], 'message', $psid, $in['ref'], $mode === 'auto' ? 'auto' : 'draft');
                 if (!$g['ok']) { continue; }
                 $note = '';
+                $gImg = (int) ($g['image_id'] ?? 0);
                 if ($mode === 'auto' && !$g['human'] && meta_configured()) {
                     $why = mai_auto_block_message($db, $contact);
                     if ($why === '') {
-                        $r = meta_send_message($db, $contact, $g['text'], '🤖 AI', 'ai');
-                        if ($r['ok']) { $out['sent']++; continue; }
+                        $im = $gImg ? mimg_get($db, $gImg) : null;
+                        $r = meta_send_reply($db, $contact, $g['text'], $im ? mimg_url((string) $im['file_path']) : '', '🤖 AI', 'ai');
+                        if ($r['ok']) { if ($im) { mimg_used($db, $gImg); } $out['sent']++; continue; }
+                        if ($r['text_ok']) { $out['sent']++; continue; } // লেখা গেছে, ছবি যায়নি — একই উত্তর আবার খসড়া নয়
                         $why = 'নিজে পাঠানো যায়নি: ' . $r['error'];
                     }
                     $note = $why;
                 }
-                mai_save_draft($db, 'message', $psid, $in['ref'], $in['question'], $g['text'], $g['human'], $note);
+                mai_save_draft($db, 'message', $psid, $in['ref'], $in['question'], $g['text'], $g['human'], $note, $gImg);
                 $out['drafts']++;
             }
         } catch (Throwable $e) {

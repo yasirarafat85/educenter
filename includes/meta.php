@@ -12,6 +12,7 @@
  * ════════════════════════════════════════════════════════════════════════════ */
 
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/meta-media.php';
 
 const META_DEFAULT_VERSION = 'v24.0';
 // মেটার নিয়ম: অভিভাবকের শেষ মেসেজের পর ২৪ ঘণ্টার মধ্যেই সাধারণ উত্তর পাঠানো যায়
@@ -363,13 +364,59 @@ function meta_send_message(PDO $db, array $contact, string $text, string $by, st
     return ['ok' => true, 'error' => ''];
 }
 
-/** কমেন্টের নিচে পাবলিক উত্তর। ফেরত: ['ok', 'error'] */
-function meta_reply_comment(PDO $db, array $comment, string $text, string $by, string $source = 'admin'): array
+/**
+ * মেসেঞ্জারে একটা ছবি (লেখা থেকে আলাদা মেসেজ — মেসেঞ্জারে লেখা আর ছবি একসাথে যায় না)।
+ * $url = ফেসবুক যেখান থেকে ছবিটা তুলবে (সাইটের পাবলিক https ঠিকানা)। ফেরত: ['ok', 'error']
+ */
+function meta_send_image(PDO $db, array $contact, string $url, string $by, string $source = 'admin'): array
+{
+    if ($url === '') { return ['ok' => false, 'error' => 'ছবির ঠিকানা খালি।']; }
+    if (!meta_window_open($contact['last_in_at'] ?? null)) {
+        return ['ok' => false, 'error' => 'অভিভাবকের শেষ মেসেজের পর ২৪ ঘণ্টা পেরিয়ে গেছে — মেটার নিয়মে এখন আর ছবি পাঠানো যায় না।'];
+    }
+    $c = meta_cfg();
+    $att = ['type' => 'image', 'payload' => ['url' => $url, 'is_reusable' => true]];
+    $r = meta_graph('POST', $c['page_id'] . '/messages', [], [
+        'recipient'      => ['id' => (string) $contact['psid']],
+        'messaging_type' => 'RESPONSE',
+        'message'        => ['attachment' => $att],
+    ]);
+    if (!$r['ok']) { return ['ok' => false, 'error' => 'ফেসবুক ছবিটা পাঠাতে দেয়নি: ' . $r['error']]; }
+    $mid = (string) ($r['data']['message_id'] ?? '');
+    if (!meta_store_message($db, (string) $contact['psid'], 'out', $mid !== '' ? $mid : null, '', [['type' => 'image', 'payload' => ['url' => $url]]], $source, date('Y-m-d H:i:s'), $by)
+        && $mid !== '') {
+        $db->prepare('UPDATE meta_messages SET source = :s, sent_by = :b WHERE mid = :m')->execute(['s' => $source, 'b' => $by, 'm' => $mid]);
+    }
+    return ['ok' => true, 'error' => ''];
+}
+
+/** লেখা (থাকলে) তারপর ছবি (থাকলে) — তিন পথ (ইনবক্স/নিয়ম/AI) এই একটাই ফাংশন ডাকে। ফেরত: ['ok', 'error', 'text_ok'] */
+function meta_send_reply(PDO $db, array $contact, string $text, string $imageUrl, string $by, string $source = 'admin'): array
 {
     $text = trim($text);
-    if ($text === '') { return ['ok' => false, 'error' => 'উত্তর লেখা খালি।']; }
+    if ($text === '' && $imageUrl === '') { return ['ok' => false, 'error' => 'লেখা বা ছবি — অন্তত একটা দিন।', 'text_ok' => false]; }
+    if ($text !== '') {
+        $r = meta_send_message($db, $contact, $text, $by, $source);
+        if (!$r['ok']) { return $r + ['text_ok' => false]; }
+    }
+    if ($imageUrl !== '') {
+        $r = meta_send_image($db, $contact, $imageUrl, $by, $source);
+        if (!$r['ok']) {
+            return ['ok' => false, 'text_ok' => $text !== '', 'error' => ($text !== '' ? 'লেখা চলে গেছে, কিন্তু ছবি যায়নি — ' : '') . $r['error']];
+        }
+    }
+    return ['ok' => true, 'error' => '', 'text_ok' => $text !== ''];
+}
+
+/** কমেন্টের নিচে পাবলিক উত্তর (চাইলে একটা ছবিসহ)। ফেরত: ['ok', 'error'] */
+function meta_reply_comment(PDO $db, array $comment, string $text, string $by, string $source = 'admin', string $imageUrl = ''): array
+{
+    $text = trim($text);
+    if ($text === '' && $imageUrl === '') { return ['ok' => false, 'error' => 'উত্তর লেখা খালি।']; }
     if (mb_strlen($text) > 2000) { return ['ok' => false, 'error' => 'উত্তর ২০০০ অক্ষরের বেশি হতে পারবে না।']; }
-    $r = meta_graph('POST', (string) $comment['comment_id'] . '/comments', [], ['message' => $text]);
+    $body = $text !== '' ? ['message' => $text] : [];
+    if ($imageUrl !== '') { $body['attachment_url'] = $imageUrl; }
+    $r = meta_graph('POST', (string) $comment['comment_id'] . '/comments', [], $body);
     if (!$r['ok']) { return ['ok' => false, 'error' => 'ফেসবুক উত্তর বসাতে দেয়নি: ' . $r['error']]; }
     $c = meta_cfg();
     $newId = (string) ($r['data']['id'] ?? '');
@@ -378,7 +425,7 @@ function meta_reply_comment(PDO $db, array $comment, string $text, string $by, s
         if (!meta_store_comment($db, [
             'comment_id' => $newId, 'post_id' => (string) ($comment['post_id'] ?? ''),
             'parent_id' => (string) $comment['comment_id'], 'from_id' => $c['page_id'], 'from_name' => '',
-            'message' => $text, 'at' => $now,
+            'message' => $text !== '' ? $text : '🖼️ ছবি', 'at' => $now,
         ], $source, $c['page_id'], $by)) {
             // ওয়েবহুক আগে পৌঁছে গেছে — কে পাঠাল সেটা ঠিক করে দেওয়া
             $db->prepare('UPDATE meta_comments SET source = :s, sent_by = :b WHERE comment_id = :c')->execute(['s' => $source, 'b' => $by, 'c' => $newId]);

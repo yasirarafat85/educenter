@@ -10,13 +10,14 @@
  * ════════════════════════════════════════════════════════════════════════════ */
 require_once __DIR__ . '/includes/auth.php';
 admin_require_login();
+require_once __DIR__ . '/includes/form-helpers.php'; // admin_image_src()
 require_once __DIR__ . '/../includes/meta-ai.php'; // meta-kb.php-ও এর ভেতরে
 
 $db = get_db();
 $pageTitle = 'ফেসবুক উত্তর-ভান্ডার';
 $me = (string) ($_SESSION['admin_username'] ?? '');
 $ready = mkb_ready($db);
-$tab = in_array($_GET['tab'] ?? '', ['rules', 'kb', 'learn', 'ai', 'report'], true) ? $_GET['tab'] : 'rules';
+$tab = in_array($_GET['tab'] ?? '', ['rules', 'kb', 'images', 'learn', 'ai', 'report'], true) ? $_GET['tab'] : 'rules';
 $action = (string) ($_GET['action'] ?? '');
 
 function mk_back(string $tab, array $extra = []): string
@@ -63,6 +64,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
             $db->prepare('INSERT INTO meta_rules (keywords, reply, channel, mode, is_active, sort_order) VALUES (:k, :r, :c, :m, :a, :s)')->execute($p);
             $id = (int) $db->lastInsertId();
         }
+        if (mimg_col($db, 'meta_rules')) {
+            // 🔴 শুধু সংগ্রহে সত্যিই থাকা ছবি (POST-এর নম্বরে ভরসা নয়)
+            $iid = (int) ($_POST['image_id'] ?? 0);
+            $db->prepare('UPDATE meta_rules SET image_id = :i WHERE id = :id')
+               ->execute(['i' => $iid > 0 && mimg_get($db, $iid, false) ? $iid : null, 'id' => $id]);
+        }
         set_flash('success', '✅ নিয়ম সংরক্ষণ হয়েছে।' . ($mode === 'auto' && !mkb_auto_on() ? ' (অটো-উত্তরের সুইচ এখন বন্ধ — তাই এটাও আপাতত শুধু প্রস্তাব দেখাবে।)' : ''));
         redirect(mk_back('rules') . '#rule-' . $id);
     }
@@ -73,9 +80,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         redirect(mk_back('rules') . '#rule-' . $id);
     }
 
-    // ── মোছা (নিয়ম / ভান্ডারের লেখা) ──
+    // ── 🖼️ সংগ্রহে ছবি রাখা / বদলানো ──
+    if ($action === 'img-save') {
+        if (!mimg_ready($db)) { set_flash('error', 'আগে database/migrate-meta-images.sql চালাতে হবে।'); redirect(mk_back('images')); }
+        $id = (int) ($_POST['id'] ?? 0);
+        $title = mb_substr(trim((string) ($_POST['title'] ?? '')), 0, 190);
+        $when = mb_substr(trim(str_replace("\r\n", "\n", (string) ($_POST['when_text'] ?? ''))), 0, 1000);
+        $act = !empty($_POST['is_active']) ? 1 : 0;
+        $sort = max(0, min(9999, (int) ($_POST['sort_order'] ?? 0)));
+        $old = $id ? mimg_get($db, $id, false) : null;
+        if ($id && !$old) { redirect(mk_back('images')); }
+        $hasFile = isset($_FILES['image_file']) && (int) ($_FILES['image_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+        if ($title === '' || (!$id && !$hasFile)) {
+            set_flash('error', 'ছবির নাম আর ছবি দুটোই লাগবে।');
+            redirect(mk_back('images', array_filter(['edit' => $id ?: null])) . '#mk-form');
+        }
+        $path = (string) ($old['file_path'] ?? '');
+        if ($hasFile) {
+            try { $path = mimg_save_upload('image_file'); }
+            catch (Throwable $e) { set_flash('error', '🖼️ ' . $e->getMessage()); redirect(mk_back('images', array_filter(['edit' => $id ?: null])) . '#mk-form'); }
+        }
+        $p = ['t' => $title, 'w' => $when !== '' ? $when : null, 'f' => $path, 'a' => $act, 's' => $sort];
+        if ($id) {
+            $db->prepare('UPDATE meta_images SET title = :t, when_text = :w, file_path = :f, is_active = :a, sort_order = :s WHERE id = :id')->execute($p + ['id' => $id]);
+            if ($hasFile && $old && (string) $old['file_path'] !== $path) { mimg_delete_file((string) $old['file_path']); }
+        } else {
+            $db->prepare('INSERT INTO meta_images (title, when_text, file_path, is_active, sort_order, created_by) VALUES (:t, :w, :f, :a, :s, :b)')->execute($p + ['b' => $me]);
+            $id = (int) $db->lastInsertId();
+        }
+        set_flash('success', '✅ ছবি সংগ্রহে রাখা হলো — নিয়মে জুড়তে পারবেন, AI-ও দরকার হলে বেছে নেবে।');
+        redirect(mk_back('images') . '#img-' . $id);
+    }
+
+    // ── মোছা (নিয়ম / ভান্ডারের লেখা / ছবি) ──
     if ($action === 'delete') {
         $id = (int) ($_POST['id'] ?? 0);
+        if (($_POST['what'] ?? '') === 'image') {
+            $im = mimg_ready($db) ? mimg_get($db, $id, false) : null;
+            if ($im) {
+                $db->prepare('DELETE FROM meta_images WHERE id = :id')->execute(['id' => $id]);
+                if (mimg_col($db, 'meta_rules')) { $db->prepare('UPDATE meta_rules SET image_id = NULL WHERE image_id = :id')->execute(['id' => $id]); }
+                mimg_delete_file((string) $im['file_path']);
+                set_flash('success', 'ছবিটা মুছে ফেলা হলো (যে নিয়মে জোড়া ছিল, সেখান থেকেও সরানো হলো)।');
+            }
+            redirect(mk_back('images'));
+        }
+
         if (($_POST['what'] ?? '') === 'rule') {
             $db->prepare('DELETE FROM meta_rules WHERE id = :id')->execute(['id' => $id]);
             set_flash('success', 'নিয়মটা মুছে ফেলা হলো।');
@@ -261,7 +311,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
 
 /* ─────────────────────────── দেখানোর ডেটা ─────────────────────────── */
 $kbPlan = null; $siteChars = 0; $seeds = [];
-$rules = []; $kbRows = []; $proposals = []; $editRow = null; $testOut = null;
+$rules = []; $kbRows = []; $proposals = []; $images = []; $editRow = null; $testOut = null;
 $counts = ['rules' => 0, 'qa' => 0, 'doc' => 0, 'learn' => 0];
 $kind = ($_GET['kind'] ?? '') === 'doc' ? 'doc' : 'qa';
 $q = trim((string) ($_GET['q'] ?? ''));
@@ -302,6 +352,10 @@ if ($ready) {
                 $st->execute(['id' => $eid, 'k' => $kind]);
                 $editRow = $st->fetch() ?: null;
             }
+        } elseif ($tab === 'images') {
+            $images = mimg_all($db, false, true);
+            $eid = (int) ($_GET['edit'] ?? 0);
+            if ($eid && isset($images[$eid])) { $editRow = $images[$eid]; }
         } elseif ($tab === 'learn') {
             $proposals = $db->query("SELECT * FROM meta_kb WHERE status = 'proposed' ORDER BY id DESC LIMIT 50")->fetchAll();
         }
@@ -358,6 +412,7 @@ require __DIR__ . '/includes/layout-top.php';
     <a href="meta-inbox.php" class="mk-tab">← ইনবক্স</a>
     <a href="<?= e(mk_back('rules')) ?>" class="mk-tab <?= $tab === 'rules' ? 'on' : '' ?>">⚡ নির্দিষ্ট শব্দে উত্তর <span class="text-xs" style="opacity:.75">(<?= $counts['rules'] ?>)</span></a>
     <a href="<?= e(mk_back('kb')) ?>" class="mk-tab <?= $tab === 'kb' ? 'on' : '' ?>">📚 জ্ঞানভান্ডার <span class="text-xs" style="opacity:.75">(<?= $counts['qa'] + $counts['doc'] ?>)</span></a>
+    <a href="<?= e(mk_back('images')) ?>" class="mk-tab <?= $tab === 'images' ? 'on' : '' ?>">🖼️ ছবি <span class="text-xs" style="opacity:.75">(<?= count(mimg_all($db, false)) ?>)</span></a>
     <a href="<?= e(mk_back('learn')) ?>" class="mk-tab <?= $tab === 'learn' ? 'on' : '' ?>">💡 শেখার প্রস্তাব <?php if ($counts['learn']): ?><span class="mk-badge"><?= $counts['learn'] ?></span><?php endif; ?></a>
     <a href="<?= e(mk_back('ai')) ?>" class="mk-tab <?= $tab === 'ai' ? 'on' : '' ?>">🤖 AI <?= $aiReady && mai_has_key() ? '' : '<span class="text-xs" style="opacity:.75">(বন্ধ)</span>' ?></a>
     <a href="<?= e(mk_back('report')) ?>" class="mk-tab <?= $tab === 'report' ? 'on' : '' ?>">📊 রিপোর্ট</a>
@@ -423,6 +478,10 @@ require __DIR__ . '/includes/layout-top.php';
         <div class="grid sm:grid-cols-2" style="column-gap:1rem">
             <div><label>কোথায়?</label><select name="channel"><?php foreach (mk_channels() as $k => $lb): ?><option value="<?= $k ?>" <?= ($fr['channel'] ?? '') === $k ? 'selected' : '' ?>><?= e($lb) ?></option><?php endforeach; ?></select></div>
             <div><label>কীভাবে?</label><select name="mode"><?php foreach (mk_modes() as $k => $lb): ?><option value="<?= $k ?>" <?= ($fr['mode'] ?? '') === $k ? 'selected' : '' ?>><?= e($lb) ?></option><?php endforeach; ?></select></div>
+            <?php if (mimg_col($db, 'meta_rules')): ?>
+            <div class="sm:col-span-2"><label>সাথে একটা ছবি (ঐচ্ছিক)</label><select name="image_id"><option value="0">— ছবি নেই —</option><?php foreach (mimg_all($db, false) as $iid => $im): ?><option value="<?= (int) $iid ?>" <?= (int) ($fr['image_id'] ?? 0) === (int) $iid ? 'selected' : '' ?>><?= e((string) $im['title']) ?><?= $im['is_active'] ? '' : ' (বন্ধ)' ?></option><?php endforeach; ?></select>
+                <p class="mk-hint">লেখার পরে ছবিটাও যাবে। নতুন ছবি আগে <a href="<?= e(mk_back('images')) ?>" class="text-indigo-600 font-semibold">🖼️ ছবি</a> ট্যাবে রাখুন।</p></div>
+            <?php endif; ?>
             <div><label>ক্রম (ছোট সংখ্যা আগে দেখা হয়)</label><input type="number" name="sort_order" min="0" max="9999" value="<?= (int) ($fr['sort_order'] ?? 0) ?>"></div>
             <div><label>&nbsp;</label><label style="font-weight:600;display:flex;gap:.5rem;align-items:center;margin:0"><input type="checkbox" name="is_active" value="1" <?= !empty($fr['is_active']) ? 'checked' : '' ?>> চালু</label></div>
         </div>
@@ -451,6 +510,7 @@ require __DIR__ . '/includes/layout-top.php';
                 <span class="text-xs font-semibold px-2 py-1 rounded <?= $r['mode'] === 'auto' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800' ?>"><?= $r['mode'] === 'auto' ? '🤖 অটো' : '💡 প্রস্তাব' ?></span>
             </div>
             <div class="mk-pre mt-2"><?= e(meta_snippet((string) $r['reply'], 300)) ?></div>
+            <?php $rim = mkb_rule_image($db, $r); if ($rim): ?><p class="text-xs font-semibold mt-1" style="color:#047857">🖼️ সাথে ছবি: <?= e((string) $rim['title']) ?></p><?php endif; ?>
             <p class="text-xs text-gray-500 mt-2"><?= e(mk_channels()[$r['channel']] ?? '') ?> · ক্রম <?= (int) $r['sort_order'] ?> · অটো-উত্তর গেছে <?= (int) $r['hits'] ?> বার<?= !$r['is_active'] ? ' · ⏸️ বন্ধ' : '' ?></p>
             <div class="mk-row mt-2">
                 <a href="<?= e(mk_back('rules', ['edit' => $r['id']])) ?>#mk-form" class="mk-btn bg-indigo-50 text-indigo-700">✏️ বদলান</a>
@@ -598,6 +658,61 @@ require __DIR__ . '/includes/layout-top.php';
             </div>
         </div>
     <?php endforeach; ?>
+</div>
+
+<?php elseif ($ready && $tab === 'images'): $fi = $editRow ?: ['id' => 0, 'title' => '', 'when_text' => '', 'is_active' => 1, 'sort_order' => 0, 'file_path' => '']; ?>
+<div class="grid gap-4" style="max-width:900px">
+    <?php if (!mimg_ready($db)): ?>
+    <div class="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-4 text-sm">
+        <p class="font-bold mb-1">⚠️ একটা SQL চালানো বাকি</p>
+        <p>phpMyAdmin-এ <code class="bg-white px-1.5 py-0.5 rounded">database/migrate-meta-images.sql</code> চালান। ততক্ষণ ইনবক্স থেকে ফোনের ছবি পাঠানো যায়, কিন্তু সংগ্রহ, নিয়মের ছবি আর AI-র ছবি কাজ করে না।</p>
+    </div>
+    <?php else: ?>
+    <div class="mk-card">
+        <p class="font-bold text-gray-800">🖼️ ছবির সংগ্রহ</p>
+        <p class="mk-hint">যেসব ছবি বারবার পাঠাতে হয় (ওয়ার্কশিটের নমুনা, রুটিন, ফি চার্ট, বিকাশের QR) এখানে রাখুন। তিন জায়গা থেকে যায়: ইনবক্সে "🖼️ ছবি যোগ করুন", নিয়মের সাথে জোড়া, আর AI — "কখন পাঠাবেন" ঘরটা পড়ে নিজে বেছে নেয় (খসড়া মোডে আপনি দেখে পাঠান)।</p>
+        <p class="mk-hint" style="color:#B45309">🔴 এই ছবিগুলো ওয়েবসাইটে পাবলিক থাকে (ফেসবুক সেখান থেকে তুলে নেয়) — কারও ব্যক্তিগত ছবি বা তথ্য এখানে রাখবেন না।</p>
+    </div>
+    <form method="post" action="<?= e(mk_back('images', ['action' => 'img-save'])) ?>" enctype="multipart/form-data" class="mk-card mk-f" id="mk-form">
+        <?= csrf_field() ?>
+        <input type="hidden" name="id" value="<?= (int) $fi['id'] ?>">
+        <p class="font-bold text-gray-800"><?= $fi['id'] ? '✏️ ছবির তথ্য বদলান' : '➕ নতুন ছবি' ?></p>
+        <label>ছবির নাম</label>
+        <input type="text" name="title" maxlength="190" required value="<?= e((string) $fi['title']) ?>" placeholder="যেমন: প্লে গ্রুপের ওয়ার্কশিটের নমুনা">
+        <label>কখন পাঠাবেন? (AI এটা পড়ে বেছে নেয়)</label>
+        <textarea name="when_text" rows="2" maxlength="1000" placeholder="যেমন: কেউ প্লে গ্রুপের ওয়ার্কশিট দেখতে চাইলে বা কী শেখানো হয় জানতে চাইলে"><?= e((string) $fi['when_text']) ?></textarea>
+        <?php if ($fi['id']): ?><img src="<?= e(admin_image_src((string) $fi['file_path'])) ?>" alt="" style="max-width:160px;max-height:160px;border-radius:.6rem;margin-top:.6rem;object-fit:contain"><?php endif; ?>
+        <label><?= $fi['id'] ? 'ছবি বদলাতে চাইলে নতুন ছবি দিন' : 'ছবি' ?> (JPG/PNG/GIF, <?= MIMG_MAX_MB ?> MB পর্যন্ত)</label>
+        <input type="file" name="image_file" accept="image/jpeg,image/png,image/gif,image/webp" <?= $fi['id'] ? '' : 'required' ?> style="max-width:100%">
+        <div class="grid sm:grid-cols-2" style="column-gap:1rem">
+            <div><label>ক্রম</label><input type="number" name="sort_order" min="0" max="9999" value="<?= (int) $fi['sort_order'] ?>"></div>
+            <div><label>&nbsp;</label><label style="font-weight:600;display:flex;gap:.5rem;align-items:center;margin:0"><input type="checkbox" name="is_active" value="1" <?= !empty($fi['is_active']) ? 'checked' : '' ?>> চালু (বন্ধ থাকলে কোথাও যায় না)</label></div>
+        </div>
+        <div class="mk-row mt-4">
+            <button type="submit" class="mk-btn bg-indigo-600 text-white">💾 সংরক্ষণ করুন</button>
+            <?php if ($fi['id']): ?><a href="<?= e(mk_back('images')) ?>" class="mk-btn bg-gray-100 text-gray-700">বাতিল</a><?php endif; ?>
+        </div>
+    </form>
+    <?php if (!$images): ?>
+        <div class="empty-state bg-white rounded-2xl shadow p-8 text-center"><p class="text-4xl mb-2">🖼️</p><p class="font-bold text-gray-800">এখনো কোনো ছবি রাখা হয়নি</p></div>
+    <?php endif; ?>
+    <?php foreach ($images as $iid => $im): ?>
+        <div class="mk-card" id="img-<?= (int) $iid ?>" style="<?= $im['is_active'] ? '' : 'opacity:.6' ?>">
+            <div class="mk-row" style="align-items:flex-start;flex-wrap:nowrap">
+                <a href="<?= e(admin_image_src((string) $im['file_path'])) ?>" target="_blank" rel="noopener" style="flex:0 0 auto"><img src="<?= e(admin_image_src((string) $im['file_path'])) ?>" alt="" loading="lazy" style="width:88px;height:88px;object-fit:cover;border-radius:.7rem;border:1px solid #E5E7EB"></a>
+                <div style="min-width:0;flex:1">
+                    <p class="font-bold text-gray-800" style="overflow-wrap:anywhere"><?= e((string) $im['title']) ?></p>
+                    <?php if (trim((string) $im['when_text']) !== ''): ?><p class="text-sm text-gray-600 mt-1" style="overflow-wrap:anywhere">কখন: <?= e((string) $im['when_text']) ?></p><?php endif; ?>
+                    <p class="text-xs text-gray-500 mt-1">পাঠানো হয়েছে <?= (int) $im['uses'] ?> বার<?= $im['is_active'] ? '' : ' · ⏸️ বন্ধ' ?></p>
+                </div>
+            </div>
+            <div class="mk-row mt-2">
+                <a href="<?= e(mk_back('images', ['edit' => $iid])) ?>#mk-form" class="mk-btn bg-indigo-50 text-indigo-700">✏️ বদলান</a>
+                <form method="post" action="<?= e(mk_back('images', ['action' => 'delete'])) ?>" onsubmit="return confirmSubmit(this, 'ছবিটা মুছবেন? যে নিয়মে জোড়া আছে, সেখান থেকেও সরে যাবে।', 'মুছে ফেলা');"><?= csrf_field() ?><input type="hidden" name="what" value="image"><input type="hidden" name="id" value="<?= (int) $iid ?>"><button type="submit" class="mk-btn bg-red-50 text-red-700">🗑️ মুছুন</button></form>
+            </div>
+        </div>
+    <?php endforeach; ?>
+    <?php endif; ?>
 </div>
 
 <?php elseif ($ready && $tab === 'ai'): /* ── 🤖 AI ── */

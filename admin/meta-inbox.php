@@ -10,6 +10,7 @@
  * ════════════════════════════════════════════════════════════════════════════ */
 require_once __DIR__ . '/includes/auth.php';
 admin_require_login();
+require_once __DIR__ . '/includes/form-helpers.php'; // admin_image_src()
 require_once __DIR__ . '/../includes/meta-ai.php'; // meta-kb.php ও meta.php-ও এর ভেতরে লোড হয় (ধাপ ২: প্রস্তাব, ধাপ ৩: AI)
 
 $db = get_db();
@@ -33,6 +34,25 @@ function mi_cflt(array $src): array
         'st' => in_array($st, ['new', 'done', 'all'], true) ? $st : '',
         'ct' => isset(mai_comment_types()[$ct]) ? $ct : '',
     ]);
+}
+
+/**
+ * ফর্ম থেকে পাঠানোর ছবি: নতুন আপলোড (ফোন থেকে) আগে, নাহলে সংগ্রহ থেকে বাছা।
+ * ফেরত: ['url', 'lib_id', 'error'] — কিছু না দিলে url খালি।
+ */
+function mi_post_image(PDO $db): array
+{
+    $f = $_FILES['image_file'] ?? null;
+    if ($f && (int) ($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        try {
+            return ['url' => mimg_url(mimg_save_upload('image_file', MIMG_DIR . '/sent')), 'lib_id' => 0, 'error' => ''];
+        } catch (Throwable $e) {
+            return ['url' => '', 'lib_id' => 0, 'error' => $e->getMessage()];
+        }
+    }
+    $id = (int) ($_POST['image_id'] ?? 0);
+    $img = $id > 0 ? mimg_get($db, $id) : null;
+    return ['url' => $img ? mimg_url((string) $img['file_path']) : '', 'lib_id' => $img ? $id : 0, 'error' => ''];
 }
 
 /* ─────────────────────────── POST হ্যান্ডলার ─────────────────────────── */
@@ -114,11 +134,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         $st->execute(['id' => $cid]);
         $contact = $st->fetch();
         if (!$contact) { set_flash('error', 'কথোপকথনটা পাওয়া যায়নি।'); redirect(mi_back('messages')); }
-        $r = meta_send_message($db, $contact, (string) ($_POST['text'] ?? ''), $me);
-        if ($r['ok']) {
+        $pi = mi_post_image($db);
+        if ($pi['error'] !== '') {
+            $_SESSION['mi_draft'][$cid] = (string) ($_POST['text'] ?? '');
+            set_flash('error', '🖼️ ' . $pi['error']);
+            redirect(mi_back('messages', ['c' => $cid]) . '#mi-reply');
+        }
+        $r = meta_send_reply($db, $contact, (string) ($_POST['text'] ?? ''), $pi['url'], $me);
+        if ($r['ok'] && $pi['lib_id']) { mimg_used($db, $pi['lib_id']); }
+        if (!$r['ok'] && $r['text_ok']) {
+            // লেখা চলে গেছে — ঘরে আর ফেরত বসানো হয় না (নাহলে আবার পাঠালে লেখা দুইবার যেত)
             $db->prepare("UPDATE meta_contacts SET unread = 0 WHERE id = :id")->execute(['id' => $cid]);
             mai_close_drafts($db, 'message', (string) $contact['psid']);
-            set_flash('success', '✅ উত্তর পাঠানো হয়েছে।');
+            set_flash('error', '⚠️ ' . $r['error']);
+        } elseif ($r['ok']) {
+            $db->prepare("UPDATE meta_contacts SET unread = 0 WHERE id = :id")->execute(['id' => $cid]);
+            mai_close_drafts($db, 'message', (string) $contact['psid']);
+            set_flash('success', $pi['url'] !== '' ? '✅ উত্তর ও ছবি পাঠানো হয়েছে।' : '✅ উত্তর পাঠানো হয়েছে।');
         } else {
             $_SESSION['mi_draft'][$cid] = (string) ($_POST['text'] ?? ''); // লেখা হারায় না
             set_flash('error', $r['error']);
@@ -143,9 +175,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         $st->execute(['id' => $id]);
         $cm = $st->fetch();
         if (!$cm) { set_flash('error', 'কমেন্টটা পাওয়া যায়নি।'); redirect(mi_back('comments')); }
-        $r = meta_reply_comment($db, $cm, (string) ($_POST['text'] ?? ''), $me);
+        $pi = mi_post_image($db);
+        $r = $pi['error'] !== '' ? ['ok' => false, 'error' => '🖼️ ' . $pi['error']]
+           : meta_reply_comment($db, $cm, (string) ($_POST['text'] ?? ''), $me, 'admin', $pi['url']);
         if (!$r['ok']) { $_SESSION['mi_cdraft'][$id] = (string) ($_POST['text'] ?? ''); }
-        else { mai_close_drafts($db, 'comment', (string) $cm['comment_id']); }
+        else { mai_close_drafts($db, 'comment', (string) $cm['comment_id']); if ($pi['lib_id']) { mimg_used($db, $pi['lib_id']); } }
         set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? '✅ কমেন্টে উত্তর বসানো হয়েছে।' : $r['error']);
         redirect(mi_back('comments', mi_cflt($_POST)) . '#cm-' . $id);
     }
@@ -175,7 +209,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         $ch = $isC ? 'comment' : 'message';
         $g = mai_generate($db, $in['messages'], $ch, $target, $in['ref'], 'manual');
         if (!$g['ok']) { set_flash('error', '❌ AI উত্তর লিখতে পারেনি: ' . $g['error']); redirect($back); }
-        mai_save_draft($db, $ch, $target, $in['ref'], $in['question'], $g['text'], $g['human']);
+        mai_save_draft($db, $ch, $target, $in['ref'], $in['question'], $g['text'], $g['human'], '', (int) ($g['image_id'] ?? 0));
         set_flash('success', $g['human'] ? '🤖 AI বলছে এটার উত্তর তার জানা নেই — আপনি নিজে উত্তর দিন (দরকার হলে জ্ঞানভান্ডারে যোগ করুন)।' : '🤖 AI খসড়া লিখেছে — দেখে নিয়ে "বসান" চাপুন, তারপর পাঠান।');
         redirect($back);
     }
@@ -306,8 +340,10 @@ function mi_suggest_box(array $sugs, string $targetId): void
     if (!$sugs) { return; }
     echo '<div class="mi-sug"><p class="mi-sug-h">💡 প্রস্তাবিত উত্তর <span>— চাপলে নিচের ঘরে বসবে, দেখে নিয়ে পাঠান</span></p>';
     foreach ($sugs as $sg) {
-        echo '<button type="button" class="mi-sug-b" data-mi-fill="' . e($targetId) . '" data-text="' . e($sg['text']) . '">'
-           . '<span class="mi-sug-l">' . e($sg['label']) . '</span>' . e(meta_snippet($sg['text'], 140)) . '</button>';
+        $sim = !empty($sg['image_id']) ? mimg_get(get_db(), (int) $sg['image_id']) : null;
+        echo '<button type="button" class="mi-sug-b" data-mi-fill="' . e($targetId) . '" data-text="' . e($sg['text']) . '" data-image="' . ($sim ? (int) $sim['id'] : 0) . '">'
+           . '<span class="mi-sug-l">' . e($sg['label']) . '</span>' . e(meta_snippet($sg['text'], 140))
+           . ($sim ? '<span class="mi-img-tag">🖼️ সাথে ছবি: ' . e((string) $sim['title']) . '</span>' : '') . '</button>';
     }
     echo '</div>';
 }
@@ -328,7 +364,9 @@ function mi_ai_box(?array $draft, string $fillTarget, string $channel, string $t
             echo '<p class="mi-ai-h">🤖 AI এর উত্তর জানে না <span>— আপনি নিজে উত্তর দিন। একই প্রশ্ন বারবার এলে জ্ঞানভান্ডারে উত্তরটা যোগ করে দিন।</span></p>';
         } else {
             echo '<p class="mi-ai-h">🤖 AI-র খসড়া <span>— চাপলে নিচের ঘরে বসবে, দেখে নিয়ে পাঠান</span></p>';
-            echo '<button type="button" class="mi-sug-b mi-ai-b" data-mi-fill="' . e($fillTarget) . '" data-text="' . e($draft['draft']) . '">' . e($draft['draft']) . '</button>';
+            $dim = !empty($draft['image_id']) ? mimg_get(get_db(), (int) $draft['image_id']) : null;
+            echo '<button type="button" class="mi-sug-b mi-ai-b" data-mi-fill="' . e($fillTarget) . '" data-text="' . e($draft['draft']) . '" data-image="' . ($dim ? (int) $dim['id'] : 0) . '">' . e($draft['draft'])
+               . ($dim ? '<span class="mi-img-tag"><img src="' . e(admin_image_src((string) $dim['file_path'])) . '" alt="" loading="lazy">🖼️ AI এই ছবিটাও দিতে বলছে: ' . e((string) $dim['title']) . '</span>' : '') . '</button>';
         }
         if (!empty($draft['note']) && !$isComplaint) { echo '<p class="mi-ai-n">ℹ️ ' . e($draft['note']) . '</p>'; }
     }
@@ -346,6 +384,24 @@ function mi_ai_box(?array $draft, string $fillTarget, string $channel, string $t
         echo '<button type="submit" class="mi-ai-x">✕ খসড়া বাদ</button></form>';
     }
     echo '</div></div>';
+}
+
+/** ছবি বাছার ঘর — সংগ্রহ থেকে, অথবা ফোন থেকে নতুন। উত্তরের ফর্মের ভেতরেই বসে (আলাদা ফর্ম নয়)। */
+function mi_image_picker(PDO $db): void
+{
+    $lib = mimg_all($db);
+    echo '<details class="mi-imgpick"><summary>🖼️ ছবি যোগ করুন <span class="mi-img-sel"></span></summary><div class="mi-imgpick-b">';
+    if ($lib) {
+        echo '<label>সংগ্রহ থেকে</label><select name="image_id" class="mi-img-lib"><option value="0">— ছবি নেই —</option>';
+        foreach ($lib as $id => $im) {
+            echo '<option value="' . (int) $id . '" data-src="' . e(admin_image_src((string) $im['file_path'])) . '">' . e((string) $im['title']) . '</option>';
+        }
+        echo '</select><img class="mi-img-prev" alt="" hidden>';
+    }
+    echo '<label>' . ($lib ? 'অথবা ' : '') . 'ফোন/কম্পিউটার থেকে নতুন ছবি (JPG/PNG, ' . MIMG_MAX_MB . ' MB পর্যন্ত)</label>'
+       . '<input type="file" name="image_file" accept="image/jpeg,image/png,image/gif,image/webp" style="max-width:100%">'
+       . '<p class="mi-imgpick-n">নতুন ছবি দিলে সেটাই যাবে। ' . ($lib ? '' : 'বারবার পাঠানোর ছবি উত্তর-ভান্ডার → 🖼️ ছবি ট্যাবে রেখে দিলে এখানে বেছে নিতে পারবেন। ') . 'লেখা খালি রেখে শুধু ছবিও পাঠানো যায়।</p>';
+    echo '</div></details>';
 }
 
 $aiOn = mai_ready($db) && mai_has_key();
@@ -379,6 +435,18 @@ require __DIR__ . '/includes/layout-top.php';
 .mi-code{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
 .mi-code code{background:#F3F4F6;padding:.35rem .6rem;border-radius:.5rem;font-size:.82rem;word-break:break-all;min-width:0}
 .mi-step{border-left:3px solid rgb(var(--c-primary));padding-left:.8rem;margin-bottom:1rem}
+.mi-imgpick{margin:.4rem 0 0;font-size:.85rem}
+.mi-imgpick summary{cursor:pointer;font-weight:700;color:rgb(var(--c-primary));padding:.25rem 0;list-style:none}
+.mi-imgpick summary::-webkit-details-marker{display:none}
+.mi-img-sel{font-weight:600;color:#047857}
+.mi-imgpick-b{display:grid;gap:.3rem;padding:.6rem;border-radius:.8rem;background:#F9FAFB;border:1px solid rgb(var(--c-border,229 231 235));min-width:0}
+.mi-imgpick-b label{font-size:.8rem;font-weight:700;color:#374151;margin-top:.2rem}
+.mi-imgpick-b select{width:100%;min-width:0;border:1px solid rgb(var(--c-border,229 231 235));border-radius:.7rem;padding:.45rem .7rem;font-size:16px;background:#fff}
+.mi-imgpick-n{font-size:.75rem;color:#6B7280}
+.mi-img-prev{max-width:140px;max-height:140px;border-radius:.6rem;border:1px solid #E5E7EB;object-fit:contain;background:#fff}
+.mi-img-tag{display:flex;align-items:center;gap:.4rem;margin-top:.35rem;font-size:.78rem;font-weight:600;color:#047857}
+.mi-img-tag img{width:40px;height:40px;object-fit:cover;border-radius:.4rem;flex:0 0 auto}
+.mi-b-img{display:block;max-width:200px;max-height:200px;margin-top:.35rem;border-radius:.6rem;object-fit:contain;background:#fff}
 .mi-sug{margin:.25rem 0 .6rem;padding:.6rem;border-radius:.8rem;background:#FFFBEB;border:1px solid #FDE68A}
 .mi-sug-h{font-size:.8rem;font-weight:700;color:#92400E;margin-bottom:.35rem}
 .mi-sug-h span{font-weight:400;color:#B45309}
@@ -478,7 +546,11 @@ require __DIR__ . '/includes/layout-top.php';
                     $txt = trim((string) $m['text']) !== '' ? (string) $m['text'] : meta_attach_label((array) json_decode((string) $m['attach_json'], true));
                     $who = $out ? ($m['source'] === 'admin' ? ('আপনি' . ($m['sent_by'] ? ' (' . $m['sent_by'] . ')' : '')) : ($m['source'] === 'auto' ? '🤖 অটো-উত্তর' : ($m['source'] === 'ai' ? '🤖 AI' : 'পেইজ থেকে'))) : '';
                 ?>
-                    <div class="mi-b <?= $out ? 'out' : 'in' ?>"><?= e($txt !== '' ? $txt : '(খালি)') ?><div class="mi-meta"><?= e(trim($who . ' · ' . mi_time($m['sent_at']), ' ·')) ?></div></div>
+                    <div class="mi-b <?= $out ? 'out' : 'in' ?>"><?= e($txt !== '' ? $txt : '(খালি)') ?><?php
+                        foreach ((array) json_decode((string) $m['attach_json'], true) as $att) {
+                            $au = is_array($att) && ($att['type'] ?? '') === 'image' ? (string) ($att['payload']['url'] ?? '') : '';
+                            if (preg_match('~^https?://~i', $au)) { echo '<a href="' . e($au) . '" target="_blank" rel="noopener noreferrer"><img class="mi-b-img" src="' . e($au) . '" alt="ছবি" loading="lazy"></a>'; }
+                        } ?><div class="mi-meta"><?= e(trim($who . ' · ' . mi_time($m['sent_at']), ' ·')) ?></div></div>
                 <?php endforeach; ?>
             </div>
             <div class="p-3 border-t mi-reply" id="mi-reply">
@@ -495,10 +567,11 @@ require __DIR__ . '/includes/layout-top.php';
                     mi_ai_box(mai_latest_draft($db, 'message', (string) $openContact['psid']), 'mi-reply', 'message', (string) $openContact['psid'],
                               ['contact_id' => (int) $openContact['id']], $aiOn && $lastIn !== '');
                 ?>
-                <form method="post" action="<?= e(mi_back('messages', ['action' => 'send'])) ?>">
+                <form method="post" action="<?= e(mi_back('messages', ['action' => 'send'])) ?>" enctype="multipart/form-data" class="mi-sendf">
                     <?= csrf_field() ?>
                     <input type="hidden" name="contact_id" value="<?= (int) $openContact['id'] ?>">
-                    <textarea name="text" rows="3" maxlength="2000" required placeholder="উত্তর লিখুন…"><?= e($draft) ?></textarea>
+                    <textarea name="text" rows="3" maxlength="2000" placeholder="উত্তর লিখুন…"><?= e($draft) ?></textarea>
+                    <?php mi_image_picker($db); ?>
                     <div class="flex items-center justify-between gap-2 mt-2 flex-wrap">
                         <span class="text-xs text-gray-400">ফেসবুক মেসেঞ্জারে সরাসরি যাবে</span>
                         <button type="submit" class="px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold">📨 পাঠান</button>
@@ -575,11 +648,12 @@ require __DIR__ . '/includes/layout-top.php';
                         mi_ai_box(mai_latest_draft($db, 'comment', (string) $cm['comment_id']), 'cmf-' . (int) $cm['id'], 'comment', (string) $cm['comment_id'],
                                   ['id' => (int) $cm['id'], 'st' => $cStatus, 'ct' => $cType], $aiOn && trim((string) $cm['message']) !== '');
                     } ?>
-                    <form method="post" action="<?= e(mi_back('comments', ['action' => 'c-reply'])) ?>" class="mi-cform mt-3" id="cmf-<?= (int) $cm['id'] ?>">
+                    <form method="post" action="<?= e(mi_back('comments', ['action' => 'c-reply'])) ?>" class="mi-cform mi-sendf mt-3" id="cmf-<?= (int) $cm['id'] ?>" enctype="multipart/form-data">
                         <?= csrf_field() ?>
                         <input type="hidden" name="id" value="<?= (int) $cm['id'] ?>">
                         <input type="hidden" name="st" value="<?= e($cStatus) ?>"><input type="hidden" name="ct" value="<?= e($cType) ?>">
-                        <textarea name="text" rows="2" maxlength="2000" required placeholder="কমেন্টের নিচে উত্তর লিখুন (সবাই দেখবে)…"><?= e($cdraft) ?></textarea>
+                        <textarea name="text" rows="2" maxlength="2000" placeholder="কমেন্টের নিচে উত্তর লিখুন (সবাই দেখবে)…"><?= e($cdraft) ?></textarea>
+                        <?php mi_image_picker($db); ?>
                         <button type="submit" class="mt-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold">💬 উত্তর দিন</button>
                     </form>
                     <?php endif; ?>
@@ -721,12 +795,45 @@ require __DIR__ . '/includes/layout-top.php';
             if (b) { setTimeout(function () { b.disabled = true; b.textContent = '🤖 লিখছে… একটু অপেক্ষা করুন'; }, 0); }
         });
     });
+    document.querySelectorAll('.mi-imgpick').forEach(function (d) {
+        var sel = d.querySelector('select.mi-img-lib'), prev = d.querySelector('.mi-img-prev'),
+            file = d.querySelector('input[type=file]'), lbl = d.querySelector('.mi-img-sel');
+        function show() {
+            var t = '';
+            if (file && file.files && file.files.length) { t = '— ' + file.files[0].name; }
+            else if (sel && sel.value !== '0') { t = '— ' + sel.options[sel.selectedIndex].text; }
+            if (lbl) { lbl.textContent = t; }
+            if (prev && sel) {
+                var o = sel.options[sel.selectedIndex];
+                var src = o ? o.getAttribute('data-src') : '';
+                if (src && !(file && file.files && file.files.length)) { prev.src = src; prev.hidden = false; } else { prev.hidden = true; }
+            }
+        }
+        if (sel) { sel.addEventListener('change', show); }
+        if (file) { file.addEventListener('change', show); }
+    });
+    document.querySelectorAll('form.mi-sendf').forEach(function (f) {
+        f.addEventListener('submit', function (ev) {
+            var ta = f.querySelector('textarea[name=text]'), sel = f.querySelector('select.mi-img-lib'), file = f.querySelector('input[name=image_file]');
+            var has = (ta && ta.value.trim() !== '') || (sel && sel.value !== '0') || (file && file.files && file.files.length);
+            if (!has && ta) { ev.preventDefault(); ta.setCustomValidity('উত্তর লিখুন অথবা একটা ছবি বাছুন।'); ta.reportValidity(); }
+        });
+        var t2 = f.querySelector('textarea[name=text]');
+        if (t2) { t2.addEventListener('input', function () { t2.setCustomValidity(''); }); }
+    });
     document.querySelectorAll('[data-mi-fill]').forEach(function (b) {
         b.addEventListener('click', function () {
             var box = document.getElementById(b.getAttribute('data-mi-fill'));
             var ta = box ? box.querySelector('textarea') : null;
             if (!ta) { return; }
             ta.value = b.getAttribute('data-text') || '';
+            var imgId = b.getAttribute('data-image') || '0';
+            var sel = box.querySelector('select.mi-img-lib');
+            if (sel) {
+                sel.value = sel.querySelector('option[value="' + imgId + '"]') ? imgId : '0';
+                sel.dispatchEvent(new Event('change'));
+                if (imgId !== '0') { var d = sel.closest('details'); if (d) { d.open = true; } }
+            }
             ta.focus();
         });
     });
