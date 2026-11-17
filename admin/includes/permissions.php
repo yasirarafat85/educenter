@@ -63,6 +63,7 @@ function admin_page_sections(): array
         // 📨 যোগাযোগ বার্তা — সম্পূর্ণ আলাদা স্তর (টাকা/খাতা ছোঁয় না), নিজস্ব সেকশন
         'contact-messages.php'      => ['contact'],
         'meta-inbox.php'            => ['meta'],
+        'meta-knowledge.php'        => ['meta'],
         'reports.php'               => ['reports'],
         'course-data.php'           => ['orders'],
         // 💰 আয় মেলানো — অর্ডারের টাকার খাতা বসায় (registrations.php-এর "টাকা" ড্রয়ারের মতোই), তাই একই সেকশন

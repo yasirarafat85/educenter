@@ -135,6 +135,7 @@ function admin_nav_groups(): array
     // 📨 ফেসবুক ইনবক্স — নরম সুইচ বন্ধ থাকলে লুকায় (মূল অ্যাডমিন সবসময় দেখেন, যাতে আবার চালু করা যায়)
     if (admin_can('meta') && (meta_feature_on() || admin_is_super())) {
         $daily[] = ['key' => 'meta-inbox', 'href' => 'meta-inbox.php', 'file' => 'meta-inbox.php', 'icon' => 'message-circle', 'label' => 'ফেসবুক ইনবক্স'];
+        $daily[] = ['key' => 'meta-knowledge', 'href' => 'meta-knowledge.php', 'file' => 'meta-knowledge.php', 'icon' => 'book-open', 'label' => 'ফেসবুক উত্তর-ভান্ডার'];
     }
 
     // 💰 টাকা মেলানো — "আয় মেলানো" আর বইয়ের তিন পাতা একসাথে (আগে দুই আলাদা গ্রুপে ছিল,

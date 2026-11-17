@@ -209,6 +209,12 @@ if (meta_feature_on() && meta_ready($db)) {
     $taskDefs[] = ['page' => 'meta-inbox.php', 'url' => 'meta-inbox.php?tab=comments', 'icon' => 'message-circle',
         'label' => 'ফেসবুকে নতুন কমেন্ট', 'hint' => 'পেইজের পোস্টে — উত্তর দিন বা "দেখা হয়েছে"', 'cls' => 'bg-blue-100 text-blue-600', 'num' => 'text-blue-600',
         'sql' => "SELECT COUNT(*) c FROM meta_comments WHERE status = 'new' AND is_page = 0"];
+    // 📚 শেখার প্রস্তাব (ধাপ ২) — টেবিল না থাকলে বাদ
+    if (db_has_table($db, 'meta_kb')) {
+        $taskDefs[] = ['page' => 'meta-knowledge.php', 'url' => 'meta-knowledge.php?tab=learn', 'icon' => 'book-open',
+            'label' => 'শেখার প্রস্তাব', 'hint' => 'হাতের উত্তর থেকে — অনুমোদন দিলে জ্ঞানভান্ডারে যাবে', 'cls' => 'bg-amber-100 text-amber-600', 'num' => 'text-amber-600',
+            'sql' => "SELECT COUNT(*) c FROM meta_kb WHERE status = 'proposed'"];
+    }
 }
 
 $tasks = [];

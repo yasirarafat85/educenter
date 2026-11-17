@@ -10,11 +10,12 @@
  * POST = আসল খবর — `X-Hub-Signature-256` সই App Secret দিয়ে মিলিয়ে তবেই জমা।
  *
  * 🔴 CSRF নয় (কল আসে মেটার সার্ভার থেকে) — **সই-ই একমাত্র গার্ড**।
- * 🔴 এই ধাপে কোনো উত্তর পাঠানো হয় না — শুধু জমা।
+ * 🔴 জমা হওয়ার পর শুধু "অটো" চিহ্নিত নিয়ম মিললে, আর অটো-সুইচ চালু থাকলে, উত্তর যায়
+ *    (ধাপ ২, `mkb_auto_respond()`)। অটো ব্যর্থ হলেও জমা করা তথ্য অক্ষত থাকে।
  * 🔴 উত্তরে কোনো তথ্য ফেরত যায় না।
  * ════════════════════════════════════════════════════════════════════════════ */
 
-require_once __DIR__ . '/includes/meta.php';
+require_once __DIR__ . '/includes/meta-kb.php'; // meta.php-ও এর ভেতরে লোড হয়
 
 header('X-Robots-Tag: noindex, nofollow');
 
@@ -74,9 +75,15 @@ if (!is_array($payload)) {
 }
 
 try {
-    meta_ingest($db, $payload, $cfg['page_id']);
+    $got = meta_ingest($db, $payload, $cfg['page_id']);
 } catch (Throwable $e) {
     error_log('meta-webhook: ' . $e->getMessage());
     meta_wh_out(500, 'error');
+}
+// অটো-উত্তর — 🔴 আলাদা try-তে, যাতে ব্যর্থ হলেও মেটা "জমা হয়নি" ভেবে আবার না পাঠায়
+try {
+    mkb_auto_respond($db, $got['fresh'] ?? []);
+} catch (Throwable $e) {
+    error_log('meta-webhook auto: ' . $e->getMessage());
 }
 meta_wh_out(200, 'ok');

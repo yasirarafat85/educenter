@@ -3,13 +3,13 @@
  * 📨 ফেসবুক ইনবক্স — পেইজের মেসেজ ও কমেন্ট এক জায়গায় (ধাপ ১, ২০২৬-১১-১৭)
  *
  * তিন ট্যাব: মেসেজ · কমেন্ট · সংযোগ।
- * 🔴 এই ধাপে কোনো অটো-উত্তর নেই — অ্যাডমিন নিজে উত্তর দেন।
+ * 🔴 ধাপ ২ থেকে "💡 প্রস্তাবিত উত্তর" দেখায় (চাপলে শুধু ঘরে বসে); অটো-উত্তর হয় শুধু ওয়েবহুকে, meta-knowledge.php-র সুইচে।
  * 🔴 গোপন চাবি বদলানো শুধু মূল অ্যাডমিন পারেন; চাবি কখনো পর্দায় দেখানো হয় না।
  * 🔴 টাকা/খাতা/আয় কিছুই ছোঁয় না।
  * ════════════════════════════════════════════════════════════════════════════ */
 require_once __DIR__ . '/includes/auth.php';
 admin_require_login();
-require_once __DIR__ . '/../includes/meta.php';
+require_once __DIR__ . '/../includes/meta-kb.php'; // meta.php-ও এর ভেতরে লোড হয় (ধাপ ২: প্রস্তাবিত উত্তর)
 
 $db = get_db();
 $pageTitle = 'ফেসবুক ইনবক্স';
@@ -156,6 +156,8 @@ $cStatus = in_array($_GET['st'] ?? '', ['new', 'done', 'all'], true) ? $_GET['st
 $q = trim((string) ($_GET['q'] ?? ''));
 
 if ($ready) {
+    // 💡 হাতের নতুন উত্তর থেকে শেখার প্রস্তাব (ধাপ ২) — টেবিল না থাকলে চুপচাপ বাদ
+    try { if (mkb_ready($db)) { mkb_scan_history($db); } } catch (Throwable $e) {}
     try {
         $counts['contacts'] = (int) $db->query('SELECT COUNT(*) FROM meta_contacts WHERE unread > 0')->fetchColumn();
         $counts['comments'] = (int) $db->query("SELECT COUNT(*) FROM meta_comments WHERE status = 'new' AND is_page = 0")->fetchColumn();
@@ -237,6 +239,18 @@ function mi_initial(?string $name): string
     return $n === '' ? '?' : mb_strtoupper(mb_substr($n, 0, 1));
 }
 
+/** "💡 প্রস্তাবিত উত্তর" বাক্স — চাপলে লেখাটা নিচের ঘরে বসে মাত্র, 🔴 কিছুই পাঠানো হয় না */
+function mi_suggest_box(array $sugs, string $targetId): void
+{
+    if (!$sugs) { return; }
+    echo '<div class="mi-sug"><p class="mi-sug-h">💡 প্রস্তাবিত উত্তর <span>— চাপলে নিচের ঘরে বসবে, দেখে নিয়ে পাঠান</span></p>';
+    foreach ($sugs as $sg) {
+        echo '<button type="button" class="mi-sug-b" data-mi-fill="' . e($targetId) . '" data-text="' . e($sg['text']) . '">'
+           . '<span class="mi-sug-l">' . e($sg['label']) . '</span>' . e(meta_snippet($sg['text'], 140)) . '</button>';
+    }
+    echo '</div>';
+}
+
 require __DIR__ . '/includes/layout-top.php';
 ?>
 <style>
@@ -261,6 +275,12 @@ require __DIR__ . '/includes/layout-top.php';
 .mi-code{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
 .mi-code code{background:#F3F4F6;padding:.35rem .6rem;border-radius:.5rem;font-size:.82rem;word-break:break-all;min-width:0}
 .mi-step{border-left:3px solid rgb(var(--c-primary));padding-left:.8rem;margin-bottom:1rem}
+.mi-sug{margin:.25rem 0 .6rem;padding:.6rem;border-radius:.8rem;background:#FFFBEB;border:1px solid #FDE68A}
+.mi-sug-h{font-size:.8rem;font-weight:700;color:#92400E;margin-bottom:.35rem}
+.mi-sug-h span{font-weight:400;color:#B45309}
+.mi-sug-b{display:block;width:100%;text-align:left;padding:.5rem .7rem;margin-top:.35rem;border-radius:.6rem;background:#fff;border:1px solid #FDE68A;font-size:.86rem;line-height:1.55;color:#1F2937;overflow-wrap:anywhere}
+.mi-sug-b:hover{border-color:#F59E0B}
+.mi-sug-l{display:block;font-size:.72rem;color:#92400E;font-weight:600}
 </style>
 
 <?php if (!$ready): ?>
@@ -278,6 +298,8 @@ require __DIR__ . '/includes/layout-top.php';
     <a href="<?= e(mi_back('messages')) ?>" class="mi-tab <?= $tab === 'messages' ? 'on' : '' ?>">💬 মেসেজ <?php if ($counts['contacts']): ?><span class="mi-badge"><?= $counts['contacts'] ?></span><?php endif; ?></a>
     <a href="<?= e(mi_back('comments')) ?>" class="mi-tab <?= $tab === 'comments' ? 'on' : '' ?>">🗨️ কমেন্ট <?php if ($counts['comments']): ?><span class="mi-badge"><?= $counts['comments'] ?></span><?php endif; ?></a>
     <a href="<?= e(mi_back('setup')) ?>" class="mi-tab <?= $tab === 'setup' ? 'on' : '' ?>">🔌 সংযোগ</a>
+    <?php $mkProp = mkb_proposed_count($db); ?>
+    <a href="meta-knowledge.php" class="mi-tab">📚 উত্তর-ভান্ডার <?php if ($mkProp): ?><span class="mi-badge" title="শেখার প্রস্তাব অপেক্ষায়"><?= $mkProp ?></span><?php endif; ?></a>
 </div>
 
 <?php if ($tab === 'messages'): ?>
@@ -340,7 +362,7 @@ require __DIR__ . '/includes/layout-top.php';
                 <?php foreach ($thread as $m):
                     $out = $m['direction'] === 'out';
                     $txt = trim((string) $m['text']) !== '' ? (string) $m['text'] : meta_attach_label((array) json_decode((string) $m['attach_json'], true));
-                    $who = $out ? ($m['source'] === 'admin' ? ('আপনি' . ($m['sent_by'] ? ' (' . $m['sent_by'] . ')' : '')) : 'পেইজ থেকে') : '';
+                    $who = $out ? ($m['source'] === 'admin' ? ('আপনি' . ($m['sent_by'] ? ' (' . $m['sent_by'] . ')' : '')) : ($m['source'] === 'auto' ? '🤖 অটো-উত্তর' : 'পেইজ থেকে')) : '';
                 ?>
                     <div class="mi-b <?= $out ? 'out' : 'in' ?>"><?= e($txt !== '' ? $txt : '(খালি)') ?><div class="mi-meta"><?= e(trim($who . ' · ' . mi_time($m['sent_at']), ' ·')) ?></div></div>
                 <?php endforeach; ?>
@@ -351,6 +373,12 @@ require __DIR__ . '/includes/layout-top.php';
                 <?php elseif (!meta_configured()): ?>
                     <p class="text-sm text-amber-700 bg-amber-50 rounded-xl p-3">উত্তর পাঠাতে আগে "সংযোগ" ট্যাবে Page ID ও Page Access Token বসাতে হবে।</p>
                 <?php else: ?>
+                <?php
+                    $lastIn = '';
+                    foreach (array_reverse($thread) as $tm) { if ($tm['direction'] === 'in' && trim((string) $tm['text']) !== '') { $lastIn = (string) $tm['text']; break; } }
+                    $sugs = $lastIn !== '' ? mkb_suggest($db, $lastIn, 'message', $openContact['name'] ?? null) : [];
+                    mi_suggest_box($sugs, 'mi-reply');
+                ?>
                 <form method="post" action="<?= e(mi_back('messages', ['action' => 'send'])) ?>">
                     <?= csrf_field() ?>
                     <input type="hidden" name="contact_id" value="<?= (int) $openContact['id'] ?>">
@@ -413,7 +441,8 @@ require __DIR__ . '/includes/layout-top.php';
                     <?php endforeach; ?>
 
                     <?php if ($cm['status'] !== 'removed' && meta_configured()): ?>
-                    <form method="post" action="<?= e(mi_back('comments', ['action' => 'c-reply'])) ?>" class="mi-cform mt-3">
+                    <?php if ($cm['status'] === 'new') { mi_suggest_box(mkb_suggest($db, (string) $cm['message'], 'comment', $cm['from_name'] ?? null), 'cmf-' . (int) $cm['id']); } ?>
+                    <form method="post" action="<?= e(mi_back('comments', ['action' => 'c-reply'])) ?>" class="mi-cform mt-3" id="cmf-<?= (int) $cm['id'] ?>">
                         <?= csrf_field() ?>
                         <input type="hidden" name="id" value="<?= (int) $cm['id'] ?>">
                         <input type="hidden" name="st" value="<?= e($cStatus) ?>">
@@ -551,4 +580,17 @@ require __DIR__ . '/includes/layout-top.php';
     </script>
 <?php endif; ?>
 
+<script>
+(function () {
+    document.querySelectorAll('[data-mi-fill]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var box = document.getElementById(b.getAttribute('data-mi-fill'));
+            var ta = box ? box.querySelector('textarea') : null;
+            if (!ta) { return; }
+            ta.value = b.getAttribute('data-text') || '';
+            ta.focus();
+        });
+    });
+})();
+</script>
 <?php require __DIR__ . '/includes/layout-bottom.php'; ?>

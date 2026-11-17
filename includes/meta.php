@@ -272,7 +272,8 @@ function meta_store_comment(PDO $db, array $c, string $source, string $pageId, ?
  */
 function meta_ingest(PDO $db, array $payload, string $pageId): array
 {
-    $n = ['messages' => 0, 'comments' => 0, 'ignored' => 0];
+    // 'fresh' = এইমাত্র নতুন জমা হওয়া অভিভাবকের মেসেজ/কমেন্ট (অটো-উত্তরের জন্য, ধাপ ২)
+    $n = ['messages' => 0, 'comments' => 0, 'ignored' => 0, 'fresh' => []];
     if (($payload['object'] ?? '') !== 'page') { $n['ignored']++; return $n; }
 
     foreach ((array) ($payload['entry'] ?? []) as $entry) {
@@ -292,6 +293,9 @@ function meta_ingest(PDO $db, array $payload, string $pageId): array
                 $ok = meta_store_message($db, $psid, $echo ? 'out' : 'in', (string) ($m['mid'] ?? ''),
                     (string) ($m['text'] ?? ''), (array) ($m['attachments'] ?? []), $echo ? 'page' : 'webhook', $at);
                 $ok ? $n['messages']++ : $n['ignored']++;
+                if ($ok && !$echo && trim((string) ($m['text'] ?? '')) !== '') {
+                    $n['fresh'][] = ['type' => 'message', 'psid' => $psid, 'text' => (string) $m['text']];
+                }
             } elseif (isset($ev['postback']) && is_array($ev['postback'])) {
                 $title = (string) ($ev['postback']['title'] ?? $ev['postback']['payload'] ?? '');
                 $ok = meta_store_message($db, $sender, 'in', (string) ($ev['postback']['mid'] ?? ''),
@@ -324,6 +328,9 @@ function meta_ingest(PDO $db, array $payload, string $pageId): array
                 'at'         => meta_ts($v['created_time'] ?? time()),
             ], 'webhook', $page);
             $ok ? $n['comments']++ : $n['ignored']++;
+            if ($ok && $verb === 'add' && (string) ($v['from']['id'] ?? '') !== $page) {
+                $n['fresh'][] = ['type' => 'comment', 'comment_id' => $cid, 'text' => (string) ($v['message'] ?? '')];
+            }
         }
     }
     return $n;
@@ -332,7 +339,7 @@ function meta_ingest(PDO $db, array $payload, string $pageId): array
 /* ───────────────────────── পাঠানো ───────────────────────── */
 
 /** মেসেঞ্জারে উত্তর পাঠানো। ফেরত: ['ok', 'error'] */
-function meta_send_message(PDO $db, array $contact, string $text, string $by): array
+function meta_send_message(PDO $db, array $contact, string $text, string $by, string $source = 'admin'): array
 {
     $text = trim($text);
     if ($text === '') { return ['ok' => false, 'error' => 'উত্তর লেখা খালি।']; }
@@ -348,12 +355,16 @@ function meta_send_message(PDO $db, array $contact, string $text, string $by): a
     ]);
     if (!$r['ok']) { return ['ok' => false, 'error' => 'ফেসবুক পাঠাতে দেয়নি: ' . $r['error']]; }
     $mid = (string) ($r['data']['message_id'] ?? '');
-    meta_store_message($db, (string) $contact['psid'], 'out', $mid !== '' ? $mid : null, $text, [], 'admin', date('Y-m-d H:i:s'), $by);
+    if (!meta_store_message($db, (string) $contact['psid'], 'out', $mid !== '' ? $mid : null, $text, [], $source, date('Y-m-d H:i:s'), $by)
+        && $mid !== '') {
+        // ফেসবুকের "echo" আমাদের আগে পৌঁছে 'page' হিসেবে বসে গেছে — কে পাঠাল সেটা ঠিক করে দেওয়া
+        $db->prepare('UPDATE meta_messages SET source = :s, sent_by = :b WHERE mid = :m')->execute(['s' => $source, 'b' => $by, 'm' => $mid]);
+    }
     return ['ok' => true, 'error' => ''];
 }
 
 /** কমেন্টের নিচে পাবলিক উত্তর। ফেরত: ['ok', 'error'] */
-function meta_reply_comment(PDO $db, array $comment, string $text, string $by): array
+function meta_reply_comment(PDO $db, array $comment, string $text, string $by, string $source = 'admin'): array
 {
     $text = trim($text);
     if ($text === '') { return ['ok' => false, 'error' => 'উত্তর লেখা খালি।']; }
@@ -364,11 +375,14 @@ function meta_reply_comment(PDO $db, array $comment, string $text, string $by): 
     $newId = (string) ($r['data']['id'] ?? '');
     $now = date('Y-m-d H:i:s');
     if ($newId !== '') {
-        meta_store_comment($db, [
+        if (!meta_store_comment($db, [
             'comment_id' => $newId, 'post_id' => (string) ($comment['post_id'] ?? ''),
             'parent_id' => (string) $comment['comment_id'], 'from_id' => $c['page_id'], 'from_name' => '',
             'message' => $text, 'at' => $now,
-        ], 'admin', $c['page_id'], $by);
+        ], $source, $c['page_id'], $by)) {
+            // ওয়েবহুক আগে পৌঁছে গেছে — কে পাঠাল সেটা ঠিক করে দেওয়া
+            $db->prepare('UPDATE meta_comments SET source = :s, sent_by = :b WHERE comment_id = :c')->execute(['s' => $source, 'b' => $by, 'c' => $newId]);
+        }
     }
     $db->prepare("UPDATE meta_comments SET status = 'done', replied_at = COALESCE(replied_at, :at) WHERE id = :id")
        ->execute(['at' => $now, 'id' => (int) $comment['id']]);

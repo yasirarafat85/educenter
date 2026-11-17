@@ -194,7 +194,8 @@ function dd_scan(PDO $db, string $phone): array
     // ফেসবুক ইনবক্স — লেখার ভেতরে নম্বরটা থাকলে (মেসেঞ্জারে নম্বর লিখে পাঠানো সাধারণ ব্যাপার)।
     // কথোপকথন মুছলে তার সব মেসেজও মোছে (FK CASCADE)। 🔴 নম্বর ছাড়া ফেসবুক-পরিচয়ে মেলানো যায় না।
     foreach (['meta_contacts' => ['SELECT DISTINCT c.id, c.name FROM meta_contacts c JOIN meta_messages m ON m.contact_id = c.id WHERE m.text LIKE :p', 'ফেসবুক মেসেঞ্জারের কথোপকথন'],
-              'meta_comments' => ['SELECT id, from_name FROM meta_comments WHERE message LIKE :p', 'ফেসবুক পেইজের কমেন্ট']] as $mt => [$sql, $lbl]) {
+              'meta_comments' => ['SELECT id, from_name FROM meta_comments WHERE message LIKE :p', 'ফেসবুক পেইজের কমেন্ট'],
+              'meta_kb'       => ["SELECT id, LEFT(COALESCE(question, title), 60) AS q FROM meta_kb WHERE CONCAT_WS(' ', title, question, answer) LIKE :p", 'ফেসবুক উত্তর-ভান্ডার (শেখা/প্রস্তাবিত লেখা)']] as $mt => [$sql, $lbl]) {
         if (!db_has_table($db, $mt)) { continue; }
         try {
             $st = $db->prepare($sql);
