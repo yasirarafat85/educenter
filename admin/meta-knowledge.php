@@ -2,7 +2,7 @@
 /* ════════════════════════════════════════════════════════════════════════════
  * 📚 ফেসবুক উত্তর-ভান্ডার (ধাপ ২, ২০২৬-১১-১৭)
  *
- * চার ট্যাব: ⚡ নির্দিষ্ট শব্দে উত্তর · 📚 জ্ঞানভান্ডার · 💡 শেখার প্রস্তাব · 🤖 AI (ধাপ ৩)
+ * পাঁচ ট্যাব: ⚡ নির্দিষ্ট শব্দে উত্তর · 📚 জ্ঞানভান্ডার · 💡 শেখার প্রস্তাব · 🤖 AI (ধাপ ৩) · 📊 রিপোর্ট (ধাপ ৪)
  * 🔴 AI-র চাবি, মডেল, অবস্থা ও খরচের সীমা বদলানো শুধু মূল অ্যাডমিন পারেন; চাবি কখনো পর্দায় দেখানো হয় না।
  * 🔴 অটো-উত্তর চালু/বন্ধ শুধু মূল অ্যাডমিন পারেন (ডিফল্টে বন্ধ)।
  * 🔴 প্রস্তাব অনুমোদন না করা পর্যন্ত কিছুই শেখা হয় না।
@@ -16,7 +16,7 @@ $db = get_db();
 $pageTitle = 'ফেসবুক উত্তর-ভান্ডার';
 $me = (string) ($_SESSION['admin_username'] ?? '');
 $ready = mkb_ready($db);
-$tab = in_array($_GET['tab'] ?? '', ['rules', 'kb', 'learn', 'ai'], true) ? $_GET['tab'] : 'rules';
+$tab = in_array($_GET['tab'] ?? '', ['rules', 'kb', 'learn', 'ai', 'report'], true) ? $_GET['tab'] : 'rules';
 $action = (string) ($_GET['action'] ?? '');
 
 function mk_back(string $tab, array $extra = []): string
@@ -97,6 +97,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
     }
 
     // ── প্রশ্নোত্তর সেভ ──
+    // ── প্রশংসার জবাবের লেখা (ধাপ ৪) — ইনবক্সের "❤️ ধন্যবাদ জানান" বোতামে বসে, নিজে পাঠায় না ──
+    if ($action === 'thanks-save') {
+        $t = trim(str_replace("\r\n", "\n", (string) ($_POST['thanks'] ?? '')));
+        if (mb_strlen($t) > 500) { set_flash('error', 'লেখাটা ৫০০ অক্ষরের মধ্যে রাখুন।'); redirect(mk_back('report')); }
+        update_setting('meta_thanks_text', $t);
+        set_flash('success', $t === '' ? '↩ তৈরি লেখাটাই ব্যবহার হবে।' : '✅ প্রশংসার জবাব সংরক্ষণ হলো।');
+        redirect(mk_back('report') . '#mk-thanks');
+    }
+
     if ($action === 'qa-save') {
         $id = (int) ($_POST['id'] ?? 0);
         $q = trim(str_replace("\r\n", "\n", (string) ($_POST['question'] ?? '')));
@@ -256,7 +265,7 @@ if ($ready) {
                 $st->execute(['id' => $eid, 'k' => $kind]);
                 $editRow = $st->fetch() ?: null;
             }
-        } else {
+        } elseif ($tab === 'learn') {
             $proposals = $db->query("SELECT * FROM meta_kb WHERE status = 'proposed' ORDER BY id DESC LIMIT 50")->fetchAll();
         }
     } catch (Throwable $e) {
@@ -273,6 +282,8 @@ if ($aiReady && $tab === 'ai') {
     try { $aiLog = $db->query('SELECT * FROM meta_ai_log ORDER BY id DESC LIMIT 15')->fetchAll(); } catch (Throwable $e) {}
 }
 $aiTest = $_SESSION['mk_ai_test'] ?? null; unset($_SESSION['mk_ai_test']);
+$report = null;
+if ($ready && $tab === 'report') { $report = mai_report($db, (int) ($_GET['days'] ?? 7)); }
 $ruleOld = $_SESSION['mk_rule_old'] ?? null; unset($_SESSION['mk_rule_old']);
 $qaOld = $_SESSION['mk_qa_old'] ?? null; unset($_SESSION['mk_qa_old']);
 
@@ -282,6 +293,11 @@ require __DIR__ . '/includes/layout-top.php';
 .mk-tabs{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.25rem}
 .mk-tab{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1rem;border-radius:.9rem;font-weight:700;font-size:.9rem;background:rgb(var(--c-surface,255 255 255));border:1px solid rgb(var(--c-border,229 231 235));color:rgb(var(--c-text,31 41 55))}
 .mk-tab.on{background:rgb(var(--c-primary));color:#fff;border-color:transparent}
+.mk-rep-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.5rem}
+.mk-rep-box{display:flex;flex-direction:column;gap:.15rem;padding:.7rem .8rem;border-radius:.8rem;background:#F3F4F6;color:#374151;min-width:0}
+.mk-rep-box b{font-size:1.35rem;line-height:1.2}
+.mk-rep-box span{font-size:.8rem;line-height:1.45;overflow-wrap:anywhere}
+.mk-rep-q{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;padding:.7rem 0;border-top:1px solid rgb(var(--c-border,229 231 235))}
 .mk-badge{display:inline-block;min-width:1.4rem;padding:0 .4rem;border-radius:999px;background:#EF4444;color:#fff;font-size:.72rem;line-height:1.4rem;text-align:center}
 .mk-card{background:#fff;border-radius:1rem;box-shadow:0 1px 3px rgba(0,0,0,.08);padding:1rem;min-width:0}
 .mk-f label{display:block;font-size:.85rem;font-weight:700;color:#374151;margin:.6rem 0 .25rem}
@@ -307,6 +323,7 @@ require __DIR__ . '/includes/layout-top.php';
     <a href="<?= e(mk_back('kb')) ?>" class="mk-tab <?= $tab === 'kb' ? 'on' : '' ?>">📚 জ্ঞানভান্ডার <span class="text-xs" style="opacity:.75">(<?= $counts['qa'] + $counts['doc'] ?>)</span></a>
     <a href="<?= e(mk_back('learn')) ?>" class="mk-tab <?= $tab === 'learn' ? 'on' : '' ?>">💡 শেখার প্রস্তাব <?php if ($counts['learn']): ?><span class="mk-badge"><?= $counts['learn'] ?></span><?php endif; ?></a>
     <a href="<?= e(mk_back('ai')) ?>" class="mk-tab <?= $tab === 'ai' ? 'on' : '' ?>">🤖 AI <?= $aiReady && mai_has_key() ? '' : '<span class="text-xs" style="opacity:.75">(বন্ধ)</span>' ?></a>
+    <a href="<?= e(mk_back('report')) ?>" class="mk-tab <?= $tab === 'report' ? 'on' : '' ?>">📊 রিপোর্ট</a>
 </div>
 
 <?php if ($ready && $tab === 'rules'): ?>
@@ -418,7 +435,7 @@ require __DIR__ . '/includes/layout-top.php';
         : 'শিশুর মেধা বিকাশ, কোর্সের ধাপ, কোন কাজ কীভাবে করতে হয় — এমন বড় লেখা। ধাপ ৩-এ AI উত্তর লেখার সময় এগুলো পড়বে। দাম/ব্যাচ/শেষ সময় এখানে লিখবেন না — সেগুলো প্রতিবার সাইট থেকে টাটকা নেওয়া হয়।' ?></p>
 
     <?php if ($kind === 'qa'):
-        $fq = $qaOld ?: ($editRow ?: ['question' => '', 'answer' => '']); ?>
+        $fq = $qaOld ?: ($editRow ?: ['question' => mb_substr(trim((string) ($_GET['ask'] ?? '')), 0, 2000), 'answer' => '']); ?>
     <form method="post" action="<?= e(mk_back('kb', ['kind' => 'qa', 'action' => 'qa-save'])) ?>" class="mk-card mk-f" id="mk-form">
         <?= csrf_field() ?>
         <input type="hidden" name="id" value="<?= (int) ($fq['id'] ?? 0) ?>">
@@ -627,6 +644,71 @@ require __DIR__ . '/includes/layout-top.php';
     if (t) { t.addEventListener('submit', function () { var b = t.querySelector('button[type=submit]'); setTimeout(function () { b.disabled = true; b.textContent = 'লিখছে…'; }, 0); }); }
 })();
 </script>
+
+<?php elseif ($ready && $tab === 'report' && $report): /* ── 📊 রিপোর্ট (ধাপ ৪) ── */
+    $rt = mai_comment_types(); $rai = $report['ai']; $rdr = $report['drafts']; ?>
+<div class="grid gap-4" style="max-width:900px">
+    <div class="mk-row">
+        <?php foreach ([7 => 'শেষ ৭ দিন', 30 => 'শেষ ৩০ দিন'] as $d => $lb): ?>
+            <a href="<?= e(mk_back('report', ['days' => $d])) ?>" class="mk-btn <?= $report['days'] === $d ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700' ?>"><?= $lb ?></a>
+        <?php endforeach; ?>
+    </div>
+
+    <div class="mk-card">
+        <p class="font-bold text-gray-800 mb-1">🗨️ কমেন্টের ধরন <span class="text-sm font-normal text-gray-500">(মোট <?= (int) $report['total'] ?>টি)</span></p>
+        <p class="mk-hint mb-2">ধরন সাধারণ নিয়মে আন্দাজ করা — AI ডাকা হয় না, খরচ নেই। চাপলে ইনবক্সে ঐ ধরনের কমেন্টগুলো খুলবে।</p>
+        <div class="mk-rep-grid">
+            <?php foreach ($rt as $tk => $tv): ?>
+                <a href="<?= e('meta-inbox.php?' . http_build_query(['tab' => 'comments', 'st' => 'all', 'ct' => $tk])) ?>" class="mk-rep-box" style="background:<?= $tv[1] ?>;color:<?= $tv[2] ?>">
+                    <b><?= (int) ($report['types'][$tk] ?? 0) ?></b><span><?= e($tv[0]) ?></span>
+                </a>
+            <?php endforeach; ?>
+        </div>
+        <p class="mk-hint mt-2">❤️ প্রশংসা ও 🚫 স্প্যামে AI ডাকা হয় না। ⚠️ অভিযোগে AI নিজে লেখে না — ইনবক্সে "নিজে দেখে উত্তর দিন" চিহ্ন বসে।</p>
+    </div>
+
+    <?php if ($report['ai_ready']): ?>
+    <div class="mk-card">
+        <p class="font-bold text-gray-800 mb-2">🤖 AI কী করল</p>
+        <div class="mk-rep-grid">
+            <div class="mk-rep-box"><b><?= (int) $rai['calls'] ?></b><span>বার AI ডাকা হয়েছে</span></div>
+            <div class="mk-rep-box"><b><?= (int) $rai['sent'] ?></b><span>উত্তর নিজে পাঠিয়েছে</span></div>
+            <div class="mk-rep-box"><b><?= (int) $rdr['created'] ?></b><span>খসড়া লিখেছে (ব্যবহার <?= (int) $rdr['used'] ?> · বাদ <?= (int) $rdr['dismissed'] ?>)</span></div>
+            <div class="mk-rep-box"><b><?= (int) $rai['human'] ?></b><span>বার উত্তর জানত না</span></div>
+            <div class="mk-rep-box"><b><?= (int) $rdr['complaints'] ?></b><span>অভিযোগ — আপনার দেখার জন্য</span></div>
+            <div class="mk-rep-box"><b>$<?= number_format((float) $rai['cost'], 2) ?></b><span>খরচ (≈৳<?= number_format((float) $rai['cost'] * MAI_BDT_PER_USD, 0) ?>)<?= $rai['error'] ? ' · সমস্যা ' . (int) $rai['error'] . 'বার' : '' ?></span></div>
+        </div>
+    </div>
+
+    <div class="mk-card">
+        <p class="font-bold text-gray-800 mb-1">❓ যেসব প্রশ্নের উত্তর AI জানত না</p>
+        <p class="mk-hint mb-2">একই প্রশ্ন বারবার এলে একসাথে গোনা হয়েছে, বেশিবারেরটা আগে। <b>➕ উত্তর শিখিয়ে দিন</b> চাপলে প্রশ্নটা বসানো অবস্থায় জ্ঞানভান্ডারের ফর্ম খুলবে — আপনি উত্তর লিখে সংরক্ষণ করলে পরের বার AI জানবে। (দাম/ব্যাচ/শেষ সময় লিখবেন না — ওগুলো সাইট থেকে টাটকা নেওয়া হয়।)</p>
+        <?php if (!$report['unknown']): ?>
+            <p class="text-sm text-green-700 font-semibold">✅ এই সময়ে এমন কোনো প্রশ্ন নেই।</p>
+        <?php endif; ?>
+        <?php foreach ($report['unknown'] as $u): ?>
+            <div class="mk-rep-q">
+                <div style="flex:1;min-width:0">
+                    <p class="text-gray-800" style="overflow-wrap:anywhere;white-space:pre-wrap"><?= e(meta_snippet($u['q'], 300)) ?></p>
+                    <p class="text-xs text-gray-500 mt-1"><?= $u['channel'] === 'comment' ? '🗨️ কমেন্ট' : '💬 মেসেজ' ?> · <?= (int) $u['n'] ?> বার · শেষ <?= e(date('d M, h:i A', strtotime($u['last']))) ?></p>
+                </div>
+                <a href="<?= e(mk_back('kb', ['kind' => 'qa', 'ask' => mb_substr($u['q'], 0, 1500)]) . '#mk-form') ?>" class="mk-btn bg-indigo-600 text-white" style="flex-shrink:0">➕ উত্তর শিখিয়ে দিন</a>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    <?php else: ?>
+    <div class="mk-card"><p class="text-sm text-gray-600">🤖 AI-র অংশ দেখাতে database/migrate-meta-ai.sql চালাতে হবে।</p></div>
+    <?php endif; ?>
+
+    <form method="post" action="<?= e(mk_back('report', ['action' => 'thanks-save'])) ?>" class="mk-card mk-f" id="mk-thanks">
+        <?= csrf_field() ?>
+        <p class="font-bold text-gray-800">❤️ প্রশংসার জবাব</p>
+        <p class="mk-hint">ইনবক্সে প্রশংসার কমেন্টের পাশে "❤️ ধন্যবাদ জানান" চাপলে এই লেখাটা উত্তরের ঘরে বসে (নিজে পাঠায় না — আপনি দেখে পাঠান)। খালি রাখলে তৈরি লেখাটা ব্যবহার হবে।</p>
+        <textarea name="thanks" rows="2" maxlength="500" placeholder="<?= e(mai_thanks_text()) ?>"><?= e((string) get_setting('meta_thanks_text')) ?></textarea>
+        <div class="mk-row mt-3"><button type="submit" class="mk-btn bg-indigo-600 text-white">💾 সংরক্ষণ করুন</button></div>
+    </form>
+</div>
+
 
 <?php elseif ($ready): /* ── শেখার প্রস্তাব ── */ ?>
 <div class="grid gap-4" style="max-width:900px">

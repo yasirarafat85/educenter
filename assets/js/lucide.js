@@ -1,5 +1,5 @@
 /**
- * @license lucide (subset: 147 icons — build/lucide-subset.js দিয়ে তৈরি, হাতে এডিট করবেন না) v0.469.0 - ISC
+ * @license lucide (subset: 151 icons — build/lucide-subset.js দিয়ে তৈরি, হাতে এডিট করবেন না) v0.469.0 - ISC
  *
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
@@ -179,6 +179,19 @@
         "path",
         {
           d: "M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"
+        }
+      ]
+    ]
+  ];
+
+  const Bitcoin = [
+    "svg",
+    defaultAttributes,
+    [
+      [
+        "path",
+        {
+          d: "M11.767 19.089c4.924.868 6.14-6.025 1.216-6.894m-1.216 6.894L5.86 18.047m5.908 1.042-.347 1.97m1.563-8.864c4.924.869 6.14-6.025 1.215-6.893m-1.215 6.893-3.94-.694m5.155-6.2L8.29 4.26m5.908 1.042.348-1.97M7.48 20.364l3.126-17.727"
         }
       ]
     ]
@@ -470,6 +483,20 @@
     [
       ["rect", { width: "20", height: "14", x: "2", y: "5", rx: "2" }],
       ["line", { x1: "2", x2: "22", y1: "10", y2: "10" }]
+    ]
+  ];
+
+  const Dam = [
+    "svg",
+    defaultAttributes,
+    [
+      ["path", { d: "M11 11.31c1.17.56 1.54 1.69 3.5 1.69 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" }],
+      ["path", { d: "M11.75 18c.35.5 1.45 1 2.75 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" }],
+      ["path", { d: "M2 10h4" }],
+      ["path", { d: "M2 14h4" }],
+      ["path", { d: "M2 18h4" }],
+      ["path", { d: "M2 6h4" }],
+      ["path", { d: "M7 3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1L10 4a1 1 0 0 0-1-1z" }]
     ]
   ];
 
@@ -1216,6 +1243,15 @@
     ]
   ];
 
+  const Reply = [
+    "svg",
+    defaultAttributes,
+    [
+      ["polyline", { points: "9 17 4 12 9 7" }],
+      ["path", { d: "M20 18v-2a4 4 0 0 0-4-4H4" }]
+    ]
+  ];
+
   const Rocket = [
     "svg",
     defaultAttributes,
@@ -1462,6 +1498,18 @@
       ["path", { d: "M5 3H4a2 2 0 0 0-2 2v4a6 6 0 0 0 12 0V5a2 2 0 0 0-2-2h-1" }],
       ["path", { d: "M8 15a6 6 0 0 0 12 0v-3" }],
       ["circle", { cx: "20", cy: "10", r: "2" }]
+    ]
+  ];
+
+  const Sticker = [
+    "svg",
+    defaultAttributes,
+    [
+      ["path", { d: "M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" }],
+      ["path", { d: "M14 3v4a2 2 0 0 0 2 2h4" }],
+      ["path", { d: "M8 13h.01" }],
+      ["path", { d: "M16 13h.01" }],
+      ["path", { d: "M10 16s.8 1 2 1c1.3 0 2-1 2-1" }]
     ]
   ];
 
@@ -1755,6 +1803,16 @@
     ]
   ];
 
+  const Webhook = [
+    "svg",
+    defaultAttributes,
+    [
+      ["path", { d: "M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 0 1 2 17c.01-.7.2-1.4.57-2" }],
+      ["path", { d: "m6 17 3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06" }],
+      ["path", { d: "m12 6 3.13 5.73C15.66 12.7 16.9 13 18 13a4 4 0 0 1 0 8" }]
+    ]
+  ];
+
   const X = [
     "svg",
     defaultAttributes,
@@ -1778,19 +1836,6 @@
     ]
   ];
 
-  const Zap = [
-    "svg",
-    defaultAttributes,
-    [
-      [
-        "path",
-        {
-          d: "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"
-        }
-      ]
-    ]
-  ];
-
   var iconAndAliases = /*#__PURE__*/Object.freeze({
     __proto__: null,
     AlertCircle: CircleAlert,
@@ -1803,6 +1848,7 @@
     Baby: Baby,
     BarChart3: ChartColumn,
     Bell: Bell,
+    Bitcoin: Bitcoin,
     BookOpen: BookOpen,
     Cake: Cake,
     Calendar: Calendar,
@@ -1823,6 +1869,7 @@
     Contact: Contact,
     Copy: Copy,
     CreditCard: CreditCard,
+    Dam: Dam,
     Database: Database,
     Delete: Delete,
     Download: Download,
@@ -1890,6 +1937,7 @@
     Quote: Quote,
     Radio: Radio,
     Regex: Regex,
+    Reply: Reply,
     Rocket: Rocket,
     RotateCcw: RotateCcw,
     Rows: Rows2,
@@ -1909,6 +1957,7 @@
     Sparkles: Sparkles,
     Star: Star,
     Stethoscope: Stethoscope,
+    Sticker: Sticker,
     StickyNote: StickyNote,
     Table: Table,
     Target: Target,
@@ -1936,10 +1985,10 @@
     View: View,
     Wallet: Wallet,
     Watch: Watch,
+    Webhook: Webhook,
     X: X,
     XCircle: CircleX,
-    Youtube: Youtube,
-    Zap: Zap
+    Youtube: Youtube
   });
 
   const createIcons = ({ icons = iconAndAliases, nameAttr = "data-lucide", attrs = {} } = {}) => {

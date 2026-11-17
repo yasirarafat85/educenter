@@ -215,6 +215,14 @@ if (meta_feature_on() && meta_ready($db)) {
             'label' => 'শেখার প্রস্তাব', 'hint' => 'হাতের উত্তর থেকে — অনুমোদন দিলে জ্ঞানভান্ডারে যাবে', 'cls' => 'bg-amber-100 text-amber-600', 'num' => 'text-amber-600',
             'sql' => "SELECT COUNT(*) c FROM meta_kb WHERE status = 'proposed'"];
     }
+    // ❓ AI জানত না (ধাপ ৪) — শেষ ৭ দিন, অভিযোগ বাদ; টেবিল না থাকলে বাদ
+    if (db_has_table($db, 'meta_ai_drafts')) {
+        require_once __DIR__ . '/../includes/meta-ai.php';
+        $taskDefs[] = ['page' => 'meta-knowledge.php', 'url' => 'meta-knowledge.php?tab=report', 'icon' => 'help-circle',
+            'label' => 'AI উত্তর জানত না', 'hint' => 'শেষ ৭ দিনের প্রশ্ন — উত্তর শিখিয়ে দিন', 'cls' => 'bg-purple-100 text-purple-600', 'num' => 'text-purple-600',
+            'sql' => "SELECT COUNT(*) c FROM meta_ai_drafts WHERE needs_human = 1 AND status = 'new' AND (note IS NULL OR note <> " . $db->quote(MAI_COMPLAINT_NOTE)
+                   . ") AND created_at >= " . $db->quote(date('Y-m-d H:i:s', time() - 7 * 86400))];
+    }
 }
 
 $tasks = [];

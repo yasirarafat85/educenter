@@ -78,6 +78,96 @@ function mai_trivial(string $text): bool
     return true;
 }
 
+/* ───────────────────────── ধাপ ৪: কমেন্ট/মেসেজের ধরন ───────────────────────── */
+
+/** অভিযোগের খসড়ার নোট — রিপোর্টে "AI জানত না" থেকে আলাদা করতে এই লেখাই চেনা হয় */
+const MAI_COMPLAINT_NOTE = '⚠️ অভিযোগ মনে হচ্ছে — AI ডাকা হয়নি, নিজে দেখে উত্তর দিন';
+
+/** ধরন → [লেবেল, হালকা রঙ, গাঢ় রঙ] (ইনলাইন রঙ — Tailwind রিবিল্ড লাগে না) */
+function mai_comment_types(): array
+{
+    return [
+        'question'  => ['❓ প্রশ্ন',     '#DBEAFE', '#1E40AF'],
+        'complaint' => ['⚠️ অভিযোগ',   '#FEE2E2', '#B91C1C'],
+        'praise'    => ['❤️ প্রশংসা',   '#FCE7F3', '#9D174D'],
+        'spam'      => ['🚫 স্প্যাম',    '#E5E7EB', '#374151'],
+        'other'     => ['💬 অন্যান্য',  '#F3F4F6', '#4B5563'],
+    ];
+}
+
+/** লেখায় কোনো শব্দ-তালিকার একটাও আছে কিনা (mkb_keyword_in-এর নিয়মে) */
+function mai_has_any(string $norm, array $words): bool
+{
+    foreach ($words as $w) {
+        // ২ অক্ষরের ছোট বাংলা শব্দ ("ফি", "কত") পুরো শব্দ হিসেবেই — নাহলে "রাফি"-তেও "ফি" মিলত
+        if (mb_strlen($w) <= 2) {
+            if (strpos(' ' . $norm . ' ', ' ' . $w . ' ') !== false) { return true; }
+            continue;
+        }
+        if (mkb_keyword_in($w, $norm)) { return true; }
+    }
+    return false;
+}
+
+/**
+ * কমেন্ট/মেসেজের ধরন — সাধারণ নিয়মে, AI ছাড়া (খরচ ০)।
+ * 🔴 ক্রম জরুরি: স্প্যাম → অভিযোগ → প্রশ্ন → প্রশংসা → অন্যান্য।
+ * অভিযোগ প্রশ্নের আগে — "টাকা দিয়েছি কিন্তু বই পাইনি কেন?" প্রশ্ন নয়, অভিযোগ।
+ */
+function mai_classify(string $text): string
+{
+    $raw = trim($text);
+    if ($raw === '') { return 'other'; }
+    $n = mkb_norm($raw);
+
+    // লিংক — শুধু ফেসবুক/আমাদের সাইটের লিংক ঠিক আছে, বাকি সব স্প্যাম
+    if (preg_match_all('~(?:https?://|www\.)([^\s/?#]+)~iu', $raw, $m)) {
+        $own = strtolower((string) parse_url(defined('SITE_URL') ? SITE_URL : '', PHP_URL_HOST));
+        foreach ($m[1] as $h) {
+            $h = strtolower(preg_replace(['/^www\./', '/:\d+$/'], '', $h));
+            $ok = $h === 'fb.me' || $h === 'm.me' || preg_match('/(^|\.)(facebook\.com|fb\.com|fb\.watch|messenger\.com)$/', $h)
+                || ($own !== '' && ($h === preg_replace('/^www\./', '', $own)));
+            if (!$ok) { return 'spam'; }
+        }
+    }
+    if (mai_has_any($n, ['crypto', 'bitcoin', 'forex', 'casino', 'betting', 'bet365', '1xbet', 'earn money', 'make money', 'work from home',
+        'check my profile', 'follow back', 'f4f', 'loan', 'ইনকাম করুন', 'ঘরে বসে আয়', 'ঘরে বসে ইনকাম', 'অনলাইনে আয়', 'লোন', 'বেটিং', 'জুয়া', 'ক্যাসিনো'])) {
+        return 'spam';
+    }
+
+    if (mai_has_any($n, ['অভিযোগ', 'পাইনি', 'পাই নাই', 'পাইনাই', 'পাচ্ছি না', 'ফেরত', 'রিফান্ড', 'refund', 'খারাপ', 'বাজে', 'প্রতারণা', 'প্রতারক',
+        'ভুয়া', 'ফেক', 'fake', 'fraud', 'scam', 'ধোঁকা', 'ধোকা', 'উত্তর দিচ্ছেন না', 'রিপ্লাই দিচ্ছেন না', 'রিপ্লাই দেন না', 'ভুল পার্সেল',
+        'ছেঁড়া', 'ছেড়া', 'নষ্ট', 'দেরি', 'দেরী', 'হতাশ', 'complain', 'complaint', 'worst', 'bad service', 'not received', 'pai nai', 'paini'])) {
+        return 'complaint';
+    }
+
+    if (preg_match('/[?？]/u', $raw) || mai_has_any($n, ['কত', 'কতো', 'কতদিন', 'কবে', 'কিভাবে', 'কীভাবে', 'কোথায়', 'কেন', 'কোন', 'দাম', 'ফি', 'ভর্তি', 'রেজিস্ট্রেশন',
+        'বয়স', 'জানতে চাই', 'জানাবেন', 'বিস্তারিত', 'ইনবক্স', 'আগ্রহী', 'details', 'detail', 'info', 'inbox', 'interested', 'price', 'how', 'when',
+        'where', 'what', 'link', 'লিংক', 'koto', 'kobe', 'kivabe', 'dam'])) {
+        return 'question';
+    }
+
+    if (mai_trivial($raw) || mai_has_any($n, ['ধন্যবাদ', 'অসাধারণ', 'সুন্দর', 'দারুণ', 'দারুন', 'ভালো লাগলো', 'ভালো লেগেছে', 'মাশাআল্লাহ',
+        'মাশাল্লাহ', 'thanks', 'thank you', 'awesome', 'excellent', 'nice', 'great', 'love'])) {
+        return 'praise';
+    }
+    return 'other';
+}
+
+/** ধরনের চিপ (HTML) */
+function mai_type_chip(string $type): string
+{
+    $t = mai_comment_types()[$type] ?? mai_comment_types()['other'];
+    return '<span class="mi-ct" style="background:' . $t[1] . ';color:' . $t[2] . '">' . e($t[0]) . '</span>';
+}
+
+/** প্রশংসার জবাব — সেটিংস থেকে, খালি হলে ডিফল্ট */
+function mai_thanks_text(): string
+{
+    $t = trim((string) get_setting('meta_thanks_text'));
+    return $t !== '' ? $t : 'আপনার সুন্দর মন্তব্যের জন্য অনেক ধন্যবাদ ❤️ পাশে থাকবেন।';
+}
+
 /** মডেলের লেখা → ['text', 'human'] */
 function mai_parse_reply(string $raw): array
 {
@@ -417,9 +507,23 @@ function mai_has_work(PDO $db, array $items): bool
     if (!$items || !mai_ready($db) || !mai_has_key()) { return false; }
     foreach ($items as $it) {
         $ch = ($it['type'] ?? '') === 'comment' ? 'comment' : 'message';
-        if (mai_mode($ch) !== 'off' && !mai_trivial((string) ($it['text'] ?? ''))) { return true; }
+        if (mai_mode($ch) !== 'off' && !mai_skip_type(mai_classify((string) ($it['text'] ?? '')))) { return true; }
     }
     return false;
+}
+
+/** এই ধরনে AI-র কিছুই করার নেই (প্রশংসা/ধন্যবাদ/ইমোজি — খরচ বাঁচাতে; স্প্যাম — উত্তরই নয়) */
+function mai_skip_type(string $type): bool
+{
+    return $type === 'praise' || $type === 'spam';
+}
+
+/** অভিযোগের খসড়া আগে বসেছে কিনা (একই প্রশ্নে দুইবার নয়) */
+function mai_complaint_saved(PDO $db, string $channel, string $ref): bool
+{
+    $st = $db->prepare('SELECT COUNT(*) FROM meta_ai_drafts WHERE channel = :c AND ref = :r AND note = :n');
+    $st->execute(['c' => $channel, 'r' => $ref, 'n' => MAI_COMPLAINT_NOTE]);
+    return (int) $st->fetchColumn() > 0;
 }
 
 /** অটো-পাঠানোর গার্ড (মেসেজ): মানুষ সম্প্রতি উত্তর দেননি · ঘণ্টায় সীমার কম। ফেরত: '' = ঠিক আছে, নাহলে কারণ */
@@ -476,13 +580,17 @@ function mai_handle_fresh(PDO $db, array $items): array
     foreach (array_reverse($items) as $it) {
         $ch = ($it['type'] ?? '') === 'comment' ? 'comment' : 'message';
         $key = $ch . ':' . ($ch === 'comment' ? (string) ($it['comment_id'] ?? '') : (string) ($it['psid'] ?? ''));
-        if (isset($seen[$key]) || mai_mode($ch) === 'off' || mai_trivial((string) ($it['text'] ?? ''))) { continue; }
+        $type = mai_classify((string) ($it['text'] ?? ''));
+        if (isset($seen[$key]) || mai_mode($ch) === 'off' || mai_skip_type($type)) { continue; }
         $seen[$key] = 1;
+        $it['_type'] = $type;
         $todo[] = $it;
     }
     $calls = 0;
     foreach (array_reverse($todo) as $it) {
-        if ($calls >= MAI_MAX_PER_RUN) { break; }
+        // 🔴 অভিযোগে AI ডাকা হয় না — মানুষের দেখার জন্য খসড়া-ঘরে চিহ্ন বসে (সীমার হিসাবে গোনা হয় না)
+        $complaint = ($it['_type'] ?? '') === 'complaint';
+        if (!$complaint && $calls >= MAI_MAX_PER_RUN) { continue; }
         $lockKey = '';
         try {
             if (($it['type'] ?? '') === 'comment') {
@@ -498,6 +606,13 @@ function mai_handle_fresh(PDO $db, array $items): array
                 if (!$cm) { continue; }
                 $in = mai_comment_input($db, $cm);
                 if (!$in['messages'] || mai_already_done($db, 'comment', $in['ref'])) { continue; }
+                if ($complaint) {
+                    if (!mai_complaint_saved($db, 'comment', $in['ref'])) {
+                        mai_save_draft($db, 'comment', $cid, $in['ref'], $in['question'], '', true, MAI_COMPLAINT_NOTE);
+                        $out['drafts']++;
+                    }
+                    continue;
+                }
                 $mode = mai_mode('comment');
                 $calls++;
                 $g = mai_generate($db, $in['messages'], 'comment', $cid, $in['ref'], $mode === 'auto' ? 'auto' : 'draft');
@@ -524,6 +639,13 @@ function mai_handle_fresh(PDO $db, array $items): array
                 if ((int) $st->fetchColumn() > 0) { continue; }
                 $in = mai_message_input($db, $contact);
                 if (!$in['messages'] || $in['ref'] === '' || mai_already_done($db, 'message', $in['ref'])) { continue; }
+                if ($complaint) {
+                    if (!mai_complaint_saved($db, 'message', $in['ref'])) {
+                        mai_save_draft($db, 'message', $psid, $in['ref'], $in['question'], '', true, MAI_COMPLAINT_NOTE);
+                        $out['drafts']++;
+                    }
+                    continue;
+                }
                 $mode = mai_mode('message');
                 $calls++;
                 $g = mai_generate($db, $in['messages'], 'message', $psid, $in['ref'], $mode === 'auto' ? 'auto' : 'draft');
@@ -572,4 +694,82 @@ function mai_month_stats(PDO $db): array
         $s['sent'] = (int) $st->fetchColumn();
     } catch (Throwable $e) {}
     return $s;
+}
+
+/**
+ * 📊 সাপ্তাহিক রিপোর্ট (ধাপ ৪) — কমেন্টের ধরন, AI কী করল, আর "AI জানত না" এমন প্রশ্ন (একই প্রশ্ন একসাথে গুনে)।
+ * 🔴 নিছক পড়া, কিছুই লেখে না। AI-র টেবিল না থাকলে শুধু কমেন্টের অংশ।
+ */
+function mai_report(PDO $db, int $days): array
+{
+    $days = in_array($days, [7, 30], true) ? $days : 7;
+    $since = date('Y-m-d H:i:s', time() - $days * 86400);
+    $r = ['days' => $days, 'types' => [], 'total' => 0, 'ai_ready' => false,
+          'ai' => ['calls' => 0, 'ok' => 0, 'human' => 0, 'error' => 0, 'cost' => 0.0, 'sent' => 0],
+          'drafts' => ['created' => 0, 'used' => 0, 'dismissed' => 0, 'complaints' => 0], 'unknown' => []];
+    try {
+        $st = $db->prepare('SELECT message FROM meta_comments WHERE is_page = 0 AND commented_at >= :s ORDER BY id DESC LIMIT 3000');
+        $st->execute(['s' => $since]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $m) {
+            $t = mai_classify((string) $m);
+            $r['types'][$t] = ($r['types'][$t] ?? 0) + 1;
+            $r['total']++;
+        }
+    } catch (Throwable $e) {}
+    if (!mai_ready($db)) { return $r; }
+    $r['ai_ready'] = true;
+    try {
+        $st = $db->prepare('SELECT outcome, COUNT(*) n, COALESCE(SUM(cost_usd), 0) c FROM meta_ai_log WHERE created_at >= :s GROUP BY outcome');
+        $st->execute(['s' => $since]);
+        foreach ($st->fetchAll() as $row) {
+            $n = (int) $row['n'];
+            $r['ai']['calls'] += $n;
+            $r['ai']['cost'] += (float) $row['c'];
+            if ($row['outcome'] === 'ok') { $r['ai']['ok'] += $n; }
+            elseif ($row['outcome'] === 'human' || $row['outcome'] === 'refusal') { $r['ai']['human'] += $n; }
+            else { $r['ai']['error'] += $n; }
+        }
+        $st = $db->prepare("SELECT (SELECT COUNT(*) FROM meta_messages WHERE source = 'ai' AND sent_at >= :a) + (SELECT COUNT(*) FROM meta_comments WHERE source = 'ai' AND commented_at >= :b)");
+        $st->execute(['a' => $since, 'b' => $since]);
+        $r['ai']['sent'] = (int) $st->fetchColumn();
+
+        $st = $db->prepare('SELECT status, needs_human, note FROM meta_ai_drafts WHERE created_at >= :s');
+        $st->execute(['s' => $since]);
+        foreach ($st->fetchAll() as $row) {
+            if ((string) $row['note'] === MAI_COMPLAINT_NOTE) { $r['drafts']['complaints']++; continue; }
+            if ((int) $row['needs_human'] === 1) { continue; }
+            $r['drafts']['created']++;
+            if ($row['status'] === 'used') { $r['drafts']['used']++; }
+            elseif ($row['status'] === 'dismissed') { $r['drafts']['dismissed']++; }
+        }
+
+        // "AI জানত না" — অভিযোগ বাদ; একই লেখা (mkb_norm) একসাথে
+        $st = $db->prepare('SELECT channel, target, question, created_at FROM meta_ai_drafts WHERE needs_human = 1 AND (note IS NULL OR note <> :n) AND created_at >= :s ORDER BY id DESC LIMIT 1000');
+        $st->execute(['n' => MAI_COMPLAINT_NOTE, 's' => $since]);
+        $g = [];
+        foreach ($st->fetchAll() as $row) {
+            $q = trim((string) $row['question']);
+            if ($q === '') { continue; }
+            $k = mkb_norm($q);
+            if ($k === '') { continue; }
+            if (!isset($g[$k])) { $g[$k] = ['q' => $q, 'n' => 0, 'last' => (string) $row['created_at'], 'channel' => (string) $row['channel'], 'target' => (string) $row['target']]; }
+            $g[$k]['n']++;
+        }
+        usort($g, fn($a, $b) => [$b['n'], $b['last']] <=> [$a['n'], $a['last']]);
+        $r['unknown'] = array_slice($g, 0, 40);
+    } catch (Throwable $e) {
+        error_log('mai report: ' . $e->getMessage());
+    }
+    return $r;
+}
+
+/** ড্যাশবোর্ডের কার্ড: শেষ ৭ দিনে AI জানত না এমন প্রশ্ন (অভিযোগ বাদ) */
+function mai_unknown_count(PDO $db, int $days = 7): int
+{
+    if (!mai_ready($db)) { return 0; }
+    try {
+        $st = $db->prepare("SELECT COUNT(*) FROM meta_ai_drafts WHERE needs_human = 1 AND status = 'new' AND (note IS NULL OR note <> :n) AND created_at >= :s");
+        $st->execute(['n' => MAI_COMPLAINT_NOTE, 's' => date('Y-m-d H:i:s', time() - $days * 86400)]);
+        return (int) $st->fetchColumn();
+    } catch (Throwable $e) { return 0; }
 }

@@ -24,6 +24,17 @@ function mi_back(string $tab, array $extra = []): string
     return 'meta-inbox.php?' . http_build_query(array_merge(['tab' => $tab], $extra));
 }
 
+/** কমেন্ট-তালিকার ফিল্টার (স্ট্যাটাস + ধরন) — redirect-এ বয়ে নিতে; মান হোয়াইটলিস্ট */
+function mi_cflt(array $src): array
+{
+    $st = (string) ($src['st'] ?? '');
+    $ct = (string) ($src['ct'] ?? '');
+    return array_filter([
+        'st' => in_array($st, ['new', 'done', 'all'], true) ? $st : '',
+        'ct' => isset(mai_comment_types()[$ct]) ? $ct : '',
+    ]);
+}
+
 /* ─────────────────────────── POST হ্যান্ডলার ─────────────────────────── */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
     if (!csrf_verify()) { set_flash('error', 'ফর্ম টোকেন মিলছে না — পাতাটা আবার খুলে চেষ্টা করুন।'); redirect(mi_back($tab)); }
@@ -136,13 +147,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         if (!$r['ok']) { $_SESSION['mi_cdraft'][$id] = (string) ($_POST['text'] ?? ''); }
         else { mai_close_drafts($db, 'comment', (string) $cm['comment_id']); }
         set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? '✅ কমেন্টে উত্তর বসানো হয়েছে।' : $r['error']);
-        redirect(mi_back('comments', array_filter(['st' => $_POST['st'] ?? ''])) . '#cm-' . $id);
+        redirect(mi_back('comments', mi_cflt($_POST)) . '#cm-' . $id);
     }
 
     // ── 🤖 AI দিয়ে খসড়া লেখানো (একটা ডাক — খরচ হয়) ──
     if ($action === 'ai-draft') {
         $isC = ($_POST['channel'] ?? '') === 'comment';
-        $back = $isC ? mi_back('comments', array_filter(['st' => $_POST['st'] ?? ''])) . '#cm-' . (int) ($_POST['id'] ?? 0)
+        $back = $isC ? mi_back('comments', mi_cflt($_POST)) . '#cm-' . (int) ($_POST['id'] ?? 0)
                      : mi_back('messages', ['c' => (int) ($_POST['contact_id'] ?? 0)]) . '#mi-reply';
         if (!mai_ready($db) || !mai_has_key()) { set_flash('error', 'AI এখনো চালু হয়নি — উত্তর-ভান্ডার → 🤖 AI ট্যাবে চাবি বসান (আর migrate-meta-ai.sql চালান)।'); redirect($back); }
         @set_time_limit(120);
@@ -173,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
     if ($action === 'ai-dismiss') {
         $isC = ($_POST['channel'] ?? '') === 'comment';
         mai_close_drafts($db, $isC ? 'comment' : 'message', (string) ($_POST['target'] ?? ''), 'dismissed');
-        redirect($isC ? mi_back('comments', array_filter(['st' => $_POST['st'] ?? ''])) . '#cm-' . (int) ($_POST['id'] ?? 0)
+        redirect($isC ? mi_back('comments', mi_cflt($_POST)) . '#cm-' . (int) ($_POST['id'] ?? 0)
                       : mi_back('messages', ['c' => (int) ($_POST['contact_id'] ?? 0)]) . '#mi-reply');
     }
 
@@ -183,7 +194,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         $done = ($_POST['status'] ?? '') === 'done';
         $db->prepare("UPDATE meta_comments SET status = :s WHERE id = :id AND status <> 'removed'")
            ->execute(['s' => $done ? 'done' : 'new', 'id' => $id]);
-        redirect(mi_back('comments', array_filter(['st' => $_POST['st'] ?? ''])) . '#cm-' . $id);
+        redirect(mi_back('comments', mi_cflt($_POST)) . '#cm-' . $id);
     }
 
     redirect(mi_back($tab));
@@ -195,6 +206,8 @@ $counts = ['contacts' => 0, 'comments' => 0];
 $contacts = []; $thread = []; $openContact = null; $comments = []; $replies = []; $posts = [];
 $cStatus = in_array($_GET['st'] ?? '', ['new', 'done', 'all'], true) ? $_GET['st'] : 'new';
 $q = trim((string) ($_GET['q'] ?? ''));
+$cType = isset(mai_comment_types()[$_GET['ct'] ?? '']) ? (string) $_GET['ct'] : '';
+$typeCounts = [];
 
 if ($ready) {
     // 💡 হাতের নতুন উত্তর থেকে শেখার প্রস্তাব (ধাপ ২) — টেবিল না থাকলে চুপচাপ বাদ
@@ -240,9 +253,16 @@ if ($ready) {
                 $where[] = "CONCAT_WS(' ', from_name, message) LIKE :q ESCAPE '!'";
                 $params['q'] = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $q) . '%';
             }
-            $st = $db->prepare('SELECT * FROM meta_comments WHERE ' . implode(' AND ', $where) . ' ORDER BY commented_at DESC LIMIT 100');
+            // ধরন (ধাপ ৪) — নিয়মে, PHP-তে হিসাব হয় (জমা থাকে না, তাই মাইগ্রেশন লাগে না)
+            $st = $db->prepare('SELECT * FROM meta_comments WHERE ' . implode(' AND ', $where) . ' ORDER BY commented_at DESC LIMIT 300');
             $st->execute($params);
-            $comments = $st->fetchAll();
+            $comments = [];
+            foreach ($st->fetchAll() as $row) {
+                $row['_type'] = mai_classify((string) $row['message']);
+                $typeCounts[$row['_type']] = ($typeCounts[$row['_type']] ?? 0) + 1;
+                if ($cType === '' || $row['_type'] === $cType) { $comments[] = $row; }
+            }
+            $comments = array_slice($comments, 0, 100);
             if ($comments) {
                 $ids = array_column($comments, 'comment_id');
                 $in = implode(',', array_fill(0, count($ids), '?'));
@@ -301,13 +321,16 @@ function mi_ai_box(?array $draft, string $fillTarget, string $channel, string $t
     if (!$draft && !$canGen) { return; }
     echo '<div class="mi-ai">';
     if ($draft) {
-        if ((int) $draft['needs_human'] === 1) {
+        $isComplaint = (string) ($draft['note'] ?? '') === MAI_COMPLAINT_NOTE;
+        if ($isComplaint) {
+            echo '<p class="mi-ai-h" style="color:#B91C1C">⚠️ অভিযোগ মনে হচ্ছে <span>— AI ডাকা হয়নি। নিজে দেখে, যত্ন নিয়ে উত্তর দিন (দরকার হলে ফোন করুন)।</span></p>';
+        } elseif ((int) $draft['needs_human'] === 1) {
             echo '<p class="mi-ai-h">🤖 AI এর উত্তর জানে না <span>— আপনি নিজে উত্তর দিন। একই প্রশ্ন বারবার এলে জ্ঞানভান্ডারে উত্তরটা যোগ করে দিন।</span></p>';
         } else {
             echo '<p class="mi-ai-h">🤖 AI-র খসড়া <span>— চাপলে নিচের ঘরে বসবে, দেখে নিয়ে পাঠান</span></p>';
             echo '<button type="button" class="mi-sug-b mi-ai-b" data-mi-fill="' . e($fillTarget) . '" data-text="' . e($draft['draft']) . '">' . e($draft['draft']) . '</button>';
         }
-        if (!empty($draft['note'])) { echo '<p class="mi-ai-n">ℹ️ ' . e($draft['note']) . '</p>'; }
+        if (!empty($draft['note']) && !$isComplaint) { echo '<p class="mi-ai-n">ℹ️ ' . e($draft['note']) . '</p>'; }
     }
     echo '<div class="mi-ai-row">';
     if ($canGen) {
@@ -333,6 +356,11 @@ require __DIR__ . '/includes/layout-top.php';
 .mi-tabs{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.25rem}
 .mi-tab{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1rem;border-radius:.9rem;font-weight:700;font-size:.9rem;background:rgb(var(--c-surface,255 255 255));border:1px solid rgb(var(--c-border,229 231 235));color:rgb(var(--c-text,31 41 55))}
 .mi-tab.on{background:rgb(var(--c-primary));color:#fff;border-color:transparent}
+.mi-ct{display:inline-block;font-size:.72rem;font-weight:700;padding:.1rem .5rem;border-radius:999px;line-height:1.5}
+.mi-ctrow{display:flex;gap:.4rem;flex-wrap:wrap;margin:-.25rem 0 1rem}
+.mi-ctf{display:inline-flex;align-items:center;gap:.35rem;padding:.4rem .75rem;border-radius:999px;font-size:.82rem;font-weight:700;background:var(--ctb,#F3F4F6);color:var(--ctd,#374151);border:2px solid transparent}
+.mi-ctf span{font-size:.72rem;background:rgba(255,255,255,.7);border-radius:999px;padding:0 .4rem}
+.mi-ctf.on{border-color:var(--ctd,#374151)}
 .mi-badge{display:inline-block;min-width:1.4rem;padding:0 .4rem;border-radius:999px;background:#EF4444;color:#fff;font-size:.72rem;line-height:1.4rem;text-align:center}
 .mi-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem}
 @media (min-width:1024px){.mi-grid.has-open{grid-template-columns:minmax(0,340px) minmax(0,1fr)}}
@@ -489,12 +517,18 @@ require __DIR__ . '/includes/layout-top.php';
     <form method="get" id="miCommentForm" class="bg-white rounded-2xl shadow p-3 mb-4 flex flex-wrap gap-2 items-center">
         <input type="hidden" name="tab" value="comments">
         <?php foreach (['new' => 'নতুন', 'done' => 'উত্তর দেওয়া / দেখা', 'all' => 'সব'] as $k => $lb): ?>
-            <a href="<?= e(mi_back('comments', array_filter(['st' => $k, 'q' => $q]))) ?>" class="text-sm font-semibold px-3 py-1.5 rounded-lg <?= $cStatus === $k ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700' ?>"><?= $lb ?></a>
+            <a href="<?= e(mi_back('comments', array_filter(['st' => $k, 'q' => $q, 'ct' => $cType]))) ?>" class="text-sm font-semibold px-3 py-1.5 rounded-lg <?= $cStatus === $k ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700' ?>"><?= $lb ?></a>
         <?php endforeach; ?>
-        <input type="hidden" name="st" value="<?= e($cStatus) ?>">
+        <input type="hidden" name="st" value="<?= e($cStatus) ?>"><input type="hidden" name="ct" value="<?= e($cType) ?>">
         <input type="search" name="q" value="<?= e($q) ?>" data-autosearch="miCommentForm" class="list-search flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm" style="min-width:160px" placeholder="নাম বা কমেন্ট খুঁজুন">
         <button type="submit" class="px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">🔍 খুঁজুন</button>
     </form>
+    <div class="mi-ctrow" aria-label="ধরন অনুযায়ী">
+        <a href="<?= e(mi_back('comments', array_filter(['st' => $cStatus, 'q' => $q]))) ?>" class="mi-ctf <?= $cType === '' ? 'on' : '' ?>">সব ধরন <span><?= array_sum($typeCounts) ?></span></a>
+        <?php foreach (mai_comment_types() as $tk => $tv): if (empty($typeCounts[$tk]) && $cType !== $tk) { continue; } ?>
+            <a href="<?= e(mi_back('comments', array_filter(['st' => $cStatus, 'q' => $q, 'ct' => $tk]))) ?>" class="mi-ctf <?= $cType === $tk ? 'on' : '' ?>" style="--ctb:<?= $tv[1] ?>;--ctd:<?= $tv[2] ?>"><?= e($tv[0]) ?> <span><?= (int) ($typeCounts[$tk] ?? 0) ?></span></a>
+        <?php endforeach; ?>
+    </div>
 
     <?php if (!$comments): ?>
         <div class="empty-state bg-white rounded-2xl shadow p-8 text-center">
@@ -520,6 +554,7 @@ require __DIR__ . '/includes/layout-top.php';
                     <div class="flex items-center gap-2 flex-wrap">
                         <b class="text-gray-800"><?= e($cm['from_name'] ?: 'ফেসবুক ব্যবহারকারী') ?></b>
                         <span class="text-xs text-gray-400"><?= e(mi_time($cm['commented_at'])) ?></span>
+                        <?= mai_type_chip((string) $cm['_type']) ?>
                         <?php if ($cm['status'] === 'removed'): ?><span class="text-xs font-semibold px-2 py-0.5 rounded bg-red-100 text-red-700">মুছে ফেলা হয়েছে</span>
                         <?php elseif ($cm['status'] === 'new'): ?><span class="text-xs font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-800">নতুন</span><?php endif; ?>
                     </div>
@@ -529,15 +564,21 @@ require __DIR__ . '/includes/layout-top.php';
                     <?php endforeach; ?>
 
                     <?php if ($cm['status'] !== 'removed' && meta_configured()): ?>
-                    <?php if ($cm['status'] === 'new') {
+                    <?php if ($cm['status'] === 'new' && $cm['_type'] === 'praise'): ?>
+                        <div class="mi-ai"><p class="mi-ai-h">❤️ প্রশংসা <span>— AI ডাকা হয়নি (খরচ বাঁচাতে)। চাপলে নিচের ঘরে ধন্যবাদ বসবে, দেখে নিয়ে পাঠান।</span></p>
+                        <button type="button" class="mi-sug-b" data-mi-fill="cmf-<?= (int) $cm['id'] ?>" data-text="<?= e(mai_thanks_text()) ?>">❤️ ধন্যবাদ জানান</button></div>
+                    <?php elseif ($cm['status'] === 'new' && $cm['_type'] === 'spam'): ?>
+                        <p class="mi-ai-n mt-2">🚫 স্প্যাম মনে হচ্ছে — উত্তর না দিয়ে "দেখা হয়েছে" চাপুন, দরকার হলে ফেসবুকে লুকিয়ে দিন।</p>
+                    <?php endif; ?>
+                    <?php if ($cm['status'] === 'new' && $cm['_type'] !== 'spam') {
                         mi_suggest_box(mkb_suggest($db, (string) $cm['message'], 'comment', $cm['from_name'] ?? null), 'cmf-' . (int) $cm['id']);
                         mi_ai_box(mai_latest_draft($db, 'comment', (string) $cm['comment_id']), 'cmf-' . (int) $cm['id'], 'comment', (string) $cm['comment_id'],
-                                  ['id' => (int) $cm['id'], 'st' => $cStatus], $aiOn && trim((string) $cm['message']) !== '');
+                                  ['id' => (int) $cm['id'], 'st' => $cStatus, 'ct' => $cType], $aiOn && trim((string) $cm['message']) !== '');
                     } ?>
                     <form method="post" action="<?= e(mi_back('comments', ['action' => 'c-reply'])) ?>" class="mi-cform mt-3" id="cmf-<?= (int) $cm['id'] ?>">
                         <?= csrf_field() ?>
                         <input type="hidden" name="id" value="<?= (int) $cm['id'] ?>">
-                        <input type="hidden" name="st" value="<?= e($cStatus) ?>">
+                        <input type="hidden" name="st" value="<?= e($cStatus) ?>"><input type="hidden" name="ct" value="<?= e($cType) ?>">
                         <textarea name="text" rows="2" maxlength="2000" required placeholder="কমেন্টের নিচে উত্তর লিখুন (সবাই দেখবে)…"><?= e($cdraft) ?></textarea>
                         <button type="submit" class="mt-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold">💬 উত্তর দিন</button>
                     </form>
@@ -547,7 +588,7 @@ require __DIR__ . '/includes/layout-top.php';
                         <form method="post" action="<?= e(mi_back('comments', ['action' => 'c-status'])) ?>">
                             <?= csrf_field() ?>
                             <input type="hidden" name="id" value="<?= (int) $cm['id'] ?>">
-                            <input type="hidden" name="st" value="<?= e($cStatus) ?>">
+                            <input type="hidden" name="st" value="<?= e($cStatus) ?>"><input type="hidden" name="ct" value="<?= e($cType) ?>">
                             <input type="hidden" name="status" value="<?= $cm['status'] === 'new' ? 'done' : 'new' ?>">
                             <button type="submit" class="px-3 py-2 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold"><?= $cm['status'] === 'new' ? '✓ দেখা হয়েছে (উত্তর লাগবে না)' : '↩ আবার নতুন' ?></button>
                         </form>
