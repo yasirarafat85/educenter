@@ -1,0 +1,82 @@
+<?php
+/* ════════════════════════════════════════════════════════════════════════════
+ * 📨 meta-webhook.php — ফেসবুক পেইজের মেসেজ ও কমেন্ট এখানে আসে (২০২৬-১১-১৭)
+ *
+ * Meta Developer → আপনার অ্যাপ → Webhooks-এ এই ঠিকানাটা বসানো হয়:
+ *   Callback URL : https://<সাইট>/meta-webhook.php
+ *   Verify token : অ্যাডমিন → ফেসবুক ইনবক্স → "সংযোগ" ট্যাবে দেখানো লেখাটা
+ *
+ * GET  = মেটার প্রথমবারের যাচাই (hub.challenge ফেরত দেওয়া)
+ * POST = আসল খবর — `X-Hub-Signature-256` সই App Secret দিয়ে মিলিয়ে তবেই জমা।
+ *
+ * 🔴 CSRF নয় (কল আসে মেটার সার্ভার থেকে) — **সই-ই একমাত্র গার্ড**।
+ * 🔴 এই ধাপে কোনো উত্তর পাঠানো হয় না — শুধু জমা।
+ * 🔴 উত্তরে কোনো তথ্য ফেরত যায় না।
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+require_once __DIR__ . '/includes/meta.php';
+
+header('X-Robots-Tag: noindex, nofollow');
+
+function meta_wh_out(int $code, string $body = 'ok'): never
+{
+    http_response_code($code);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo $body;
+    exit;
+}
+
+$cfg = meta_cfg();
+$method = $_SERVER['REQUEST_METHOD'] ?? '';
+
+// ── GET: মেটার যাচাই ─────────────────────────────────────────────────────────
+// PHP ঠিকানার `hub.mode` কে `hub_mode` বানিয়ে দেয়
+if ($method === 'GET') {
+    $mode  = (string) ($_GET['hub_mode'] ?? '');
+    $token = (string) ($_GET['hub_verify_token'] ?? '');
+    $chal  = (string) ($_GET['hub_challenge'] ?? '');
+    // 🔴 খালি ↔ খালি কখনো মিলবে না
+    if ($mode === 'subscribe' && $cfg['verify_token'] !== '' && $token !== ''
+        && hash_equals($cfg['verify_token'], $token) && preg_match('/^[A-Za-z0-9_-]{1,200}$/', $chal)) {
+        meta_wh_out(200, $chal);
+    }
+    meta_wh_out(403, 'forbidden');
+}
+
+if ($method !== 'POST') {
+    meta_wh_out(405, 'post_only');
+}
+
+// ── POST: সই যাচাই ───────────────────────────────────────────────────────────
+$raw = (string) file_get_contents('php://input');
+if (strlen($raw) > 1024 * 1024) {
+    meta_wh_out(413, 'too_large');
+}
+$sig = (string) ($_SERVER['HTTP_X_HUB_SIGNATURE_256'] ?? '');
+if (!meta_signature_valid($raw, $sig, $cfg['app_secret'])) {
+    meta_wh_out(403, 'bad_signature');
+}
+
+$db = get_db();
+// শেষ কখন খবর এসেছে — সংযোগ ট্যাবে দেখানো হয় (সংযোগ ঠিক আছে কিনা বুঝতে)
+try { update_setting('meta_last_webhook_at', date('Y-m-d H:i:s')); } catch (Throwable $e) {}
+
+if (!meta_feature_on()) {
+    meta_wh_out(200, 'off'); // বন্ধ থাকলে কিছুই জমা হয় না
+}
+if (!meta_ready($db)) {
+    meta_wh_out(503, 'not_ready'); // মাইগ্রেশনের আগে — মেটা পরে আবার পাঠাবে
+}
+
+$payload = json_decode($raw, true);
+if (!is_array($payload)) {
+    meta_wh_out(400, 'bad_json');
+}
+
+try {
+    meta_ingest($db, $payload, $cfg['page_id']);
+} catch (Throwable $e) {
+    error_log('meta-webhook: ' . $e->getMessage());
+    meta_wh_out(500, 'error');
+}
+meta_wh_out(200, 'ok');

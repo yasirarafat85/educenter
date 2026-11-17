@@ -1,7 +1,7 @@
 # EduCenter — ক্লিন URL (.php লুকানো)
 # লোকাল (সাবডিরেক্টরি /website) ও লাইভ (ডোমেইন রুট) — দুই জায়গাতেই কাজ করে।
 # THE_REQUEST-ভিত্তিক %1 এ সাবডিরেক্টরি প্রিফিক্স সহ পুরো পাথ থাকে, তাই redirect নিরাপদ।
-# admin/ ফোল্ডার ও ফাংশনাল endpoint (-submit / ajax-* / log-download / sitemap / sms-in / pay-status) ইচ্ছাকৃতভাবে বাদ।
+# admin/ ফোল্ডার ও ফাংশনাল endpoint (-submit / ajax-* / log-download / sitemap / sms-in / meta-webhook / pay-status) ইচ্ছাকৃতভাবে বাদ।
 
 # 🔒 `.user.ini` বাইরে থেকে পড়া বন্ধ (২০২৬-১০-২২)
 # ফাইলটা PHP-র নিজের সেটিংস (PHP2Shell-এর ঢাল) — গোপন কিছু নেই, কিন্তু সার্ভারের
@@ -26,7 +26,7 @@
     RewriteCond %{THE_REQUEST} \s/+([^\s?]+?)\.php[\s?] [NC]
     RewriteCond %{REQUEST_URI} !(^|/)admin/ [NC]
     RewriteCond %{REQUEST_URI} !-submit\.php$ [NC]
-    RewriteCond %{REQUEST_URI} !/(ajax-[^/]+|log-download|sitemap|sms-in|pay-submit|pay-status|report-view|cart-add)\.php$ [NC]
+    RewriteCond %{REQUEST_URI} !/(ajax-[^/]+|log-download|sitemap|sms-in|pay-submit|pay-status|report-view|cart-add|meta-webhook)\.php$ [NC]
     RewriteRule ^ /%1 [R=301,L,NE]
 
     # extensionless URL → আসল .php ফাইল (থাকলে) — অভ্যন্তরীণ rewrite, query string সহ (QSA)

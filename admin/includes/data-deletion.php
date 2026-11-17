@@ -191,6 +191,18 @@ function dd_scan(PDO $db, string $phone): array
     }
     $add('registration_tasks', 'করণীয় তালিকা (ছবিসহ)', 'delete', $tasks);
 
+    // ফেসবুক ইনবক্স — লেখার ভেতরে নম্বরটা থাকলে (মেসেঞ্জারে নম্বর লিখে পাঠানো সাধারণ ব্যাপার)।
+    // কথোপকথন মুছলে তার সব মেসেজও মোছে (FK CASCADE)। 🔴 নম্বর ছাড়া ফেসবুক-পরিচয়ে মেলানো যায় না।
+    foreach (['meta_contacts' => ['SELECT DISTINCT c.id, c.name FROM meta_contacts c JOIN meta_messages m ON m.contact_id = c.id WHERE m.text LIKE :p', 'ফেসবুক মেসেঞ্জারের কথোপকথন'],
+              'meta_comments' => ['SELECT id, from_name FROM meta_comments WHERE message LIKE :p', 'ফেসবুক পেইজের কমেন্ট']] as $mt => [$sql, $lbl]) {
+        if (!db_has_table($db, $mt)) { continue; }
+        try {
+            $st = $db->prepare($sql);
+            $st->execute(['p' => '%' . $last10 . '%']);
+            $add($mt, $lbl, 'delete', $st->fetchAll());
+        } catch (Throwable $e) {}
+    }
+
     // ── নাম/নম্বর ঢাকা হয়, সারি থাকে (টাকার রেকর্ড) ──
     $claims = dd_match_rows($db, 'payment_claims', ['phone'], ['registration_id'], $last10);
     $add('payment_claims', 'পেমেন্ট দাবি (TrxID রেকর্ড)', 'mask', $claims);

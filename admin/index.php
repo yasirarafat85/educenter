@@ -200,6 +200,17 @@ if (contact_feature_ready($db)) {
         'sql' => "SELECT COUNT(*) c FROM contact_messages WHERE status = 'new'"];
 }
 
+// 📨 ফেসবুক ইনবক্স — অপঠিত মেসেজ ও নতুন কমেন্ট (ফিচার চালু ও টেবিল থাকলেই)
+require_once __DIR__ . '/../includes/meta.php';
+if (meta_feature_on() && meta_ready($db)) {
+    $taskDefs[] = ['page' => 'meta-inbox.php', 'url' => 'meta-inbox.php?tab=messages', 'icon' => 'message-circle',
+        'label' => 'ফেসবুকে নতুন মেসেজ', 'hint' => 'উত্তরের অপেক্ষায় থাকা কথোপকথন', 'cls' => 'bg-blue-100 text-blue-600', 'num' => 'text-blue-600',
+        'sql' => 'SELECT COUNT(*) c FROM meta_contacts WHERE unread > 0'];
+    $taskDefs[] = ['page' => 'meta-inbox.php', 'url' => 'meta-inbox.php?tab=comments', 'icon' => 'message-circle',
+        'label' => 'ফেসবুকে নতুন কমেন্ট', 'hint' => 'পেইজের পোস্টে — উত্তর দিন বা "দেখা হয়েছে"', 'cls' => 'bg-blue-100 text-blue-600', 'num' => 'text-blue-600',
+        'sql' => "SELECT COUNT(*) c FROM meta_comments WHERE status = 'new' AND is_page = 0"];
+}
+
 $tasks = [];
 foreach ($taskDefs as $td) {
     if (!admin_can_page($td['page'])) {

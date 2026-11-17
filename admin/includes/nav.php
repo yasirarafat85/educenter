@@ -15,6 +15,7 @@
 require_once __DIR__ . '/entities.php';
 require_once __DIR__ . '/permissions.php';
 require_once __DIR__ . '/tasks.php'; // task_feature_ready() — 📌 করণীয় ইনবক্স লিংকের গার্ড
+require_once dirname(__DIR__, 2) . '/includes/meta.php'; // meta_feature_on() — 📨 ফেসবুক ইনবক্স লিংকের গার্ড
 require_once dirname(__DIR__, 2) . '/includes/contact.php'; // contact_feature_ready() — 📨 যোগাযোগ বার্তা লিংকের গার্ড
 
 // সেট করা না থাকলে এই চারটা পিন করা অবস্থায় শুরু হয় (ইউজারের নিজের বলা "রোজ যেগুলো বেশি লাগে")।
@@ -130,6 +131,10 @@ function admin_nav_groups(): array
     //    (task_feature_ready); অ্যাডমিন সেটিংসে ০ দিলে নীরবে লুকায়, ডেটা থাকে।
     if (admin_can('tasks') && task_feature_ready()) {
         $daily[] = ['key' => 'tasks', 'href' => 'tasks.php', 'file' => 'tasks.php', 'icon' => 'clipboard-check', 'label' => 'করণীয় ইনবক্স'];
+    }
+    // 📨 ফেসবুক ইনবক্স — নরম সুইচ বন্ধ থাকলে লুকায় (মূল অ্যাডমিন সবসময় দেখেন, যাতে আবার চালু করা যায়)
+    if (admin_can('meta') && (meta_feature_on() || admin_is_super())) {
+        $daily[] = ['key' => 'meta-inbox', 'href' => 'meta-inbox.php', 'file' => 'meta-inbox.php', 'icon' => 'message-circle', 'label' => 'ফেসবুক ইনবক্স'];
     }
 
     // 💰 টাকা মেলানো — "আয় মেলানো" আর বইয়ের তিন পাতা একসাথে (আগে দুই আলাদা গ্রুপে ছিল,
