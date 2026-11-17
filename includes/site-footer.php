@@ -41,6 +41,7 @@
             ['gallery',  '🖼️', 'গ্যালারি'],
             ['notice',   '🔔', 'নোটিশ বোর্ড'],
             ['contact',  '✉️', 'যোগাযোগ করুন'],
+            ['privacy',  '🔒', 'গোপনীয়তা নীতি'],
         ]],
     ];
     ?>
@@ -192,6 +193,8 @@ $socialIcons = [
                         <span aria-hidden="true">·</span>
                         <a href="account-signup">নতুন অ্যাকাউন্ট</a>
                     <?php endif; ?>
+                    <span aria-hidden="true">·</span>
+                    <a href="privacy">গোপনীয়তা নীতি</a>
                     <?php // ↑ উপরে — JS নিচের স্ক্রিপ্টে `#ft-top` ধরে পেজের উপরে নেয় (স্টিকি বারের সাথে শেয়ার্ড) ?>
                     <button type="button" class="ft-up" id="ft-top" aria-label="উপরে যান">↑ উপরে</button>
                 </div>
