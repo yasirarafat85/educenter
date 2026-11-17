@@ -199,6 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         }
         $cap = (float) str_replace(',', '.', (string) ($_POST['ai_cap'] ?? MAI_DEFAULT_CAP));
         update_setting('meta_ai_cap_usd', (string) round(max(0, min(1000, $cap)), 2));
+        update_setting('meta_ai_site_info', !empty($_POST['site_info']) ? '1' : '0');
         $persona = trim(str_replace("\r\n", "\n", (string) ($_POST['ai_persona'] ?? '')));
         update_setting('meta_ai_persona', mb_substr($persona, 0, 3000));
         set_flash('success', '🤖 AI-র সেটিংস সংরক্ষণ হয়েছে।' . (mai_has_key() ? '' : ' চাবি না বসালে AI কাজ করবে না।'));
@@ -223,10 +224,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         redirect(mk_back('learn'));
     }
 
+    // ── 📥 তৈরি করা কোর্সের ডকুমেন্ট এক চাপে বসানো (database/kb-seed) ──
+    if ($action === 'seed-import') {
+        $n = mai_seed_import($db, $me);
+        set_flash('success', $n ? "📥 {$n}টি কোর্সের ডকুমেন্ট জ্ঞানভান্ডারে বসানো হলো — AI এখন থেকেই এগুলো পড়বে।" : 'নতুন কিছু বসানোর নেই — সবগুলো আগেই বসানো আছে।');
+        redirect(mk_back('kb', ['kind' => 'doc']));
+    }
+    // ── মুছে ফেলা একটা তৈরি-ডকুমেন্ট ফিরিয়ে আনা ──
+    if ($action === 'seed-restore') {
+        $key = (string) ($_POST['key'] ?? '');
+        foreach (mai_seed_list($db) as $sd) {
+            if ($sd['key'] === $key && $sd['state'] === 'removed') {
+                $db->prepare("UPDATE meta_kb SET status = 'active', title = :t, answer = :b, updated_at = :at WHERE source_ref = :ref")
+                   ->execute(['t' => $sd['title'], 'b' => $sd['body'], 'at' => $now, 'ref' => 'seed:' . $key]);
+                set_flash('success', '↩ "' . $sd['title'] . '" আবার জ্ঞানভান্ডারে বসানো হলো।');
+            }
+        }
+        redirect(mk_back('kb', ['kind' => 'doc']));
+    }
+
     redirect(mk_back($tab));
 }
 
 /* ─────────────────────────── দেখানোর ডেটা ─────────────────────────── */
+$kbPlan = null; $siteChars = 0; $seeds = [];
 $rules = []; $kbRows = []; $proposals = []; $editRow = null; $testOut = null;
 $counts = ['rules' => 0, 'qa' => 0, 'doc' => 0, 'learn' => 0];
 $kind = ($_GET['kind'] ?? '') === 'doc' ? 'doc' : 'qa';
@@ -250,6 +271,9 @@ if ($ready) {
                 $testOut = ['rule' => mkb_rule_pick($rules, $testText, $testCh), 'sug' => mkb_suggest($db, $testText, $testCh, 'রহিমা')];
             }
         } elseif ($tab === 'kb') {
+            $kbPlan = mai_kb_plan($db);
+            $siteChars = mai_site_info_on() ? mb_strlen(mai_site_info_text($db)) : 0;
+            $seeds = mai_seed_list($db);
             $params = ['k' => $kind];
             $where = "kind = :k AND status = 'active'";
             if ($q !== '') {
@@ -432,7 +456,59 @@ require __DIR__ . '/includes/layout-top.php';
     </div>
     <p class="text-sm text-gray-600"><?= $kind === 'qa'
         ? 'অভিভাবকেরা যা যা জিজ্ঞেস করেন আর তার সঠিক উত্তর। মেসেজ/কমেন্ট এলে কাছাকাছি প্রশ্নের উত্তর ইনবক্সে প্রস্তাব হিসেবে আসে; ধাপ ৩-এ AI-ও এখান থেকে শিখবে।'
-        : 'শিশুর মেধা বিকাশ, কোর্সের ধাপ, কোন কাজ কীভাবে করতে হয় — এমন বড় লেখা। ধাপ ৩-এ AI উত্তর লেখার সময় এগুলো পড়বে। দাম/ব্যাচ/শেষ সময় এখানে লিখবেন না — সেগুলো প্রতিবার সাইট থেকে টাটকা নেওয়া হয়। কোন কোর্সে এখন ভর্তি চলছে আর কোনটা বন্ধ, সেটাও AI সাইট থেকে নিজে জানে — এখানে শুধু নিয়মটা লিখুন (যেমন "রেজিস্ট্রেশনের পর কী কী ধাপ", "ভর্তি বন্ধ হলে কী বলতে হবে")।' ?></p>
+        : 'শিশুর মেধা বিকাশ, কোর্সের ধাপ, কোন কাজ কীভাবে করতে হয় — এমন বড় লেখা। ধাপ ৩-এ AI উত্তর লেখার সময় এগুলো পড়বে। প্রতিটা কোর্সের তথ্য ও নিয়ম নিজের ভাষায় লিখুন (যেমন "রেজিস্ট্রেশনের পর কী কী ধাপ", "ভর্তি বন্ধ হলে কী বলতে হবে") — AI প্রতিটা উত্তরের আগে সব ডকুমেন্ট পড়ে নেয়, তাই সেভ করার পরের প্রশ্ন থেকেই মেনে চলে। কোন কোর্সে এখন ভর্তি চলছে আর কোনটা বন্ধ, সেটা AI সাইট থেকে নিজে জানে। ফি বা শুরুর তারিখ ডকুমেন্টে লিখলে, সেগুলো বদলালে ডকুমেন্টও বদলাতে হবে।' ?></p>
+
+    <?php if ($kbPlan):
+        $pct = min(100, (int) round($kbPlan['used'] * 100 / max(1, $kbPlan['limit'])));
+        $lost = array_filter($kbPlan['docs'], fn($d) => $d['state'] !== 'full'); ?>
+    <div class="mk-card" style="<?= ($lost || $kbPlan['qa_dropped']) ? 'border-color:#FCA5A5;background:#FEF2F2' : '' ?>">
+        <p class="font-bold text-gray-800">🧠 AI কতটা পড়তে পারছে</p>
+        <div style="height:10px;border-radius:99px;background:#E5E7EB;overflow:hidden;margin:8px 0">
+            <div style="height:100%;width:<?= $pct ?>%;background:<?= $pct >= 90 ? '#DC2626' : ($pct >= 70 ? '#F59E0B' : '#16A34A') ?>"></div>
+        </div>
+        <p class="text-sm text-gray-700">জ্ঞানভান্ডার: <?= number_format($kbPlan['used']) ?> / <?= number_format($kbPlan['limit']) ?> অক্ষর (<?= $pct ?>%) — <?= count($kbPlan['docs']) ?>টি ডকুমেন্ট, <?= count($kbPlan['qa']) ?>টি প্রশ্নোত্তর।
+            <?= $siteChars ? 'সাথে ওয়েবসাইটের তথ্য ' . number_format($siteChars) . ' অক্ষর (আলাদা হিসাব)।' : '' ?></p>
+        <?php if ($lost || $kbPlan['qa_dropped']): ?>
+            <p class="text-sm font-bold" style="color:#B91C1C;margin-top:6px">⚠️ জায়গা ভরে গেছে — নিচেরগুলো AI পুরোটা পড়তে পারছে না:</p>
+            <ul class="text-sm" style="color:#B91C1C;padding-inline-start:18px;list-style:disc">
+                <?php foreach ($lost as $d): ?><li><?= e($d['title']) ?> — <?= $d['state'] === 'cut' ? 'শেষের অংশ কাটা পড়ছে' : 'একদমই পড়া হচ্ছে না' ?></li><?php endforeach; ?>
+                <?php if ($kbPlan['qa_dropped']): ?><li><?= $kbPlan['qa_dropped'] ?>টি পুরনো প্রশ্নোত্তর পড়া হচ্ছে না</li><?php endif; ?>
+            </ul>
+            <p class="mk-hint">অপ্রয়োজনীয় বা পুরনো ডকুমেন্ট/প্রশ্নোত্তর মুছে জায়গা খালি করুন। ডকুমেন্ট সবসময় আগে পড়া হয়, প্রশ্নোত্তর পরে।</p>
+        <?php else: ?>
+            <p class="mk-hint">✅ সব ডকুমেন্ট ও প্রশ্নোত্তর AI পুরোটা পড়ছে।</p>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($kind === 'doc' && $seeds):
+        $seedNew = array_filter($seeds, fn($x) => $x['state'] === 'new'); ?>
+    <div class="mk-card">
+        <p class="font-bold text-gray-800">📥 তৈরি করা কোর্সের তথ্য (<?= count($seeds) ?>টি কোর্স)</p>
+        <p class="mk-hint">প্রতিটা কোর্সের পুরো তথ্য আর সাধারণ প্রশ্নোত্তর আগে থেকে সাজানো আছে। বসানোর পর নিচের তালিকা থেকে যেকোনোটা খুলে বদলাতে পারবেন।</p>
+        <ul class="text-sm text-gray-700" style="margin:8px 0;display:grid;gap:4px">
+            <?php foreach ($seeds as $sd): ?>
+            <li class="mk-row" style="justify-content:space-between;gap:8px">
+                <span class="min-w-0" style="overflow-wrap:anywhere"><?= $sd['state'] === 'have' ? '✅' : ($sd['state'] === 'new' ? '🆕' : '🗑️') ?> <?= e($sd['title']) ?></span>
+                <?php if ($sd['state'] === 'removed'): ?>
+                <form method="post" action="<?= e(mk_back('kb', ['kind' => 'doc', 'action' => 'seed-restore'])) ?>" style="flex:0 0 auto">
+                    <?= csrf_field() ?><input type="hidden" name="key" value="<?= e($sd['key']) ?>">
+                    <button type="submit" class="mk-btn bg-gray-100 text-gray-700">↩ ফিরিয়ে আনুন</button>
+                </form>
+                <?php endif; ?>
+            </li>
+            <?php endforeach; ?>
+        </ul>
+        <?php if ($seedNew): ?>
+        <form method="post" action="<?= e(mk_back('kb', ['kind' => 'doc', 'action' => 'seed-import'])) ?>">
+            <?= csrf_field() ?>
+            <button type="submit" class="mk-btn bg-indigo-600 text-white">📥 <?= count($seedNew) ?>টি কোর্সের তথ্য এক চাপে বসান</button>
+        </form>
+        <?php else: ?>
+            <p class="mk-hint">✅ সবগুলো বসানো আছে।</p>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
 
     <?php if ($kind === 'qa'):
         $fq = $qaOld ?: ($editRow ?: ['question' => mb_substr(trim((string) ($_GET['ask'] ?? '')), 0, 2000), 'answer' => '']); ?>
@@ -562,6 +638,11 @@ require __DIR__ . '/includes/layout-top.php';
             <label>মাসে সর্বোচ্চ খরচ (ডলার)</label>
             <input type="number" name="ai_cap" min="0" max="1000" step="0.5" value="<?= e((string) $aiCfg['cap']) ?>">
             <p class="mk-hint">≈ <?= e($bdt($aiCfg['cap'])) ?>। সীমা পেরোলে AI নিজে থেকে থেমে যায়, মাস বদলালে আবার চলে।</p>
+            <label class="mk-check" style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-weight:600">
+                <input type="checkbox" name="site_info" value="1" <?= mai_site_info_on() ? 'checked' : '' ?> style="margin-top:4px;flex:0 0 auto">
+                <span>🌐 ওয়েবসাইটের পাবলিক তথ্য থেকেও উত্তর দেবে (কোর্সের বিবরণ, ওয়ার্কশিট, প্রোডাক্ট, FAQ, চালু নোটিশ, যোগাযোগ)</span>
+            </label>
+            <p class="mk-hint">সাইটে যা বদলাবেন, AI নিজে থেকেই সেটা জানবে। শুধু পাবলিক সাইটে যা দেখা যায় তাই যায় — কোনো অভিভাবকের নাম, ফোন বা অর্ডার কখনো নয়।</p>
             <label>AI-কে নির্দেশনা (কীভাবে কথা বলবে)</label>
             <textarea name="ai_persona" rows="4" placeholder="<?= e(mai_default_persona()) ?>"><?= e((string) get_setting('meta_ai_persona')) ?></textarea>
             <p class="mk-hint">খালি রাখলে ধূসর লেখাটাই ব্যবহার হবে। দাম/তারিখ এখানে লিখবেন না — ওগুলো সবসময় সাইট থেকে টাটকা নেওয়া হয়। "না জানলে চুপ থাকা", "দাম বানিয়ে না বলা" নিয়মগুলো আগে থেকেই বসানো, বদলানো যায় না।</p>
@@ -569,6 +650,13 @@ require __DIR__ . '/includes/layout-top.php';
                 <button type="submit" class="mk-btn bg-indigo-600 text-white">💾 সংরক্ষণ করুন</button>
             </div>
         </form>
+        <?php if (mai_site_info_on()): $siteTxt = mai_site_info_text($db); ?>
+        <details class="mk-card" style="margin-top:12px">
+            <summary class="font-bold text-gray-800" style="cursor:pointer">🌐 AI ওয়েবসাইট থেকে যা দেখছে (<?= number_format(mb_strlen($siteTxt)) ?> অক্ষর)</summary>
+            <pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;font-size:.82rem;margin-top:8px;max-height:420px;overflow:auto"><?= e($siteTxt !== '' ? $siteTxt : 'সাইটে এখনো কোনো সক্রিয় তথ্য নেই।') ?></pre>
+            <p class="mk-hint">এর সাথে প্রতিবার টাটকা যায়: কোন কোর্সে এখন ভর্তি চলছে আর কোনটা বন্ধ। ভুল কিছু দেখলে সাইটের ঐ কোর্স/পাতা ঠিক করুন — AI নিজে থেকেই নতুনটা দেখবে।</p>
+        </details>
+        <?php endif; ?>
         <?php if ($aiCfg['key'] !== ''): ?>
         <form method="post" action="<?= e(mk_back('ai', ['action' => 'ai-save'])) ?>" class="mt-3" onsubmit="return confirmSubmit(this, 'চাবি মুছলে AI সম্পূর্ণ বন্ধ হয়ে যাবে। মুছবেন?', 'চাবি মুছুন');">
             <?= csrf_field() ?><input type="hidden" name="clear_key" value="1">

@@ -22,7 +22,8 @@ const MAI_API_VERSION   = '2026-10-21';
 const MAI_DEFAULT_MODEL = 'claude-opus-5-5';
 const MAI_DEFAULT_CAP   = 5.0;      // মাসে কত ডলার পর্যন্ত (ডিফল্ট)
 const MAI_BDT_PER_USD   = 125;      // শুধু দেখানোর জন্য আনুমানিক টাকা
-const MAI_CONTEXT_CHARS = 40000;    // জ্ঞানভান্ডার থেকে প্রম্পটে সর্বোচ্চ কত অক্ষর
+const MAI_CONTEXT_CHARS = 120000;   // জ্ঞানভান্ডার (ডকুমেন্ট + প্রশ্নোত্তর) থেকে প্রম্পটে সর্বোচ্চ কত অক্ষর
+const MAI_SITE_CHARS    = 40000;    // সাইটের পাবলিক তথ্য থেকে সর্বোচ্চ কত অক্ষর (আলাদা সীমা)
 const MAI_HISTORY       = 12;       // কথোপকথনের শেষ কয়টা মেসেজ পাঠানো হয়
 const MAI_MAX_PER_RUN   = 3;        // এক ওয়েবহুকে সর্বোচ্চ কয়টা AI ডাক
 const MAI_MAX_TOKENS    = 3000;
@@ -209,7 +210,7 @@ function mai_thread_messages(array $rows): array
 function mai_fixed_rules(): string
 {
     return "নিয়ম (সবসময় মানবেন):\n"
-        . "1. শুধু নিচে দেওয়া তথ্য ও জ্ঞানভান্ডার থেকে উত্তর দিন। দাম, তারিখ, ব্যাচ, লিংক, ফোন নম্বর কখনো অনুমান করে বা বানিয়ে লিখবেন না — \"কোর্সের অবস্থা\" তালিকায় যা আছে শুধু তাই।\n"
+        . "1. শুধু নিচে দেওয়া তথ্য ও জ্ঞানভান্ডার থেকে উত্তর দিন। দাম, তারিখ, ব্যাচ, লিংক, ফোন নম্বর কখনো অনুমান করে বা বানিয়ে লিখবেন না — \"কোর্সের অবস্থা\" তালিকা, ওয়েবসাইটের তথ্য বা জ্ঞানভান্ডারের ডকুমেন্টে যা আছে শুধু তাই। ডকুমেন্টে কোনো কোর্স শুরুর তারিখ আজকের তারিখের আগে হয়ে গেলে সেটাকে \"আসছে\" বলবেন না।\n"
         . "2. উত্তর জানা না থাকলে, বা প্রশ্নটা অভিযোগ, টাকা ফেরত, পেমেন্ট সমস্যা, পার্সেল না পাওয়া, অ্যাকাউন্টের ব্যক্তিগত বিষয় হলে, অথবা কেউ মানুষের সাথে কথা বলতে চাইলে — অন্য কিছু না লিখে হুবহু শুধু " . MAI_HUMAN_TAG . " লিখুন।\n"
         . "3. যে ভাষায় প্রশ্ন, সেই ভাষায় উত্তর (সাধারণত বাংলা)। ভদ্র, উষ্ণ ও সংক্ষিপ্ত — মেসেজে ২-৫ বাক্য, কমেন্টে ১-৩ বাক্য।\n"
         . "4. সাধারণ লেখা দিন — মার্কডাউন, তারকা-চিহ্ন বা শিরোনাম নয়।\n"
@@ -280,30 +281,214 @@ function mai_cap_reached(PDO $db): bool
 
 /* ───────────────────────── প্রম্পট ───────────────────────── */
 
-/** স্থির অংশ — নিয়ম + অ্যাডমিনের নির্দেশনা + জ্ঞানভান্ডার (ক্যাশ হয়, তাই বারবারের খরচ খুব কম) */
+/**
+ * জ্ঞানভান্ডারের কোনটা প্রম্পটে যাবে — আর কতটা জায়গা লাগল (২০২৬-১১-১৭)।
+ * 🔴 ক্রম: আগে সব ডকুমেন্ট (অ্যাডমিনের লেখা কোর্সের তথ্য/নিয়ম — এটাই সবচেয়ে জরুরি), তারপর প্রশ্নোত্তর নতুন থেকে পুরনো।
+ *    আগে উল্টো ছিল — শেখা প্রশ্নোত্তর জমতে থাকলে শেষের ডকুমেন্টগুলো নীরবে কেটে বাদ পড়ত।
+ * 🔴 কিছু বাদ পড়লে সেটা 'docs'/'qa_dropped'-এ ধরা থাকে — জ্ঞানভান্ডার পাতা এটাই দেখায় (নীরবে হারানো নয়)।
+ * ফেরত: ['docs' => [[id,title,chars,state full|cut|dropped,text]], 'qa' => [লাইন], 'qa_total', 'qa_dropped', 'used', 'limit']
+ */
+function mai_kb_plan(PDO $db): array
+{
+    $plan = ['docs' => [], 'qa' => [], 'qa_total' => 0, 'qa_dropped' => 0, 'used' => 0, 'limit' => MAI_CONTEXT_CHARS];
+    $budget = MAI_CONTEXT_CHARS;
+    try {
+        foreach ($db->query("SELECT id, title, answer FROM meta_kb WHERE kind = 'doc' AND status = 'active' ORDER BY id ASC LIMIT 100")->fetchAll() as $r) {
+            $title = trim((string) $r['title']);
+            $body = trim((string) $r['answer']);
+            $len = mb_strlen($body);
+            if ($budget < 500) {
+                $plan['docs'][] = ['id' => (int) $r['id'], 'title' => $title, 'chars' => $len, 'state' => 'dropped', 'text' => ''];
+                continue;
+            }
+            $state = $len > $budget ? 'cut' : 'full';
+            $text = $state === 'cut' ? mb_substr($body, 0, $budget) : $body;
+            $budget -= mb_strlen($text);
+            $plan['docs'][] = ['id' => (int) $r['id'], 'title' => $title, 'chars' => $len, 'state' => $state, 'text' => $text];
+        }
+        foreach ($db->query("SELECT question, answer FROM meta_kb WHERE kind = 'qa' AND status = 'active' ORDER BY id DESC LIMIT 1000")->fetchAll() as $r) {
+            $plan['qa_total']++;
+            $line = 'প্রশ্ন: ' . trim((string) $r['question']) . "\nউত্তর: " . trim((string) $r['answer']);
+            if (mb_strlen($line) > $budget) { $plan['qa_dropped']++; continue; }
+            $budget -= mb_strlen($line);
+            $plan['qa'][] = $line;
+        }
+    } catch (Throwable $e) {}
+    $plan['used'] = MAI_CONTEXT_CHARS - $budget;
+    return $plan;
+}
+
+/** সাইটের তথ্য AI-কে দেওয়া চালু? (ডিফল্ট চালু; শুধু '0' = বন্ধ) */
+function mai_site_info_on(): bool
+{
+    return get_setting('meta_ai_site_info') !== '0';
+}
+
+/** লেখা পরিষ্কার: HTML বাদ, ফাঁকা লাইন কমানো, সীমায় ছাঁটা (বিশুদ্ধ) */
+function mai_clean(?string $t, int $max): string
+{
+    $t = html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>', '</li>'], "\n", (string) $t)), ENT_QUOTES, 'UTF-8');
+    $t = preg_replace("/[ \t]+/u", ' ', str_replace("\r", '', $t));
+    $t = trim((string) preg_replace("/\n\s*\n+/u", "\n", (string) $t));
+    return mb_strlen($t) > $max ? rtrim(mb_substr($t, 0, $max)) . '…' : $t;
+}
+
+/**
+ * ওয়েবসাইটের পাবলিক তথ্য — অ্যাডমিন সাইটে যা বদলান, AI নিজে থেকেই সেটা জানে (২০২৬-১১-১৭)।
+ * কোর্সের বিবরণ ও ফিচার · ওয়ার্কশিট · প্রোডাক্ট · FAQ · চালু নোটিশ · যোগাযোগ।
+ * 🔴🔴 শুধু পাবলিক সাইটে যা দেখা যায় তাই — অভিভাবকের নাম/ফোন/অর্ডার, গ্রুপের প্রাইভেট লিংক,
+ *     গোপন রেজিস্ট্রেশন চাবি কখনো এখানে নয়। নিষ্ক্রিয় (is_active = 0) কিছুই নয়।
+ * 🔴 ভর্তি খোলা/বন্ধ এখানে নেই — সেটা প্রতিবার টাটকা `mai_courses_status_text()`-এ (live অংশে)।
+ * এটা স্থির অংশে বসে (ক্যাশ হয়) — সাইট বদলালে শুধু তখনই ক্যাশ নতুন হয়।
+ */
+function mai_site_info_text(PDO $db): string
+{
+    static $txt = null;
+    if ($txt !== null) { return $txt; }
+    $out = [];
+    try {
+        // কোর্স-ব্যাচ
+        $rows = $db->query('SELECT cb.*, c.title FROM course_batches cb JOIN courses c ON c.id = cb.course_id
+                            WHERE cb.is_active = 1 ORDER BY cb.sort_order ASC, cb.id ASC LIMIT 30')->fetchAll();
+        $feat = [];
+        if ($rows) {
+            $ids = implode(',', array_map(fn($r) => (int) $r['id'], $rows));
+            foreach ($db->query("SELECT batch_id, feature_text FROM course_features WHERE batch_id IN ($ids) ORDER BY sort_order ASC, id ASC")->fetchAll() as $f) {
+                $feat[(int) $f['batch_id']][] = trim((string) $f['feature_text']);
+            }
+        }
+        $c = [];
+        foreach ($rows as $r) {
+            $b = '▸ ' . trim((string) $r['title']) . (trim((string) ($r['batch_name'] ?? '')) !== '' ? ' — ' . trim((string) $r['batch_name']) : '');
+            foreach (['duration' => 'মেয়াদ', 'instructor' => 'শিক্ষক/শিক্ষিকা', 'price' => 'দাম', 'payment_schedule' => 'টাকা দেওয়ার নিয়ম'] as $k => $lb) {
+                if (trim((string) ($r[$k] ?? '')) !== '') { $b .= "\n  " . $lb . ': ' . mai_clean($r[$k], 300); }
+            }
+            if (trim((string) ($r['secondary_fee'] ?? '')) !== '') {
+                $b .= "\n  " . (trim((string) ($r['secondary_fee_label'] ?? '')) ?: 'অতিরিক্ত ফি') . ': ' . mai_clean($r['secondary_fee'], 100);
+            }
+            $d = mai_clean($r['description'] ?? '', 1500);
+            if ($d !== '') { $b .= "\n  বিবরণ: " . $d; }
+            if (!empty($feat[(int) $r['id']])) { $b .= "\n  যা থাকছে: " . mai_clean(implode(' · ', $feat[(int) $r['id']]), 800); }
+            $c[] = $b;
+        }
+        if ($c) { $out[] = "কোর্স (সাইটে যা লেখা আছে):\n" . implode("\n", $c); }
+
+        // ওয়ার্কশিট ও প্রোডাক্ট
+        $pf = [];
+        foreach ($db->query('SELECT pf.product_id, pf.feature_text FROM product_features pf JOIN products p ON p.id = pf.product_id WHERE p.is_active = 1 ORDER BY pf.sort_order ASC, pf.id ASC')->fetchAll() as $f) {
+            $pf[(int) $f['product_id']][] = trim((string) $f['feature_text']);
+        }
+        foreach (['worksheets' => ['ওয়ার্কশিট', 'worksheet'], 'products' => ['প্রোডাক্ট', 'product']] as $tb => [$lb, $type]) {
+            $items = [];
+            foreach ($db->query("SELECT * FROM $tb WHERE is_active = 1 ORDER BY sort_order ASC, id ASC LIMIT 40")->fetchAll() as $r) {
+                $b = '▸ ' . trim((string) $r['title']);
+                if (trim((string) ($r['price'] ?? '')) !== '') { $b .= ' | দাম: ' . trim((string) $r['price']); }
+                if ($tb === 'worksheets' && trim((string) ($r['pages'] ?? '')) !== '') { $b .= ' | পৃষ্ঠা: ' . trim((string) $r['pages']); }
+                $b .= ' | লিংক: ' . item_share_url($r, $type);
+                $d = mai_clean($r['description'] ?? '', 500);
+                if ($d !== '') { $b .= "\n  " . $d; }
+                if ($tb === 'products' && !empty($pf[(int) $r['id']])) { $b .= "\n  যা থাকছে: " . mai_clean(implode(' · ', $pf[(int) $r['id']]), 400); }
+                $items[] = $b;
+            }
+            if ($items) { $out[] = $lb . " (অর্ডার সাইটের কার্ট থেকে):\n" . implode("\n", $items); }
+        }
+
+        // সাইটের FAQ
+        $fq = [];
+        foreach ($db->query('SELECT question, answer FROM faqs WHERE is_active = 1 ORDER BY sort_order ASC, id ASC LIMIT 60')->fetchAll() as $r) {
+            $fq[] = 'প্রশ্ন: ' . mai_clean($r['question'], 300) . "\nউত্তর: " . mai_clean($r['answer'], 800);
+        }
+        if ($fq) { $out[] = "সাইটের সাধারণ প্রশ্ন (FAQ):\n" . implode("\n", $fq); }
+
+        // চালু নোটিশ (মেয়াদ পেরোনো বাদ)
+        $nt = [];
+        foreach (notice_filter_live($db->query('SELECT * FROM notices WHERE is_active = 1 ORDER BY id DESC LIMIT 25')->fetchAll()) as $r) {
+            $nt[] = '▸ ' . mai_clean($r['title'] ?? '', 200) . (trim((string) ($r['notice_date'] ?? '')) !== '' ? ' (' . trim((string) $r['notice_date']) . ')' : '')
+                . "\n  " . mai_clean($r['content'] ?? '', 600);
+            if (count($nt) >= 8) { break; }
+        }
+        if ($nt) { $out[] = "চালু নোটিশ:\n" . implode("\n", $nt); }
+    } catch (Throwable $e) {}
+
+    // যোগাযোগ (সেটিংস থেকে)
+    $ct = [];
+    foreach (['site_name' => 'প্রতিষ্ঠান', 'contact_phone' => 'ফোন', 'contact_email' => 'ইমেইল', 'contact_address' => 'ঠিকানা', 'contact_hours' => 'যোগাযোগের সময়'] as $k => $lb) {
+        $v = trim((string) get_setting($k));
+        if ($v !== '') { $ct[] = $lb . ': ' . mai_clean($v, 200); }
+    }
+    if ($ct) { $out[] = "যোগাযোগ:\n" . implode("\n", $ct); }
+
+    $txt = implode("\n\n", $out);
+    if (mb_strlen($txt) > MAI_SITE_CHARS) { $txt = mb_substr($txt, 0, MAI_SITE_CHARS) . "\n…(বাকিটা জায়গার অভাবে বাদ)"; }
+    return $txt;
+}
+
+/** স্থির অংশ — নিয়ম + অ্যাডমিনের নির্দেশনা + সাইটের তথ্য + জ্ঞানভান্ডার (ক্যাশ হয়, তাই বারবারের খরচ খুব কম) */
 function mai_stable_prompt(PDO $db): string
 {
     $cfg = mai_cfg();
     $parts = [mai_fixed_rules(), "প্রতিষ্ঠানের নির্দেশনা:\n" . $cfg['persona']];
-    $budget = MAI_CONTEXT_CHARS;
-    $qa = []; $docs = [];
+    if (mai_site_info_on()) {
+        $site = mai_site_info_text($db);
+        if ($site !== '') { $parts[] = "ওয়েবসাইটের তথ্য (সাইট থেকে নেওয়া — জ্ঞানভান্ডারের সাথে না মিললে জ্ঞানভান্ডারের ডকুমেন্টকে ঠিক ধরুন):\n\n" . $site; }
+    }
+    $plan = mai_kb_plan($db);
+    $docs = [];
+    foreach ($plan['docs'] as $d) {
+        if ($d['state'] !== 'dropped') { $docs[] = '### ' . $d['title'] . "\n" . $d['text']; }
+    }
+    if ($docs) { $parts[] = "জ্ঞানভান্ডার — ডকুমেন্ট (প্রতিষ্ঠানের নিজের লেখা কোর্সের তথ্য ও নিয়ম):\n\n" . implode("\n\n", $docs); }
+    if ($plan['qa']) { $parts[] = "জ্ঞানভান্ডার — আগের প্রশ্নোত্তর (একই ধরনের প্রশ্নে এভাবেই উত্তর দিন):\n\n" . implode("\n\n", $plan['qa']); }
+    return implode("\n\n---\n\n", $parts);
+}
+
+/**
+ * এক চাপে বসানোর জন্য তৈরি করা কোর্সের ডকুমেন্ট (database/kb-seed/*.txt)।
+ * প্রথম লাইন = শিরোনাম। ক্রম এখানেই ঠিক করা।
+ */
+function mai_seed_files(): array
+{
+    return ['play-based-math', 'play-group', 'art-basic', 'art-pre-advance', 'pre-school', 'junior-kids', 'creative-kids', 'bangla-reading'];
+}
+
+/** ['key','title','body','state' => new|have|removed] — 'removed' = আগে বসিয়ে অ্যাডমিন মুছে দিয়েছেন (আর ফেরে না) */
+function mai_seed_list(PDO $db): array
+{
+    $dir = dirname(__DIR__) . '/database/kb-seed';
+    $out = [];
+    $have = [];
     try {
-        foreach ($db->query("SELECT question, answer FROM meta_kb WHERE kind = 'qa' AND status = 'active' ORDER BY id DESC LIMIT 400")->fetchAll() as $r) {
-            $line = 'প্রশ্ন: ' . trim((string) $r['question']) . "\nউত্তর: " . trim((string) $r['answer']);
-            if (mb_strlen($line) > $budget) { break; }
-            $budget -= mb_strlen($line);
-            $qa[] = $line;
-        }
-        foreach ($db->query("SELECT title, answer FROM meta_kb WHERE kind = 'doc' AND status = 'active' ORDER BY id ASC LIMIT 50")->fetchAll() as $r) {
-            if ($budget < 500) { break; }
-            $body = mb_substr(trim((string) $r['answer']), 0, $budget);
-            $budget -= mb_strlen($body);
-            $docs[] = '### ' . trim((string) $r['title']) . "\n" . $body;
+        foreach ($db->query("SELECT source_ref, status FROM meta_kb WHERE source_ref LIKE 'seed:%'")->fetchAll() as $r) {
+            $have[(string) $r['source_ref']] = (string) $r['status'];
         }
     } catch (Throwable $e) {}
-    if ($qa) { $parts[] = "জ্ঞানভান্ডার — আগের প্রশ্নোত্তর (একই ধরনের প্রশ্নে এভাবেই উত্তর দিন):\n\n" . implode("\n\n", $qa); }
-    if ($docs) { $parts[] = "জ্ঞানভান্ডার — ডকুমেন্ট:\n\n" . implode("\n\n", $docs); }
-    return implode("\n\n---\n\n", $parts);
+    foreach (mai_seed_files() as $k) {
+        $f = $dir . '/' . $k . '.txt';
+        if (!is_file($f)) { continue; }
+        $body = mkb_clean_doc((string) file_get_contents($f));
+        if ($body === '') { continue; }
+        $title = mb_substr(trim((string) strtok($body, "\n")), 0, 190);
+        $st = $have['seed:' . $k] ?? null;
+        $out[] = ['key' => $k, 'title' => $title, 'body' => $body, 'state' => $st === null ? 'new' : ($st === 'active' ? 'have' : 'removed')];
+    }
+    return $out;
+}
+
+/** নতুনগুলো বসায় (একই ডকুমেন্ট দুইবার নয় — source_ref UNIQUE)। ফেরত: কয়টা বসল */
+function mai_seed_import(PDO $db, string $by): int
+{
+    $n = 0;
+    $now = date('Y-m-d H:i:s');
+    $st = $db->prepare("INSERT INTO meta_kb (kind, status, title, answer, source, source_ref, created_by, approved_by, approved_at)
+                        VALUES ('doc', 'active', :t, :b, 'seed', :ref, :by, :by2, :at)");
+    foreach (mai_seed_list($db) as $s) {
+        if ($s['state'] !== 'new') { continue; }
+        try {
+            $st->execute(['t' => $s['title'], 'b' => $s['body'], 'ref' => 'seed:' . $s['key'], 'by' => $by, 'by2' => $by, 'at' => $now]);
+            $n++;
+        } catch (Throwable $e) {} // একই সময়ে দুইবার চাপলে UNIQUE আটকায়
+    }
+    return $n;
 }
 
 /** প্রতিবার টাটকা অংশ — আজকের তারিখ, চলমান কোর্স, লিংক */
