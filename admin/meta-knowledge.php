@@ -243,6 +243,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         redirect(mk_back('kb', ['kind' => 'doc']));
     }
 
+    // ── বসানো তৈরি-ডকুমেন্টে ফাইলের নতুন সংস্করণ বসানো (অ্যাডমিন চাপলে তবেই — নিজের বদল মুছে যায়) ──
+    if ($action === 'seed-update') {
+        $key = (string) ($_POST['key'] ?? '');
+        foreach (mai_seed_list($db) as $sd) {
+            if ($sd['key'] === $key && $sd['state'] === 'changed') {
+                $db->prepare("UPDATE meta_kb SET title = :t, answer = :b, updated_at = :at WHERE source_ref = :ref AND status = 'active'")
+                   ->execute(['t' => $sd['title'], 'b' => $sd['body'], 'at' => $now, 'ref' => 'seed:' . $key]);
+                set_flash('success', '↻ "' . $sd['title'] . '" নতুন সংস্করণে হালনাগাদ হলো — AI এখন থেকেই নতুন লেখা পড়বে।');
+            }
+        }
+        redirect(mk_back('kb', ['kind' => 'doc']));
+    }
+
     redirect(mk_back($tab));
 }
 
@@ -455,8 +468,8 @@ require __DIR__ . '/includes/layout-top.php';
         <a href="<?= e(mk_back('kb', ['kind' => 'doc'])) ?>" class="mk-btn <?= $kind === 'doc' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700' ?>">📄 ডকুমেন্ট (<?= $counts['doc'] ?>)</a>
     </div>
     <p class="text-sm text-gray-600"><?= $kind === 'qa'
-        ? 'অভিভাবকেরা যা যা জিজ্ঞেস করেন আর তার সঠিক উত্তর। মেসেজ/কমেন্ট এলে কাছাকাছি প্রশ্নের উত্তর ইনবক্সে প্রস্তাব হিসেবে আসে; ধাপ ৩-এ AI-ও এখান থেকে শিখবে।'
-        : 'শিশুর মেধা বিকাশ, কোর্সের ধাপ, কোন কাজ কীভাবে করতে হয় — এমন বড় লেখা। ধাপ ৩-এ AI উত্তর লেখার সময় এগুলো পড়বে। প্রতিটা কোর্সের তথ্য ও নিয়ম নিজের ভাষায় লিখুন (যেমন "রেজিস্ট্রেশনের পর কী কী ধাপ", "ভর্তি বন্ধ হলে কী বলতে হবে") — AI প্রতিটা উত্তরের আগে সব ডকুমেন্ট পড়ে নেয়, তাই সেভ করার পরের প্রশ্ন থেকেই মেনে চলে। কোন কোর্সে এখন ভর্তি চলছে আর কোনটা বন্ধ, সেটা AI সাইট থেকে নিজে জানে। ফি বা শুরুর তারিখ ডকুমেন্টে লিখলে, সেগুলো বদলালে ডকুমেন্টও বদলাতে হবে।' ?></p>
+        ? 'অভিভাবকেরা যা যা জিজ্ঞেস করেন আর তার সঠিক উত্তর। মেসেজ/কমেন্ট এলে কাছাকাছি প্রশ্নের উত্তর ইনবক্সে প্রস্তাব হিসেবে আসে; AI-ও এখান থেকে শেখে।'
+        : 'শিশুর মেধা বিকাশ, কোর্সের ধাপ, কোন কাজ কীভাবে করতে হয় — এমন বড় লেখা। AI উত্তর লেখার সময় এগুলো পড়ে। প্রতিটা কোর্সের তথ্য ও নিয়ম নিজের ভাষায় লিখুন (যেমন "রেজিস্ট্রেশনের পর কী কী ধাপ", "ভর্তি বন্ধ হলে কী বলতে হবে") — AI প্রতিটা উত্তরের আগে সব ডকুমেন্ট পড়ে নেয়, তাই সেভ করার পরের প্রশ্ন থেকেই মেনে চলে। কোন কোর্সে এখন ভর্তি চলছে আর কোনটা বন্ধ, সেটা AI সাইট থেকে নিজে জানে। ফি বা শুরুর তারিখ ডকুমেন্টে লিখলে, সেগুলো বদলালে ডকুমেন্টও বদলাতে হবে।' ?></p>
 
     <?php if ($kbPlan):
         $pct = min(100, (int) round($kbPlan['used'] * 100 / max(1, $kbPlan['limit'])));
@@ -489,7 +502,13 @@ require __DIR__ . '/includes/layout-top.php';
         <ul class="text-sm text-gray-700" style="margin:8px 0;display:grid;gap:4px">
             <?php foreach ($seeds as $sd): ?>
             <li class="mk-row" style="justify-content:space-between;gap:8px">
-                <span class="min-w-0" style="overflow-wrap:anywhere"><?= $sd['state'] === 'have' ? '✅' : ($sd['state'] === 'new' ? '🆕' : '🗑️') ?> <?= e($sd['title']) ?></span>
+                <span class="min-w-0" style="overflow-wrap:anywhere"><?= ['have' => '✅', 'new' => '🆕', 'changed' => '🔄', 'removed' => '🗑️'][$sd['state']] ?? '' ?> <?= e($sd['title']) ?><?php if ($sd['state'] === 'changed'): ?><br><span class="mk-hint">আপনার বসানো লেখাটা নতুন সংস্করণ থেকে আলাদা (নতুন সংস্করণে কিছু তথ্য বদলেছে, অথবা আপনি নিজে বদলেছেন)।</span><?php endif; ?></span>
+                <?php if ($sd['state'] === 'changed'): ?>
+                <form method="post" action="<?= e(mk_back('kb', ['kind' => 'doc', 'action' => 'seed-update'])) ?>" style="flex:0 0 auto" onsubmit="return confirmSubmit(this, 'নতুন সংস্করণ বসালে এই ডকুমেন্টে আপনার নিজের করা বদল (যদি থাকে) মুছে যাবে। বসাবেন?', 'নতুন সংস্করণ');">
+                    <?= csrf_field() ?><input type="hidden" name="key" value="<?= e($sd['key']) ?>">
+                    <button type="submit" class="mk-btn bg-indigo-600 text-white">↻ নতুন সংস্করণ বসান</button>
+                </form>
+                <?php endif; ?>
                 <?php if ($sd['state'] === 'removed'): ?>
                 <form method="post" action="<?= e(mk_back('kb', ['kind' => 'doc', 'action' => 'seed-restore'])) ?>" style="flex:0 0 auto">
                     <?= csrf_field() ?><input type="hidden" name="key" value="<?= e($sd['key']) ?>">
@@ -542,6 +561,7 @@ require __DIR__ . '/includes/layout-top.php';
         <label>অথবা লেখা পেস্ট করুন</label>
         <textarea name="body" rows="10"><?= e((string) $fd['answer']) ?></textarea>
         <p class="mk-hint">একটা ডকুমেন্টে সর্বোচ্চ <?= number_format(MKB_DOC_MAX_CHARS) ?> অক্ষর।</p>
+        <p class="mk-hint">📋 <b>প্রস্তুত বার্তা:</b> কেউ কোর্সের নাম লিখলে বা বিস্তারিত জানতে চাইলে AI যেন আপনার সাজানো লেখাটা (ইমোজি, লাইন সহ) হুবহু পাঠায় — তাহলে লেখাটার আগে আলাদা লাইনে <code><?= e(MAI_READY_START) ?></code> আর পরে আলাদা লাইনে <code><?= e(MAI_READY_END) ?></code> লিখুন। প্রস্তুত বার্তা <?= number_format(MAI_READY_MAX) ?> অক্ষরের মধ্যে রাখুন (মেসেঞ্জারের সীমা)।</p>
         <div class="mk-row mt-3">
             <button type="submit" class="mk-btn bg-indigo-600 text-white">💾 সংরক্ষণ করুন</button>
             <?php if (!empty($fd['id'])): ?><a href="<?= e(mk_back('kb', ['kind' => 'doc'])) ?>" class="mk-btn bg-gray-100 text-gray-700">বাতিল</a><?php endif; ?>
@@ -566,6 +586,9 @@ require __DIR__ . '/includes/layout-top.php';
             <?php else: ?>
                 <p class="font-bold text-gray-800" style="overflow-wrap:anywhere">📄 <?= e((string) $r['title']) ?></p>
                 <p class="text-xs text-gray-500"><?= number_format(mb_strlen((string) $r['answer'])) ?> অক্ষর</p>
+                <?php foreach (mai_ready_blocks((string) $r['answer']) as $rb): $rbn = mb_strlen($rb); ?>
+                    <p class="text-xs mt-1" style="color:<?= $rbn > MAI_READY_MAX ? '#B91C1C' : '#047857' ?>">📋 প্রস্তুত বার্তা আছে (<?= number_format($rbn) ?> অক্ষর)<?= $rbn > MAI_READY_MAX ? ' — ⚠️ বেশি লম্বা, মেসেঞ্জারে শেষটা কেটে যাবে; ' . number_format(MAI_READY_MAX) . ' অক্ষরের মধ্যে আনুন' : ' — কেউ এই কোর্স সম্পর্কে জানতে চাইলে AI এটাই হুবহু পাঠাবে' ?></p>
+                <?php endforeach; ?>
                 <div class="mk-pre mt-1 text-gray-600"><?= e(meta_snippet((string) $r['answer'], 220)) ?></div>
             <?php endif; ?>
             <p class="text-xs text-gray-400 mt-2"><?= $r['source'] === 'message' ? '💬 মেসেজের উত্তর থেকে শেখা' : ($r['source'] === 'comment' ? '🗨️ কমেন্টের উত্তর থেকে শেখা' : 'হাতে লেখা') ?><?= $r['approved_by'] ? ' · ' . e($r['approved_by']) : '' ?></p>
