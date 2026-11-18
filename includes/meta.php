@@ -112,6 +112,9 @@ function meta_configured(): bool
     return $c['page_id'] !== '' && $c['page_token'] !== '';
 }
 
+/** পাতা খোলার সময় নাম/পোস্ট আনতে মোট সর্বোচ্চ কত সেকেন্ড (বাকিটা পরের বার) */
+const META_FILL_BUDGET = 3.0;
+
 function meta_graph_base(): string
 {
     return defined('META_GRAPH_BASE') ? rtrim((string) META_GRAPH_BASE, '/') : 'https://graph.facebook.com';
@@ -121,7 +124,7 @@ function meta_graph_base(): string
  * Graph API ডাকা। ফেরত: ['ok', 'status', 'data', 'error']
  * 🔴 টোকেন কখনো এরর-বার্তা বা লগে যায় না।
  */
-function meta_graph(string $method, string $path, array $params = [], ?array $body = null): array
+function meta_graph(string $method, string $path, array $params = [], ?array $body = null, int $timeout = 20): array
 {
     $c = meta_cfg();
     if ($c['page_token'] === '') {
@@ -138,8 +141,8 @@ function meta_graph(string $method, string $path, array $params = [], ?array $bo
     $ch = curl_init($url);
     $opts = [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 20,
-        CURLOPT_CONNECTTIMEOUT => 8,
+        CURLOPT_TIMEOUT        => max(2, $timeout),
+        CURLOPT_CONNECTTIMEOUT => min(8, max(2, $timeout)),
         CURLOPT_CUSTOMREQUEST  => strtoupper($method),
     ];
     if ($body !== null) {
@@ -524,8 +527,11 @@ function meta_fill_posts(PDO $db, int $max = 5): void
         $ids = $db->query("SELECT DISTINCT c.post_id FROM meta_comments c LEFT JOIN meta_posts p ON p.post_id = c.post_id
                            WHERE c.post_id IS NOT NULL AND p.post_id IS NULL LIMIT " . (int) $max)->fetchAll(PDO::FETCH_COLUMN);
     } catch (Throwable $e) { return; }
+    $t0 = microtime(true);
     foreach ($ids as $pid) {
-        $r = meta_graph('GET', (string) $pid, ['fields' => 'id,message,created_time,permalink_url']);
+        // পাতা খোলার সময় চলে — মোট META_FILL_BUDGET সেকেন্ডের বেশি অপেক্ষা নয়, বাকিটা পরের বার
+        if (microtime(true) - $t0 > META_FILL_BUDGET) { break; }
+        $r = meta_graph('GET', (string) $pid, ['fields' => 'id,message,created_time,permalink_url'], null, 5);
         // না পেলেও একটা খালি সারি বসে — নাহলে প্রতিবার আবার চেষ্টা করত
         meta_store_post($db, (string) $pid, $r['ok'] ? (string) ($r['data']['message'] ?? '') : '',
             $r['ok'] ? (string) ($r['data']['permalink_url'] ?? '') : '', $r['ok'] ? meta_ts($r['data']['created_time'] ?? '') : null);
@@ -536,6 +542,10 @@ function meta_fill_posts(PDO $db, int $max = 5): void
 function meta_fill_names(PDO $db, int $max = 8): void
 {
     if (!meta_configured()) { return; }
+    // ফেসবুক "অনুমতি নেই" বলে থাকলে (App Review-এর আগে) পাতা খোলার সময় আর চেষ্টা নয় —
+    // প্রতিবার দুটো ব্যর্থ Graph ডাকেই পাতা ধীর হচ্ছিল। "↻ নাম আনুন" হাতে চাপলে তবু চেষ্টা হয়।
+    $blocked = (int) strtotime((string) get_setting('meta_names_blocked_until'));
+    if ($blocked > time()) { return; }
     try {
         $rows = $db->query('SELECT id, psid FROM meta_contacts WHERE name IS NULL ORDER BY last_at DESC LIMIT ' . (int) $max)->fetchAll();
         // আগে ব্যর্থ হওয়া (খালি) নাম — ৬ ঘণ্টায় একবার, অল্প কয়েকটা করে আবার চেষ্টা
@@ -545,26 +555,38 @@ function meta_fill_names(PDO $db, int $max = 8): void
             $rows = array_merge($rows, $db->query("SELECT id, psid FROM meta_contacts WHERE name = '' ORDER BY last_at DESC LIMIT 5")->fetchAll());
         }
     } catch (Throwable $e) { return; }
+    $t0 = microtime(true);
     foreach ($rows as $row) {
-        meta_fetch_name($db, (int) $row['id'], (string) $row['psid']);
+        if (microtime(true) - $t0 > META_FILL_BUDGET) { break; }
+        $got = meta_fetch_name($db, (int) $row['id'], (string) $row['psid'], 5);
+        if ($got === '' && meta_name_capability_error(meta_name_error())) {
+            update_setting('meta_names_blocked_until', date('Y-m-d H:i:s', time() + 12 * 3600));
+            break;
+        }
     }
+}
+
+/** ফেসবুকের "এই অ্যাপের অনুমতি নেই" জাতীয় এরর (নেটওয়ার্কের সাময়িক সমস্যা নয়) */
+function meta_name_capability_error(string $err): bool
+{
+    return $err !== '' && (bool) preg_match('/\(#(3|10|200|230)\)|capability|permission|advanced access/i', $err);
 }
 
 /**
  * একজনের নাম ফেসবুক থেকে আনা — দুই পথ: (ক) PSID-এর প্রোফাইল, (খ) কথোপকথনের অংশগ্রহণকারী।
  * না পেলে খালি স্ট্রিং বসে (বারবার চেষ্টা নয়), আর শেষ কারণটা meta_name_error-এ থাকে।
  */
-function meta_fetch_name(PDO $db, int $contactId, string $psid): string
+function meta_fetch_name(PDO $db, int $contactId, string $psid, int $timeout = 20): string
 {
     $name = ''; $err = '';
-    $r = meta_graph('GET', $psid, ['fields' => 'name,first_name,last_name']);
+    $r = meta_graph('GET', $psid, ['fields' => 'name,first_name,last_name'], null, $timeout);
     if ($r['ok']) {
         $d = (array) $r['data'];
         $name = trim((string) ($d['name'] ?? trim(($d['first_name'] ?? '') . ' ' . ($d['last_name'] ?? ''))));
     } else { $err = $r['error']; }
     if ($name === '') {
         $c = meta_cfg();
-        $r2 = meta_graph('GET', $c['page_id'] . '/conversations', ['user_id' => $psid, 'fields' => 'participants']);
+        $r2 = meta_graph('GET', $c['page_id'] . '/conversations', ['user_id' => $psid, 'fields' => 'participants'], null, $timeout);
         if ($r2['ok']) {
             foreach ((array) ($r2['data']['data'][0]['participants']['data'] ?? []) as $pt) {
                 if ((string) ($pt['id'] ?? '') === $psid) { $name = trim((string) ($pt['name'] ?? '')); break; }
@@ -573,6 +595,7 @@ function meta_fetch_name(PDO $db, int $contactId, string $psid): string
     }
     try {
         $db->prepare('UPDATE meta_contacts SET name = :n WHERE id = :id')->execute(['n' => $name, 'id' => $contactId]);
+        if ($name !== '') { update_setting('meta_names_blocked_until', ''); }
         if ($name === '' && $err !== '') { update_setting('meta_name_error', meta_snippet($err, 200)); meta_name_error(meta_snippet($err, 200)); }
     } catch (Throwable $e) {}
     return $name;

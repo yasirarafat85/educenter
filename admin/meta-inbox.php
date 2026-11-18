@@ -315,7 +315,13 @@ $typeCounts = [];
 
 if ($ready) {
     // 💡 হাতের নতুন উত্তর থেকে শেখার প্রস্তাব (ধাপ ২) — টেবিল না থাকলে চুপচাপ বাদ
-    try { if (mkb_ready($db)) { mkb_scan_history($db); } } catch (Throwable $e) {}
+    // শেখার স্ক্যান ভারী (প্রতিটা উত্তরের আগের প্রশ্ন খোঁজে) — ইনবক্স থেকে ১০ মিনিটে একবার
+    try {
+        if (mkb_ready($db) && (int) strtotime((string) get_setting('meta_kb_scan_at')) < time() - 600) {
+            update_setting('meta_kb_scan_at', date('Y-m-d H:i:s'));
+            mkb_scan_history($db);
+        }
+    } catch (Throwable $e) {}
     try {
         $counts['contacts'] = (int) $db->query('SELECT COUNT(*) FROM meta_contacts WHERE unread > 0')->fetchColumn();
         $counts['comments'] = (int) $db->query("SELECT COUNT(*) FROM meta_comments WHERE status = 'new' AND is_page = 0")->fetchColumn();
