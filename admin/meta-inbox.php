@@ -110,6 +110,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         $r = meta_graph('GET', $c['page_id'], ['fields' => 'id,name']);
         if ($r['ok']) {
             update_setting('meta_page_name', (string) ($r['data']['name'] ?? ''));
+            // আগে (কম অনুমতির token-এ) নাম আনতে ব্যর্থ হলে খালি বসে থাকে — এখন আবার চেষ্টা হবে
+            try { $db->exec("UPDATE meta_contacts SET name = NULL WHERE name = ''"); } catch (Throwable $e) {}
             set_flash('success', '✅ সংযোগ ঠিক আছে — পেইজ: ' . (string) ($r['data']['name'] ?? ''));
         } else {
             set_flash('error', '⚠️ token ঠিক আছে, পেইজও মিলেছে — কিন্তু token-এ "pages_read_engagement" অনুমতি নেই। মেসেজ চলবে, তবে কমেন্ট আনা ও পেইজের নাম পড়া যাবে না। Meta Developer → Use cases-এ pages_read_engagement যোগ করে আবার Generate চাপুন, নতুন token এখানে বসান। (ফেসবুকের বার্তা: ' . $r['error'] . ')');
@@ -432,6 +434,8 @@ require __DIR__ . '/includes/layout-top.php';
 .mi-ctf.on{border-color:var(--ctd,#374151)}
 .mi-badge{display:inline-block;min-width:1.4rem;padding:0 .4rem;border-radius:999px;background:#EF4444;color:#fff;font-size:.72rem;line-height:1.4rem;text-align:center}
 .mi-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem}
+/* কথোপকথন খোলা থাকলে তালিকা শুধু ছোট পর্দায় লুকায় (lg:block কম্পাইলড CSS-এ নেই বলে সাধারণ CSS) */
+@media (max-width:1023px){.mi-listbox-hide{display:none}}
 @media (min-width:1024px){.mi-grid.has-open{grid-template-columns:minmax(0,340px) minmax(0,1fr)}}
 .mi-list a.mi-row{display:flex;gap:.75rem;padding:.8rem 1rem;border-bottom:1px solid rgb(var(--c-border,229 231 235));min-width:0}
 .mi-list a.mi-row.on{background:rgb(var(--c-primary) / .08)}
@@ -506,7 +510,7 @@ require __DIR__ . '/includes/layout-top.php';
         </div>
     <?php elseif ($ready): ?>
     <div class="mi-grid <?= $openContact ? 'has-open' : '' ?>">
-        <div class="bg-white rounded-2xl shadow overflow-hidden <?= $openContact ? 'hidden lg:block' : '' ?>" style="min-width:0">
+        <div class="bg-white rounded-2xl shadow overflow-hidden <?= $openContact ? 'mi-listbox-hide' : '' ?>" style="min-width:0">
             <form method="get" id="miSearchForm" class="p-3 border-b flex gap-2">
                 <input type="hidden" name="tab" value="messages">
                 <input type="search" name="q" value="<?= e($q) ?>" data-autosearch="miSearchForm" class="list-search flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm" style="min-width:0" placeholder="নাম বা লেখা দিয়ে খুঁজুন">
