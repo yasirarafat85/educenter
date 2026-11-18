@@ -4,6 +4,12 @@
 
 ---
 
+## ২০২৬-১১-১৮ — META-INBOX-LOG.md: ফেসবুক ইনবক্সের পুরো লগ
+
+- নতুন নথি [META-INBOX-LOG.md](META-INBOX-LOG.md) — কী বানানো হলো (৪ ধাপ + সংযোজন), মেটা অ্যাপ সেটআপের সঠিক পথ (User token → Extend → সাইট নিজে পেইজের Never token বসায়), যেসব এরর এসেছিল ও সমাধান, সুবিধা-অসুবিধা, App Review-এর তালিকা, বাকি কাজ। CLAUDE.md ও PROJECT-NOTES.md থেকে লিংক।
+
+---
+
 ## ২০২৬-১১-১৮ — User token বসালে পেইজের token নিজে থেকেই বের করে নেয়
 
 - লাইভে ইউজার বারবার Explorer-এর User token বসাচ্ছিলেন (me/accounts থেকে ঠিক লাইন খুঁজে কপি করা কঠিন)। এখন "সংযোগ পরীক্ষা"-য় token-এর id ≠ Page ID হলে ঐ token দিয়েই `GET /{page_id}?fields=access_token` চাওয়া হয়; পাওয়া token-এর `/me` = Page ID মিললে সেটাই `meta_page_token`-এ সেভ।
