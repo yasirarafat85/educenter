@@ -40,6 +40,13 @@ function mi_cflt(array $src): array
  * ফর্ম থেকে পাঠানোর ছবি: নতুন আপলোড (ফোন থেকে) আগে, নাহলে সংগ্রহ থেকে বাছা।
  * ফেরত: ['url', 'lib_id', 'error'] — কিছু না দিলে url খালি।
  */
+/** কন্টাক্টের দেখানোর নাম — নাম না থাকলে PSID-এর শেষ ৪ অঙ্ক দিয়ে আলাদা করে চেনা যায় */
+function mi_contact_name(array $c): string
+{
+    $n = trim((string) ($c['name'] ?? ''));
+    return $n !== '' ? $n : 'ফেসবুক ব্যবহারকারী #' . substr((string) ($c['psid'] ?? ''), -4);
+}
+
 function mi_post_image(PDO $db): array
 {
     $f = $_FILES['image_file'] ?? null;
@@ -89,6 +96,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
     }
 
     if (!$ready) { set_flash('error', 'আগে database/migrate-meta-inbox.sql চালাতে হবে।'); redirect(mi_back($tab)); }
+
+    // ── একজনের নাম আবার আনা ──
+    if ($action === 'refetch-name') {
+        $cid = (int) ($_POST['contact_id'] ?? 0);
+        $st = $db->prepare('SELECT id, psid FROM meta_contacts WHERE id = :id');
+        $st->execute(['id' => $cid]);
+        $row = $st->fetch();
+        if ($row && meta_configured()) {
+            $got = meta_fetch_name($db, (int) $row['id'], (string) $row['psid']);
+            set_flash($got !== '' ? 'success' : 'error', $got !== '' ? '✅ নাম পাওয়া গেছে: ' . $got : '❌ ফেসবুক এখনো নাম দিচ্ছে না — ' . meta_name_error());
+        }
+        redirect(mi_back('messages', ['c' => $cid]));
+    }
 
     // ── সংযোগ পরীক্ষা ──
     if ($action === 'test') {
@@ -519,7 +539,7 @@ require __DIR__ . '/includes/layout-top.php';
             <div class="mi-list">
                 <?php if (!$contacts): ?><p class="p-4 text-sm text-gray-400">কিছু পাওয়া যায়নি।</p><?php endif; ?>
                 <?php foreach ($contacts as $ct):
-                    $nm = $ct['name'] !== null && $ct['name'] !== '' ? $ct['name'] : 'ফেসবুক ব্যবহারকারী'; ?>
+                    $nm = mi_contact_name($ct); ?>
                     <a href="<?= e(mi_back('messages', array_filter(['c' => $ct['id'], 'q' => $q]))) ?>" class="mi-row <?= $openContact && (int) $openContact['id'] === (int) $ct['id'] ? 'on' : '' ?>">
                         <span class="mi-av"><?= e(mi_initial($nm)) ?></span>
                         <span style="flex:1;min-width:0">
@@ -539,7 +559,7 @@ require __DIR__ . '/includes/layout-top.php';
         </div>
 
         <?php if ($openContact):
-            $nm = $openContact['name'] !== null && $openContact['name'] !== '' ? $openContact['name'] : 'ফেসবুক ব্যবহারকারী';
+            $nm = mi_contact_name($openContact);
             $win = meta_window_open($openContact['last_in_at']);
             $draft = (string) ($_SESSION['mi_draft'][(int) $openContact['id']] ?? '');
             unset($_SESSION['mi_draft'][(int) $openContact['id']]);
@@ -548,7 +568,19 @@ require __DIR__ . '/includes/layout-top.php';
             <div class="p-3 border-b flex items-center gap-3 flex-wrap">
                 <a href="<?= e(mi_back('messages', array_filter(['q' => $q]))) ?>" class="lg:hidden text-sm font-semibold text-indigo-600">← সব</a>
                 <span class="mi-av"><?= e(mi_initial($nm)) ?></span>
-                <b class="text-gray-800" style="flex:1;min-width:0;overflow-wrap:anywhere"><?= e($nm) ?></b>
+                <span style="flex:1 1 170px;min-width:0">
+                    <b class="text-gray-800 block" style="overflow-wrap:anywhere" title="<?= e($nm) ?>"><?= e($nm) ?></b>
+                    <?php if ((string) $openContact['name'] === ''): ?>
+                        <span class="block text-xs text-amber-700" style="line-height:1.5">ফেসবুক নাম দেয়নি<?= meta_name_error() !== '' ? ' — ' . e(meta_name_error()) : '' ?></span>
+                    <?php endif; ?>
+                </span>
+                <?php if ((string) $openContact['name'] === ''): ?>
+                <form method="post" action="<?= e(mi_back('messages', ['action' => 'refetch-name', 'c' => (int) $openContact['id']])) ?>">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="contact_id" value="<?= (int) $openContact['id'] ?>">
+                    <button type="submit" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-700">↻ নাম আনুন</button>
+                </form>
+                <?php endif; ?>
                 <form method="post" action="<?= e(mi_back('messages', ['action' => 'contact-status'])) ?>">
                     <?= csrf_field() ?>
                     <input type="hidden" name="contact_id" value="<?= (int) $openContact['id'] ?>">

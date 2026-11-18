@@ -536,13 +536,52 @@ function meta_fill_names(PDO $db, int $max = 8): void
     if (!meta_configured()) { return; }
     try {
         $rows = $db->query('SELECT id, psid FROM meta_contacts WHERE name IS NULL ORDER BY last_at DESC LIMIT ' . (int) $max)->fetchAll();
+        // আগে ব্যর্থ হওয়া (খালি) নাম — ৬ ঘণ্টায় একবার, অল্প কয়েকটা করে আবার চেষ্টা
+        $last = (int) strtotime((string) get_setting('meta_names_retry_at'));
+        if ($last < time() - 6 * 3600) {
+            update_setting('meta_names_retry_at', date('Y-m-d H:i:s'));
+            $rows = array_merge($rows, $db->query("SELECT id, psid FROM meta_contacts WHERE name = '' ORDER BY last_at DESC LIMIT 5")->fetchAll());
+        }
     } catch (Throwable $e) { return; }
     foreach ($rows as $row) {
-        $r = meta_graph('GET', (string) $row['psid'], ['fields' => 'name']);
-        // না পেলে খালি স্ট্রিং — আর বারবার চেষ্টা নয়
-        $db->prepare('UPDATE meta_contacts SET name = :n WHERE id = :id')
-           ->execute(['n' => $r['ok'] ? (string) ($r['data']['name'] ?? '') : '', 'id' => $row['id']]);
+        meta_fetch_name($db, (int) $row['id'], (string) $row['psid']);
     }
+}
+
+/**
+ * একজনের নাম ফেসবুক থেকে আনা — দুই পথ: (ক) PSID-এর প্রোফাইল, (খ) কথোপকথনের অংশগ্রহণকারী।
+ * না পেলে খালি স্ট্রিং বসে (বারবার চেষ্টা নয়), আর শেষ কারণটা meta_name_error-এ থাকে।
+ */
+function meta_fetch_name(PDO $db, int $contactId, string $psid): string
+{
+    $name = ''; $err = '';
+    $r = meta_graph('GET', $psid, ['fields' => 'name,first_name,last_name']);
+    if ($r['ok']) {
+        $d = (array) $r['data'];
+        $name = trim((string) ($d['name'] ?? trim(($d['first_name'] ?? '') . ' ' . ($d['last_name'] ?? ''))));
+    } else { $err = $r['error']; }
+    if ($name === '') {
+        $c = meta_cfg();
+        $r2 = meta_graph('GET', $c['page_id'] . '/conversations', ['user_id' => $psid, 'fields' => 'participants']);
+        if ($r2['ok']) {
+            foreach ((array) ($r2['data']['data'][0]['participants']['data'] ?? []) as $pt) {
+                if ((string) ($pt['id'] ?? '') === $psid) { $name = trim((string) ($pt['name'] ?? '')); break; }
+            }
+        } elseif ($err === '') { $err = $r2['error']; }
+    }
+    try {
+        $db->prepare('UPDATE meta_contacts SET name = :n WHERE id = :id')->execute(['n' => $name, 'id' => $contactId]);
+        if ($name === '' && $err !== '') { update_setting('meta_name_error', meta_snippet($err, 200)); meta_name_error(meta_snippet($err, 200)); }
+    } catch (Throwable $e) {}
+    return $name;
+}
+
+/** নাম আনতে শেষ ব্যর্থতার কারণ (এই রিকোয়েস্টে নতুন হলে সেটাই — সেটিংসের ক্যাশ পুরনো থাকে) */
+function meta_name_error(?string $set = null): string
+{
+    static $now = null;
+    if ($set !== null) { $now = $set; }
+    return $now ?? (string) get_setting('meta_name_error');
 }
 
 /** ড্যাশবোর্ড/সাইডবারের সংখ্যা: অপঠিত কথোপকথন + নতুন কমেন্ট */
