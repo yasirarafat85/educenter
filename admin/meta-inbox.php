@@ -116,14 +116,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         if (!meta_configured()) { set_flash('error', 'আগে Page ID ও Page Access Token বসান।'); redirect(mi_back('setup')); }
         // ধাপ ক: token-টা কোন পেইজের — শুধু id চাওয়া হয় (কোনো বাড়তি অনুমতি লাগে না),
         // তাই "token-ই ভুল", "Page ID ভুল" আর "অনুমতি কম" — তিনটা আলাদা করে বলা যায়
-        $me = meta_graph('GET', 'me', ['fields' => 'id']);
+        $me = meta_graph('GET', 'me', ['fields' => 'id,name', 'metadata' => '1']);
         if (!$me['ok']) {
             set_flash('error', '❌ Page Access Token কাজ করছে না — Meta Developer-এ আবার Generate করে নতুনটা বসান। (ফেসবুকের বার্তা: ' . $me['error'] . ')');
             redirect(mi_back('setup'));
         }
         $tokPage = (string) ($me['data']['id'] ?? '');
+        $tokType = strtolower((string) ($me['data']['metadata']['type'] ?? ''));
+        if ($tokType === 'user') {
+            // সবচেয়ে সাধারণ ভুল: Explorer-এর নিজের (User) token বসানো — Page ID বদলানো কখনো সমাধান নয়
+            set_flash('error', '❌ এটা আপনার নিজের অ্যাকাউন্টের (User) token, পেইজের নয়' . (!empty($me['data']['name']) ? ' (' . (string) $me['data']['name'] . ')' : '') . '। Graph API Explorer-এ me/accounts?fields=id,name,access_token চালিয়ে "' . $c['page_id'] . '"-এর পাশের access_token কপি করে বসান। Page ID ঘর বদলাবেন না।');
+            redirect(mi_back('setup'));
+        }
         if ($tokPage !== '' && $tokPage !== $c['page_id']) {
-            set_flash('error', '❌ Page ID মিলছে না — বসানো token-টা অন্য পেইজের (' . $tokPage . ')। Page ID ঘরে ' . $tokPage . ' লিখুন, নাহলে ঠিক পেইজের token বসান।');
+            set_flash('error', '❌ Page ID মিলছে না — বসানো token-টা অন্য পেইজের (' . $tokPage . (!empty($me['data']['name']) ? ' — ' . (string) $me['data']['name'] : '') . ')। me/accounts-এর ফলাফলে ঠিক পেইজের (' . $c['page_id'] . ') access_token কপি করে বসান।');
             redirect(mi_back('setup'));
         }
         // ধাপ খ: পেইজের নাম — এর জন্য pages_read_engagement লাগে (কমেন্টেও এটাই লাগে)
