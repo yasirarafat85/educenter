@@ -245,12 +245,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         $st->execute(['id' => $id]);
         $cm = $st->fetch();
         if (!$cm) { set_flash('error', 'কমেন্টটা পাওয়া যায়নি।'); redirect(mi_back('comments')); }
+        $pubText = (string) ($_POST['text'] ?? '');
+        $pmText  = (string) ($_POST['pm_text'] ?? '');
         $pi = mi_post_image($db);
-        $r = $pi['error'] !== '' ? ['ok' => false, 'error' => '🖼️ ' . $pi['error']]
-           : meta_reply_comment($db, $cm, (string) ($_POST['text'] ?? ''), $me, 'admin', $pi['url']);
-        if (!$r['ok']) { $_SESSION['mi_cdraft'][$id] = (string) ($_POST['text'] ?? ''); }
-        else { mai_close_drafts($db, 'comment', (string) $cm['comment_id']); if ($pi['lib_id']) { mimg_used($db, $pi['lib_id']); } }
-        set_flash($r['ok'] ? 'success' : 'error', $r['ok'] ? '✅ কমেন্টে উত্তর বসানো হয়েছে।' : $r['error']);
+        $wantPub = trim($pubText) !== '' || $pi['url'] !== '' || $pi['error'] !== '';
+        $wantPm  = trim($pmText) !== '';
+        $msgs = []; $ok = true; $pubDone = false;
+        if (!$wantPub && !$wantPm) { $ok = false; $msgs[] = 'কমেন্টের উত্তর বা ইনবক্সের মেসেজ — অন্তত একটা লিখুন।'; }
+        // ১) কমেন্টের নিচে (সবাই দেখবে) — ব্যর্থ হলে ইনবক্সেও পাঠানো হয় না, দুটো লেখাই থাকে
+        if ($wantPub) {
+            $r = $pi['error'] !== '' ? ['ok' => false, 'error' => '🖼️ ' . $pi['error']]
+               : meta_reply_comment($db, $cm, $pubText, $me, 'admin', $pi['url']);
+            if ($r['ok']) {
+                $pubDone = true;
+                $msgs[] = '✅ কমেন্টে উত্তর বসানো হয়েছে।';
+                mai_close_drafts($db, 'comment', (string) $cm['comment_id']);
+                if ($pi['lib_id']) { mimg_used($db, $pi['lib_id']); }
+            } else { $ok = false; $msgs[] = $r['error']; }
+        }
+        // ২) তাঁর ইনবক্সে (শুধু উনি দেখবেন) — ফেসবুকের Private Reply, কমেন্টে একবারই
+        if ($wantPm) {
+            if ($ok) {
+                $pr = meta_private_reply($db, $cm, $pmText, $me, 'admin');
+                if ($pr['ok']) {
+                    $msgs[] = '📩 ইনবক্সেও মেসেজ পাঠানো হয়েছে — উনি উত্তর দিলে "মেসেজ" ট্যাবে আসবে।';
+                    mai_close_drafts($db, 'comment', (string) $cm['comment_id']);
+                } else { $ok = false; $msgs[] = $pr['error']; }
+            } else { $msgs[] = 'ইনবক্সের মেসেজ পাঠানো হয়নি — লেখাটা রাখা আছে।'; }
+        }
+        if (!$ok) {
+            if (!$pubDone) { $_SESSION['mi_cdraft'][$id] = $pubText; }
+            $_SESSION['mi_pmdraft'][$id] = $pmText;
+        }
+        set_flash($ok ? 'success' : 'error', implode(' ', $msgs));
         redirect(mi_back('comments', mi_cflt($_POST)) . '#cm-' . $id);
     }
 
@@ -536,6 +563,10 @@ require __DIR__ . '/includes/layout-top.php';
 .mi-ai-h span{font-weight:400;color:#6D28D9}
 .mi-ai-b{border-color:#DDD6FE;white-space:pre-wrap}
 .mi-ai-b:hover{border-color:#8B5CF6}
+.mi-pm{margin-top:.6rem;padding:.6rem .7rem;border-radius:.7rem;background:#EFF6FF;border:1px solid #BFDBFE}
+.mi-pm-l{display:block;font-size:.85rem;font-weight:700;color:#1E40AF;margin-bottom:.3rem}.mi-pm-l span{font-weight:400;color:#475569}
+.mi-pm textarea{background:#fff}
+.mi-pm-done{font-size:.85rem;color:#166534;overflow-wrap:anywhere}.mi-pm-off{font-size:.8rem;color:#64748B;overflow-wrap:anywhere}
 .mi-ai-n{font-size:.75rem;color:#6B7280;margin-top:.35rem;overflow-wrap:anywhere}
 .mi-ai-row{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.45rem}
 .mi-ai-btn{padding:.4rem .8rem;border-radius:.6rem;background:#7C3AED;color:#fff;font-size:.82rem;font-weight:700}
@@ -705,6 +736,9 @@ require __DIR__ . '/includes/layout-top.php';
         $kids = $replies[$cm['comment_id']] ?? [];
         $cdraft = (string) ($_SESSION['mi_cdraft'][(int) $cm['id']] ?? '');
         unset($_SESSION['mi_cdraft'][(int) $cm['id']]);
+        $pmdraft = (string) ($_SESSION['mi_pmdraft'][(int) $cm['id']] ?? '');
+        unset($_SESSION['mi_pmdraft'][(int) $cm['id']]);
+        $pmBlock = meta_private_reply_block($cm);
         $fbLink = $post && $post['permalink'] ? $post['permalink'] : '';
     ?>
         <div class="mi-card" id="cm-<?= (int) $cm['id'] ?>">
@@ -744,7 +778,18 @@ require __DIR__ . '/includes/layout-top.php';
                         <input type="hidden" name="st" value="<?= e($cStatus) ?>"><input type="hidden" name="ct" value="<?= e($cType) ?>">
                         <textarea name="text" rows="2" maxlength="2000" placeholder="কমেন্টের নিচে উত্তর লিখুন (সবাই দেখবে)…"><?= e($cdraft) ?></textarea>
                         <?php mi_image_picker($db); ?>
-                        <button type="submit" class="mt-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold">💬 উত্তর দিন</button>
+                        <div class="mi-pm">
+                        <?php if (!empty($cm['private_reply_at'])): ?>
+                            <p class="mi-pm-done">📩 ইনবক্সে মেসেজ পাঠানো হয়েছে<?= !empty($cm['private_reply_by']) ? ' — ' . e($cm['private_reply_by']) : '' ?>, <?= e(mi_time($cm['private_reply_at'])) ?>। উত্তর এলে "মেসেজ" ট্যাবে দেখবেন।</p>
+                        <?php elseif ($pmBlock !== ''): ?>
+                            <p class="mi-pm-off">📩 ইনবক্সে পাঠানো যাবে না — <?= e($pmBlock) ?>।</p>
+                        <?php else: ?>
+                            <label class="mi-pm-l" for="pm-<?= (int) $cm['id'] ?>">📩 ওনার ইনবক্সেও মেসেজ পাঠান <span>(শুধু উনি দেখবেন · ঐচ্ছিক · একবারই পাঠানো যায়)</span></label>
+                            <textarea name="pm_text" id="pm-<?= (int) $cm['id'] ?>" rows="2" maxlength="2000" placeholder="যেমন: আসসালামু আলাইকুম, কোর্সের বিস্তারিত পাঠালাম…"><?= e($pmdraft) ?></textarea>
+                            <button type="button" class="mi-sug-b" data-mi-pub="cmf-<?= (int) $cm['id'] ?>" data-text="আপনার ইনবক্সে বিস্তারিত পাঠানো হয়েছে, চেক করুন 🙏">↑ কমেন্টে লিখুন: "ইনবক্সে পাঠানো হয়েছে, চেক করুন 🙏"</button>
+                        <?php endif; ?>
+                        </div>
+                        <button type="submit" class="mt-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold">💬 পাঠান</button>
                     </form>
                     <?php endif; ?>
                     <div class="flex items-center gap-2 mt-2 flex-wrap">
@@ -905,11 +950,20 @@ require __DIR__ . '/includes/layout-top.php';
     document.querySelectorAll('form.mi-sendf').forEach(function (f) {
         f.addEventListener('submit', function (ev) {
             var ta = f.querySelector('textarea[name=text]'), sel = f.querySelector('select.mi-img-lib'), file = f.querySelector('input[name=image_file]');
-            var has = (ta && ta.value.trim() !== '') || (sel && sel.value !== '0') || (file && file.files && file.files.length);
-            if (!has && ta) { ev.preventDefault(); ta.setCustomValidity('উত্তর লিখুন অথবা একটা ছবি বাছুন।'); ta.reportValidity(); }
+            var pm = f.querySelector('textarea[name=pm_text]');
+            var has = (ta && ta.value.trim() !== '') || (sel && sel.value !== '0') || (file && file.files && file.files.length) || (pm && pm.value.trim() !== '');
+            if (!has && ta) { ev.preventDefault(); ta.setCustomValidity(pm ? 'কমেন্টের উত্তর বা ইনবক্সের মেসেজ লিখুন।' : 'উত্তর লিখুন অথবা একটা ছবি বাছুন।'); ta.reportValidity(); }
         });
         var t2 = f.querySelector('textarea[name=text]');
         if (t2) { t2.addEventListener('input', function () { t2.setCustomValidity(''); }); }
+    });
+    document.querySelectorAll('[data-mi-pub]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var box = document.getElementById(b.getAttribute('data-mi-pub'));
+            var ta = box ? box.querySelector('textarea[name=text]') : null;
+            if (!ta) { return; }
+            ta.value = b.getAttribute('data-text') || ''; ta.setCustomValidity(''); ta.focus();
+        });
     });
     document.querySelectorAll('[data-mi-fill]').forEach(function (b) {
         b.addEventListener('click', function () {

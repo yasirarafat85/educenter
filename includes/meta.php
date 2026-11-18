@@ -17,6 +17,8 @@ require_once __DIR__ . '/meta-media.php';
 const META_DEFAULT_VERSION = 'v24.0';
 // মেটার নিয়ম: অভিভাবকের শেষ মেসেজের পর ২৪ ঘণ্টার মধ্যেই সাধারণ উত্তর পাঠানো যায়
 const META_REPLY_WINDOW_HOURS = 24;
+/** কমেন্টকারীকে ইনবক্সে মেসেজ (Private Reply) — ফেসবুকের নিয়মে কমেন্টের ৭ দিনের মধ্যে, একবারই */
+const META_PRIVATE_REPLY_DAYS = 7;
 // পুরনো তথ্য একবারে কতটা টানা হবে (শেয়ার্ড হোস্টে সময়সীমা পেরোনো ঠেকাতে)
 const META_IMPORT_CONVERSATIONS = 25;
 const META_IMPORT_POSTS = 15;
@@ -439,6 +441,67 @@ function meta_reply_comment(PDO $db, array $comment, string $text, string $by, s
     $db->prepare("UPDATE meta_comments SET status = 'done', replied_at = COALESCE(replied_at, :at) WHERE id = :id")
        ->execute(['at' => $now, 'id' => (int) $comment['id']]);
     return ['ok' => true, 'error' => ''];
+}
+
+/** "আগেই ইনবক্সে পাঠানো হয়েছে" মনে রাখার ঘর আছে? (migrate-meta-private-reply.sql) */
+function meta_private_ready(?PDO $db = null): bool
+{
+    static $ok = null;
+    if ($ok === null) { $ok = db_has_column($db ?: get_db(), 'meta_comments', 'private_reply_at'); }
+    return $ok;
+}
+
+/**
+ * কমেন্টকারীকে ইনবক্সে পাঠানো যাবে কিনা (বিশুদ্ধ)। ফেরত: '' = যাবে, নাহলে কারণ।
+ * 🔴 ফেসবুকের নিয়ম: কমেন্টের ৭ দিনের মধ্যে, প্রতি কমেন্টে একবারই, পেইজের নিজের কমেন্টে নয়।
+ */
+function meta_private_reply_block(array $comment, ?int $now = null): string
+{
+    if (!empty($comment['is_page'])) { return 'পেইজের নিজের কমেন্ট'; }
+    if (($comment['status'] ?? '') === 'removed') { return 'কমেন্টটা মুছে ফেলা হয়েছে'; }
+    if (!empty($comment['private_reply_at'])) { return 'আগেই ইনবক্সে পাঠানো হয়েছে'; }
+    $t = strtotime((string) ($comment['commented_at'] ?? ''));
+    if ($t === false || (($now ?? time()) - $t) >= META_PRIVATE_REPLY_DAYS * 86400) {
+        return 'কমেন্টটা ' . META_PRIVATE_REPLY_DAYS . ' দিনের বেশি পুরনো — ফেসবুকের নিয়মে আর ইনবক্সে পাঠানো যায় না';
+    }
+    return '';
+}
+
+/**
+ * কমেন্টকারীর মেসেঞ্জার-ইনবক্সে একটা মেসেজ (Private Reply)। শুধু লেখা।
+ * পাঠানো মেসেজটা ঐ মানুষের কথোপকথনে জমা হয় — তিনি উত্তর দিলে "মেসেজ" ট্যাবে সেখানেই আসবে।
+ * ফেরত: ['ok', 'error']
+ */
+function meta_private_reply(PDO $db, array $comment, string $text, string $by, string $source = 'admin'): array
+{
+    $text = trim($text);
+    if ($text === '') { return ['ok' => false, 'error' => 'ইনবক্সের মেসেজ খালি।']; }
+    if (mb_strlen($text) > 2000) { return ['ok' => false, 'error' => 'ইনবক্সের মেসেজ ২০০০ অক্ষরের বেশি হতে পারবে না।']; }
+    $block = meta_private_reply_block($comment);
+    if ($block !== '') { return ['ok' => false, 'error' => 'ইনবক্সে পাঠানো যায়নি — ' . $block . '।']; }
+    $c = meta_cfg();
+    $r = meta_graph('POST', $c['page_id'] . '/messages', [], [
+        'recipient' => ['comment_id' => (string) $comment['comment_id']],
+        'message'   => ['text' => $text],
+    ]);
+    if (!$r['ok']) { return ['ok' => false, 'error' => 'ফেসবুক ইনবক্সে পাঠাতে দেয়নি: ' . $r['error']]; }
+    $now = date('Y-m-d H:i:s');
+    $psid = (string) ($r['data']['recipient_id'] ?? '');
+    $mid = (string) ($r['data']['message_id'] ?? '');
+    if ($psid !== '') {
+        $name = trim((string) ($comment['from_name'] ?? ''));
+        if (!meta_store_message($db, $psid, 'out', $mid !== '' ? $mid : null, $text, [], $source, $now, $by, $name !== '' ? $name : null)
+            && $mid !== '') {
+            $db->prepare('UPDATE meta_messages SET source = :s, sent_by = :b WHERE mid = :m')->execute(['s' => $source, 'b' => $by, 'm' => $mid]);
+        }
+    }
+    if (meta_private_ready($db)) {
+        $db->prepare('UPDATE meta_comments SET private_reply_at = :at, private_reply_by = :b WHERE id = :id')
+           ->execute(['at' => $now, 'b' => $by, 'id' => (int) $comment['id']]);
+    }
+    $db->prepare("UPDATE meta_comments SET status = 'done', replied_at = COALESCE(replied_at, :at) WHERE id = :id")
+       ->execute(['at' => $now, 'id' => (int) $comment['id']]);
+    return ['ok' => true, 'error' => '', 'psid' => $psid];
 }
 
 /* ───────────────────────── পুরনো তথ্য আনা ───────────────────────── */

@@ -1089,6 +1089,8 @@ CREATE TABLE IF NOT EXISTS meta_comments (
     sent_by       VARCHAR(100) NULL,
     commented_at  DATETIME     NOT NULL,
     replied_at    DATETIME     NULL,
+    private_reply_at DATETIME  NULL,
+    private_reply_by VARCHAR(100) NULL,
     created_at    DATETIME     DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_meta_comment (comment_id),
     KEY idx_meta_cstatus (status, commented_at),
