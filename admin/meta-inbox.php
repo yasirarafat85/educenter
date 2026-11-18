@@ -94,12 +94,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
     if ($action === 'test') {
         $c = meta_cfg();
         if (!meta_configured()) { set_flash('error', 'আগে Page ID ও Page Access Token বসান।'); redirect(mi_back('setup')); }
+        // ধাপ ক: token-টা কোন পেইজের — শুধু id চাওয়া হয় (কোনো বাড়তি অনুমতি লাগে না),
+        // তাই "token-ই ভুল", "Page ID ভুল" আর "অনুমতি কম" — তিনটা আলাদা করে বলা যায়
+        $me = meta_graph('GET', 'me', ['fields' => 'id']);
+        if (!$me['ok']) {
+            set_flash('error', '❌ Page Access Token কাজ করছে না — Meta Developer-এ আবার Generate করে নতুনটা বসান। (ফেসবুকের বার্তা: ' . $me['error'] . ')');
+            redirect(mi_back('setup'));
+        }
+        $tokPage = (string) ($me['data']['id'] ?? '');
+        if ($tokPage !== '' && $tokPage !== $c['page_id']) {
+            set_flash('error', '❌ Page ID মিলছে না — বসানো token-টা অন্য পেইজের (' . $tokPage . ')। Page ID ঘরে ' . $tokPage . ' লিখুন, নাহলে ঠিক পেইজের token বসান।');
+            redirect(mi_back('setup'));
+        }
+        // ধাপ খ: পেইজের নাম — এর জন্য pages_read_engagement লাগে (কমেন্টেও এটাই লাগে)
         $r = meta_graph('GET', $c['page_id'], ['fields' => 'id,name']);
         if ($r['ok']) {
             update_setting('meta_page_name', (string) ($r['data']['name'] ?? ''));
             set_flash('success', '✅ সংযোগ ঠিক আছে — পেইজ: ' . (string) ($r['data']['name'] ?? ''));
         } else {
-            set_flash('error', '❌ সংযোগ হয়নি: ' . $r['error']);
+            set_flash('error', '⚠️ token ঠিক আছে, পেইজও মিলেছে — কিন্তু token-এ "pages_read_engagement" অনুমতি নেই। মেসেজ চলবে, তবে কমেন্ট আনা ও পেইজের নাম পড়া যাবে না। Meta Developer → Use cases-এ pages_read_engagement যোগ করে আবার Generate চাপুন, নতুন token এখানে বসান। (ফেসবুকের বার্তা: ' . $r['error'] . ')');
         }
         redirect(mi_back('setup'));
     }
