@@ -13,6 +13,17 @@ admin_require_login();
 require_once __DIR__ . '/includes/form-helpers.php'; // admin_image_src()
 require_once __DIR__ . '/../includes/meta-ai.php'; // meta-kb.php-ও এর ভেতরে
 
+/** লাইন-ভাঙা অক্ষত রেখে ঝলক; বড় হলে "পুরোটা দেখুন" ভাঁজে পুরো লেখা */
+function mk_preview(string $text, string $cls = '', int $maxChars = 400, int $maxLines = 8): void
+{
+    $p = meta_snippet_lines($text, $maxChars, $maxLines);
+    echo '<div class="mk-pre ' . e($cls) . '">' . e($p['text']) . '</div>';
+    if ($p['cut']) {
+        echo '<details class="mk-more"><summary>পুরোটা দেখুন</summary><div class="mk-pre">' . e(trim(str_replace("\r\n", "\n", $text))) . '</div></details>';
+    }
+}
+
+
 $db = get_db();
 $pageTitle = 'ফেসবুক উত্তর-ভান্ডার';
 $me = (string) ($_SESSION['admin_username'] ?? '');
@@ -408,6 +419,8 @@ require __DIR__ . '/includes/layout-top.php';
 .mk-f textarea,.mk-f input[type=text],.mk-f input[type=search],.mk-f input[type=number],.mk-f select{width:100%;min-width:0;border:1px solid rgb(var(--c-border,229 231 235));border-radius:.8rem;padding:.55rem .8rem;font-size:16px;line-height:1.6;background:#fff}
 .mk-hint{font-size:.78rem;color:#6B7280;margin-top:.2rem}
 .mk-chip{display:inline-block;padding:.15rem .55rem;border-radius:999px;font-size:.78rem;font-weight:600;background:#EEF2FF;color:#3730A3;margin:0 .25rem .25rem 0;overflow-wrap:anywhere}
+.mk-more summary{cursor:pointer;font-size:.8rem;font-weight:600;color:rgb(var(--c-primary));margin-top:.25rem}
+.mk-more .mk-pre{margin-top:.35rem;padding:.5rem .65rem;border-radius:.6rem;background:#F9FAFB}
 .mk-pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.9rem;line-height:1.7;color:#1F2937}
 .mk-row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
 .mk-chs{display:flex;flex-wrap:wrap;gap:.4rem}
@@ -529,7 +542,7 @@ require __DIR__ . '/includes/layout-top.php';
                 </div>
                 <span class="text-xs font-semibold px-2 py-1 rounded <?= $r['mode'] === 'auto' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800' ?>"><?= $r['mode'] === 'auto' ? '🤖 অটো' : '💡 প্রস্তাব' ?></span>
             </div>
-            <div class="mk-pre mt-2"><?= e(meta_snippet((string) $r['reply'], 300)) ?></div>
+            <?php mk_preview((string) $r['reply'], 'mt-2'); ?>
             <?php $rim = mkb_rule_image($db, $r); if ($rim): ?><p class="text-xs font-semibold mt-1" style="color:#047857">🖼️ সাথে ছবি: <?= e((string) $rim['title']) ?></p><?php endif; ?>
             <p class="text-xs text-gray-500 mt-2"><?= e(mk_channels()[$r['channel']] ?? '') ?> · ক্রম <?= (int) $r['sort_order'] ?> · অটো-উত্তর গেছে <?= (int) $r['hits'] ?> বার<?= !$r['is_active'] ? ' · ⏸️ বন্ধ' : '' ?></p>
             <div class="mk-row mt-2">
@@ -667,14 +680,14 @@ require __DIR__ . '/includes/layout-top.php';
             <?php if ($kind === 'qa'): ?>
                 <?php if (mkb_has_channel($db)): ?><div class="mb-1"><?= mkb_channel_chip($r['channel'] ?? 'both') ?></div><?php endif; ?>
                 <p class="font-bold text-gray-800" style="overflow-wrap:anywhere">❓ <?= e((string) $r['question']) ?></p>
-                <div class="mk-pre mt-1"><?= e(meta_snippet((string) $r['answer'], 400)) ?></div>
+                <?php mk_preview((string) $r['answer'], 'mt-1'); ?>
             <?php else: ?>
                 <p class="font-bold text-gray-800" style="overflow-wrap:anywhere">📄 <?= e((string) $r['title']) ?></p>
                 <p class="text-xs text-gray-500"><?= number_format(mb_strlen((string) $r['answer'])) ?> অক্ষর</p>
                 <?php foreach (mai_ready_blocks((string) $r['answer']) as $rb): $rbn = mb_strlen($rb); ?>
                     <p class="text-xs mt-1" style="color:<?= $rbn > MAI_READY_MAX ? '#B91C1C' : '#047857' ?>">📋 প্রস্তুত বার্তা আছে (<?= number_format($rbn) ?> অক্ষর)<?= $rbn > MAI_READY_MAX ? ' — ⚠️ বেশি লম্বা, মেসেঞ্জারে শেষটা কেটে যাবে; ' . number_format(MAI_READY_MAX) . ' অক্ষরের মধ্যে আনুন' : ' — কেউ এই কোর্স সম্পর্কে জানতে চাইলে AI এটাই হুবহু পাঠাবে' ?></p>
                 <?php endforeach; ?>
-                <div class="mk-pre mt-1 text-gray-600"><?= e(meta_snippet((string) $r['answer'], 220)) ?></div>
+                <?php mk_preview((string) $r['answer'], 'mt-1 text-gray-600', 220, 5); ?>
             <?php endif; ?>
             <p class="text-xs text-gray-400 mt-2"><?= $r['source'] === 'message' ? '💬 মেসেজের উত্তর থেকে শেখা' : ($r['source'] === 'comment' ? '🗨️ কমেন্টের উত্তর থেকে শেখা' : 'হাতে লেখা') ?><?= $r['approved_by'] ? ' · ' . e($r['approved_by']) : '' ?></p>
             <div class="mk-row mt-2">

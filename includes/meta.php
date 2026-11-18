@@ -58,6 +58,27 @@ function meta_snippet(?string $text, int $max = 120): string
     return mb_strlen($t) > $max ? mb_substr($t, 0, $max - 1) . '…' : $t;
 }
 
+/**
+ * লাইন-ভাঙা অক্ষত রেখে ছোট ঝলক (তালিকায় দেখানোর জন্য) — meta_snippet() সব লাইন এক করে ফেলে।
+ * ফেরত: ['text' => ঝলক, 'cut' => কাটা পড়েছে কিনা]। পাঠানো লেখা এতে কখনো বদলায় না।
+ */
+function meta_snippet_lines(?string $text, int $maxChars = 400, int $maxLines = 8): array
+{
+    $t = str_replace(["\r\n", "\r"], "\n", (string) $text);
+    $t = preg_replace("/[ \t]+\n/u", "\n", $t) ?? $t;
+    $t = trim(preg_replace("/\n{3,}/u", "\n\n", $t) ?? $t);
+    $cut = false;
+    $lines = explode("\n", $t);
+    $keep = []; $filled = 0;
+    foreach ($lines as $ln) {   // ফাঁকা লাইন গোনা হয় না — শুধু লেখা-ওয়ালা লাইন
+        if (trim($ln) !== '' && ++$filled > $maxLines) { $cut = true; break; }
+        $keep[] = $ln;
+    }
+    if ($cut) { $t = rtrim(implode("\n", $keep)); }
+    if (mb_strlen($t) > $maxChars) { $t = mb_substr($t, 0, $maxChars); $cut = true; }
+    return ['text' => rtrim($t) . ($cut ? '…' : ''), 'cut' => $cut];
+}
+
 /** সংযুক্তির তালিকা থেকে লেখার রূপ — ছবি/ভিডিও ইত্যাদি */
 function meta_attach_label(array $attachments): string
 {
