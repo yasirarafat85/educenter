@@ -23,7 +23,12 @@ const MAI_DEFAULT_MODEL = 'claude-opus-5-5';
 const MAI_DEFAULT_CAP   = 5.0;      // মাসে কত ডলার পর্যন্ত (ডিফল্ট)
 const MAI_BDT_PER_USD   = 125;      // শুধু দেখানোর জন্য আনুমানিক টাকা
 const MAI_CONTEXT_CHARS = 120000;   // জ্ঞানভান্ডার (ডকুমেন্ট + প্রশ্নোত্তর) থেকে প্রম্পটে সর্বোচ্চ কত অক্ষর
-const MAI_SITE_CHARS    = 40000;    // সাইটের পাবলিক তথ্য থেকে সর্বোচ্চ কত অক্ষর (আলাদা সীমা)
+const MAI_SITE_CHARS    = 40000;
+const MAI_DOC_PICK      = 3;        // প্রতি প্রশ্নে সর্বোচ্চ কয়টা ডকুমেন্ট পুরোটা যায় (বাকিগুলোর শুধু শুরুর অংশ) — ২০২৬-১১-১৮ খরচ কমাতে
+const MAI_QA_PICK       = 15;       // প্রতি প্রশ্নে সর্বোচ্চ কয়টা মিলে যাওয়া প্রশ্নোত্তর যায়
+const MAI_QA_MIN_SCORE  = 0.2;      // এর কম মিললে প্রশ্নোত্তরটা পাঠানো হয় না
+const MAI_DOC_HEAD      = 400;      // ডকুমেন্টের শুরুর কতটুকু দিয়ে "কোন কোর্স" চেনা হয় (শিরোনাম + অন্য নামগুলো ওখানেই থাকে)
+const MAI_CACHE_TTL     = '1h';     // স্থির অংশের ক্যাশ — মেসেজ সাধারণত ৫ মিনিটের বেশি ফাঁকে আসে, তাই ১ ঘণ্টা    // সাইটের পাবলিক তথ্য থেকে সর্বোচ্চ কত অক্ষর (আলাদা সীমা)
 const MAI_HISTORY       = 12;       // কথোপকথনের শেষ কয়টা মেসেজ পাঠানো হয়
 const MAI_MAX_PER_RUN   = 3;        // এক ওয়েবহুকে সর্বোচ্চ কয়টা AI ডাক
 const MAI_MAX_TOKENS    = 8000;   // প্রস্তুত বার্তা (~১৮০০ বাংলা অক্ষর) পুরোটা লিখতে জায়গা লাগে
@@ -57,7 +62,11 @@ function mai_cost(string $model, array $usage): float
     $out = (int) ($usage['output_tokens'] ?? 0);
     $cw = (int) ($usage['cache_creation_input_tokens'] ?? 0);
     $cr = (int) ($usage['cache_read_input_tokens'] ?? 0);
-    return ($in * $p[1] + $cw * $p[1] * 1.25 + $cr * $p[3] + $out * $p[2]) / 1000000;
+    // ১ ঘণ্টার ক্যাশে লেখা = ২×, ৫ মিনিটের = ১.২৫× (API ভাগ করে দিলে সেটাই মানা হয়, নাহলে সবটা ৫ মিনিট ধরা)
+    $cw1h = (int) ($usage['cache_creation']['ephemeral_1h_input_tokens'] ?? 0);
+    $cw1h = min($cw1h, $cw);
+    $writeCost = $cw1h * $p[1] * 2.0 + ($cw - $cw1h) * $p[1] * 1.25;
+    return ($in * $p[1] + $writeCost + $cr * $p[3] + $out * $p[2]) / 1000000;
 }
 
 /** ছোট ধন্যবাদ/প্রশংসা/ইমোজি — এগুলোর জন্য AI ডাকা হয় না (খরচ বাঁচাতে) */
@@ -330,6 +339,93 @@ function mai_cap_reached(PDO $db): bool
 
 /* ───────────────────────── প্রম্পট ───────────────────────── */
 
+/* ── প্রশ্ন অনুযায়ী বাছাই (২০২৬-১১-১৮, খরচ কমাতে) ──
+ * আগে প্রতিটা প্রশ্নের সাথে পুরো জ্ঞানভান্ডার (৮টা কোর্সের ডকুমেন্ট + সব প্রশ্নোত্তর) যেত, আর ক্যাশ
+ * ৫ মিনিটে মুছে যেত বলে প্রায় প্রতিবার পুরো দাম লাগত। এখন: স্থির অংশে শুধু ডকুমেন্টের "সূচি"
+ * (শিরোনাম + অন্য নাম + বয়সের লাইন), আর প্রশ্নের সাথে মেলা ডকুমেন্ট (সর্বোচ্চ MAI_DOC_PICK) ও
+ * প্রশ্নোত্তর (সর্বোচ্চ MAI_QA_PICK) পুরোটা। নিচের ফাংশনগুলো বিশুদ্ধ (DB নেই)। */
+
+/** API-র messages থেকে অভিভাবকের লেখা (সব user টার্ন) এক জায়গায় — ডকুমেন্ট বাছাইয়ের জন্য */
+function mai_query_text(array $messages): string
+{
+    $out = [];
+    foreach ($messages as $m) {
+        if (($m['role'] ?? '') !== 'user') { continue; }
+        $c = $m['content'] ?? '';
+        if (is_array($c)) {
+            foreach ($c as $b) { if (is_array($b) && ($b['type'] ?? '') === 'text') { $out[] = (string) ($b['text'] ?? ''); } }
+        } else {
+            $out[] = (string) $c;
+        }
+    }
+    return trim(implode("\n", $out));
+}
+
+/** ডকুমেন্টের মাথা — শিরোনাম + শুরুর অংশ (কোর্সের নাম ও অন্য নাম ওখানেই) */
+function mai_doc_head(string $title, string $body): string
+{
+    return trim($title . "\n" . mb_substr($body, 0, MAI_DOC_HEAD));
+}
+
+/** ডকুমেন্টের প্রথম যে লাইনে "বয়স" আছে (সূচিতে দেখাতে — "৪ বছরের বাচ্চার জন্য কোনটা" প্রশ্নে কাজে লাগে) */
+function mai_doc_age_line(string $body): string
+{
+    foreach (preg_split('/\R/u', $body) ?: [] as $ln) {
+        $ln = trim($ln);
+        if ($ln !== '' && mb_strpos($ln, 'বয়স') !== false) { return mb_substr($ln, 0, 200); }
+    }
+    return '';
+}
+
+/**
+ * কোন ডকুমেন্টগুলো এই প্রশ্নের সাথে মেলে — ফেরত: id-র তালিকা (বেশি মিল আগে, সর্বোচ্চ $max)।
+ * $docs = [['id','title','text']]। মেলানো হয় শুধু ডকুমেন্টের মাথায় (শিরোনাম + অন্য নাম) — পুরো লেখায় নয়,
+ * কারণ "ফি/ক্লাস/বয়স" জাতীয় শব্দ সব ডকুমেন্টেই আছে। যে শব্দ অর্ধেকের বেশি ডকুমেন্টের মাথায় আছে
+ * ("কোর্স", "তথ্য") সেটা গোনা হয় না; বাকিগুলো যত কম ডকুমেন্টে, তত বেশি ওজন।
+ */
+function mai_pick_docs(array $docs, string $query, int $max = MAI_DOC_PICK): array
+{
+    $q = mkb_tokens($query);
+    if (!$q || !$docs || $max <= 0) { return []; }
+    $heads = [];
+    foreach ($docs as $d) { $heads[(int) $d['id']] = mkb_tokens(mai_doc_head((string) ($d['title'] ?? ''), (string) ($d['text'] ?? ''))); }
+    $hit = function (string $a, array $toks): bool {
+        foreach ($toks as $b) {
+            if ($a === $b) { return true; }
+            $la = mb_strlen($a); $lb = mb_strlen($b);
+            if (min($la, $lb) >= 3 && ($la < $lb ? mb_strpos($b, $a) === 0 : mb_strpos($a, $b) === 0)) { return true; }
+        }
+        return false;
+    };
+    $n = count($heads);
+    $score = [];
+    foreach ($q as $a) {
+        $in = [];
+        foreach ($heads as $id => $toks) { if ($hit($a, $toks)) { $in[] = $id; } }
+        $df = count($in);
+        if ($df === 0 || ($n >= 3 && $df > $n / 2)) { continue; }
+        foreach ($in as $id) { $score[$id] = ($score[$id] ?? 0) + 1.0 / $df; }
+    }
+    arsort($score);
+    return array_slice(array_keys($score), 0, $max);
+}
+
+/** কোন প্রশ্নোত্তরগুলো মেলে — $qa = [['q','line']] → line-এর তালিকা (বেশি মিল আগে) */
+function mai_pick_qa(array $qa, string $query, int $max = MAI_QA_PICK): array
+{
+    $q = mkb_tokens($query);
+    if (!$q || !$qa) { return []; }
+    $sc = [];
+    foreach ($qa as $i => $r) {
+        $s = mkb_score($q, mkb_tokens((string) $r['q']));
+        if ($s >= MAI_QA_MIN_SCORE) { $sc[$i] = $s; }
+    }
+    arsort($sc);
+    $out = [];
+    foreach (array_slice(array_keys($sc), 0, $max) as $i) { $out[] = $qa[$i]['line']; }
+    return $out;
+}
+
 /**
  * জ্ঞানভান্ডারের কোনটা প্রম্পটে যাবে — আর কতটা জায়গা লাগল (২০২৬-১১-১৭)।
  * 🔴 ক্রম: আগে সব ডকুমেন্ট (অ্যাডমিনের লেখা কোর্সের তথ্য/নিয়ম — এটাই সবচেয়ে জরুরি), তারপর প্রশ্নোত্তর নতুন থেকে পুরনো।
@@ -339,7 +435,7 @@ function mai_cap_reached(PDO $db): bool
  */
 function mai_kb_plan(PDO $db, ?string $channel = null): array
 {
-    $plan = ['docs' => [], 'qa' => [], 'qa_total' => 0, 'qa_dropped' => 0, 'used' => 0, 'limit' => MAI_CONTEXT_CHARS];
+    $plan = ['docs' => [], 'qa' => [], 'qa_rows' => [], 'qa_total' => 0, 'qa_dropped' => 0, 'used' => 0, 'limit' => MAI_CONTEXT_CHARS];
     $budget = MAI_CONTEXT_CHARS;
     try {
         foreach ($db->query("SELECT id, title, answer FROM meta_kb WHERE kind = 'doc' AND status = 'active' ORDER BY id ASC LIMIT 100")->fetchAll() as $r) {
@@ -361,6 +457,7 @@ function mai_kb_plan(PDO $db, ?string $channel = null): array
             if (mb_strlen($line) > $budget) { $plan['qa_dropped']++; continue; }
             $budget -= mb_strlen($line);
             $plan['qa'][] = $line;
+            $plan['qa_rows'][] = ['q' => (string) $r['question'], 'line' => $line];
         }
     } catch (Throwable $e) {}
     $plan['used'] = MAI_CONTEXT_CHARS - $budget;
@@ -395,6 +492,8 @@ function mai_site_info_text(PDO $db): string
     static $txt = null;
     if ($txt !== null) { return $txt; }
     $out = [];
+    $haveDocs = false;
+    try { $haveDocs = (bool) $db->query("SELECT 1 FROM meta_kb WHERE kind = 'doc' AND status = 'active' LIMIT 1")->fetchColumn(); } catch (Throwable $e) {}
     try {
         // কোর্স-ব্যাচ
         $rows = $db->query('SELECT cb.*, c.title FROM course_batches cb JOIN courses c ON c.id = cb.course_id
@@ -415,9 +514,10 @@ function mai_site_info_text(PDO $db): string
             if (trim((string) ($r['secondary_fee'] ?? '')) !== '') {
                 $b .= "\n  " . (trim((string) ($r['secondary_fee_label'] ?? '')) ?: 'অতিরিক্ত ফি') . ': ' . mai_clean($r['secondary_fee'], 100);
             }
-            $d = mai_clean($r['description'] ?? '', 1500);
+            // 🔴 জ্ঞানভান্ডারে কোর্সের ডকুমেন্ট থাকলে বিবরণ ছোট — পুরো তথ্য ঐ ডকুমেন্টেই, দুইবার পাঠালে খরচ দ্বিগুণ
+            $d = mai_clean($r['description'] ?? '', $haveDocs ? 300 : 1500);
             if ($d !== '') { $b .= "\n  বিবরণ: " . $d; }
-            if (!empty($feat[(int) $r['id']])) { $b .= "\n  যা থাকছে: " . mai_clean(implode(' · ', $feat[(int) $r['id']]), 800); }
+            if (!empty($feat[(int) $r['id']])) { $b .= "\n  যা থাকছে: " . mai_clean(implode(' · ', $feat[(int) $r['id']]), $haveDocs ? 250 : 800); }
             $c[] = $b;
         }
         if ($c) { $out[] = "কোর্স (সাইটে যা লেখা আছে):\n" . implode("\n", $c); }
@@ -472,7 +572,12 @@ function mai_site_info_text(PDO $db): string
     return $txt;
 }
 
-/** স্থির অংশ — নিয়ম + অ্যাডমিনের নির্দেশনা + সাইটের তথ্য + জ্ঞানভান্ডার (ক্যাশ হয়, তাই বারবারের খরচ খুব কম) */
+/**
+ * স্থির অংশ — নিয়ম + অ্যাডমিনের নির্দেশনা + সাইটের তথ্য + ডকুমেন্টের সূচি + ছবির সংগ্রহ।
+ * এটা ১ ঘণ্টার ক্যাশে থাকে, তাই এখানে প্রশ্ন-নির্ভর কিছু রাখা যাবে না (তাহলে ক্যাশ প্রতিবার ভাঙত)।
+ * 🔴 ডকুমেন্টের পুরো লেখা ও প্রশ্নোত্তর এখন mai_context_prompt()-এ — প্রশ্ন অনুযায়ী বাছাই করে।
+ * $channel এখন অব্যবহৃত (স্থির অংশ দুই চ্যানেলে একই — একটাই ক্যাশ), সামঞ্জস্যের জন্য রাখা।
+ */
 function mai_stable_prompt(PDO $db, ?string $channel = null): string
 {
     $cfg = mai_cfg();
@@ -481,16 +586,53 @@ function mai_stable_prompt(PDO $db, ?string $channel = null): string
         $site = mai_site_info_text($db);
         if ($site !== '') { $parts[] = "ওয়েবসাইটের তথ্য (সাইট থেকে নেওয়া — জ্ঞানভান্ডারের সাথে না মিললে জ্ঞানভান্ডারের ডকুমেন্টকে ঠিক ধরুন):\n\n" . $site; }
     }
-    $plan = mai_kb_plan($db, $channel); // 🔴 শুধু এই চ্যানেলের প্রশ্নোত্তর (ইনবক্স/কমেন্টে দুটো আলাদা ক্যাশ)
-    $docs = [];
+    $plan = mai_kb_plan($db);
+    $idx = [];
     foreach ($plan['docs'] as $d) {
-        if ($d['state'] !== 'dropped') { $docs[] = '### ' . $d['title'] . "\n" . $d['text']; }
+        if ($d['state'] === 'dropped') { continue; }
+        $line = '▸ ' . $d['title'];
+        $head = trim(mb_substr((string) $d['text'], 0, 300));
+        $head = trim((string) preg_replace('/^' . preg_quote(trim((string) $d['title']), '/') . '\s*/u', '', $head));
+        if ($head !== '') { $line .= "\n  " . preg_replace('/\s+/u', ' ', $head); }
+        $age = mai_doc_age_line((string) $d['text']);
+        if ($age !== '' && mb_strpos($head, $age) === false) { $line .= "\n  " . $age; }
+        $idx[] = $line;
     }
-    if ($docs) { $parts[] = "জ্ঞানভান্ডার — ডকুমেন্ট (প্রতিষ্ঠানের নিজের লেখা কোর্সের তথ্য ও নিয়ম):\n\n" . implode("\n\n", $docs); }
-    if ($plan['qa']) { $parts[] = "জ্ঞানভান্ডার — আগের প্রশ্নোত্তর (একই ধরনের প্রশ্নে এভাবেই উত্তর দিন):\n\n" . implode("\n\n", $plan['qa']); }
+    if ($idx) {
+        $parts[] = "জ্ঞানভান্ডারের ডকুমেন্টের সূচি (প্রতিটার শুধু শুরুটা — প্রশ্নের সাথে মেলা ডকুমেন্ট নিচে \"এই প্রশ্নের জন্য\" অংশে পুরোটা দেওয়া থাকে।"
+            . " কোনো কোর্সের পুরো তথ্য (দাম, সময়, প্রস্তুত বার্তা) নিচে না থাকলে অনুমান করবেন না — কোন কোর্সের কথা জানতে চাইছেন জিজ্ঞেস করুন,"
+            . " বা উপরের কোর্সের অবস্থা/ওয়েবসাইটের তথ্য থেকে যা নিশ্চিত শুধু তাই বলুন):\n\n" . implode("\n", $idx);
+    }
     $imgs = mimg_prompt_text($db);
     if ($imgs !== '') { $parts[] = $imgs; }
     return implode("\n\n---\n\n", $parts);
+}
+
+/**
+ * প্রশ্ন-নির্ভর অংশ — এই প্রশ্নের সাথে মেলা ডকুমেন্ট (পুরোটা) ও প্রশ্নোত্তর (এই চ্যানেলের)।
+ * কিছু না মিললে খালি স্ট্রিং (তখন AI সূচি দেখে জিজ্ঞেস করে নেয়)।
+ */
+function mai_context_prompt(PDO $db, ?string $channel, string $query): string
+{
+    $parts = [];
+    $plan = mai_kb_plan($db, $channel);
+    $live = array_values(array_filter($plan['docs'], fn($d) => $d['state'] !== 'dropped'));
+    $byId = [];
+    foreach ($live as $d) { $byId[(int) $d['id']] = $d; }
+    $docs = [];
+    foreach (mai_pick_docs($live, $query) as $id) {
+        if (isset($byId[$id])) { $docs[] = '### ' . $byId[$id]['title'] . "\n" . $byId[$id]['text']; }
+    }
+    if ($docs) { $parts[] = "এই প্রশ্নের জন্য — জ্ঞানভান্ডারের ডকুমেন্ট (প্রতিষ্ঠানের নিজের লেখা কোর্সের তথ্য ও নিয়ম):\n\n" . implode("\n\n", $docs); }
+    $qa = mai_pick_qa($plan['qa_rows'], $query);
+    if ($qa) { $parts[] = "এই প্রশ্নের জন্য — আগের প্রশ্নোত্তর (একই ধরনের প্রশ্নে এভাবেই উত্তর দিন):\n\n" . implode("\n\n", $qa); }
+    return implode("\n\n---\n\n", $parts);
+}
+
+/** AI যা পায় তার পুরোটা এক লেখায় (পরীক্ষা ও দেখানোর জন্য) */
+function mai_full_prompt(PDO $db, ?string $channel, string $query): string
+{
+    return trim(mai_stable_prompt($db, $channel) . "\n\n---\n\n" . mai_context_prompt($db, $channel, $query));
 }
 
 /**
@@ -597,6 +739,20 @@ function mai_courses_status_text(PDO $db): string
 /* ───────────────────────── API ডাক ───────────────────────── */
 
 /**
+ * API-র system ব্লক — ক্রম জরুরি: স্থির অংশ (১ ঘণ্টার ক্যাশ) আগে, তারপর প্রশ্ন-নির্ভর ও টাটকা অংশ (ক্যাশ নয়)।
+ * 🔴 ক্যাশের চিহ্ন শুধু প্রথম ব্লকে — পরের ব্লক প্রতিবার আলাদা, ওখানে চিহ্ন দিলে প্রতিবার লেখার বাড়তি দাম লাগত।
+ */
+function mai_system_blocks(PDO $db, string $channel, string $query): array
+{
+    $ch = $channel === 'comment' ? 'comment' : 'message';
+    $blocks = [['type' => 'text', 'text' => mai_stable_prompt($db, $ch), 'cache_control' => ['type' => 'ephemeral', 'ttl' => MAI_CACHE_TTL]]];
+    $ctx = mai_context_prompt($db, $ch, $query);
+    if ($ctx !== '') { $blocks[] = ['type' => 'text', 'text' => $ctx]; }
+    $blocks[] = ['type' => 'text', 'text' => mai_live_prompt($db) . "\n\nএখন যেখানে উত্তর দিচ্ছেন: " . ($ch === 'comment' ? 'পাবলিক কমেন্ট' : 'মেসেঞ্জার ইনবক্স')];
+    return $blocks;
+}
+
+/**
  * Claude-কে ডাকা। ফেরত: ['ok', 'text', 'stop', 'usage', 'model', 'error']
  * 🔴 চাবি কখনো এরর-বার্তায় যায় না।
  */
@@ -610,10 +766,7 @@ function mai_call(PDO $db, array $messages, string $channel): array
     $body = [
         'model'         => $cfg['model'],
         'max_tokens'    => MAI_MAX_TOKENS,
-        'system'        => [
-            ['type' => 'text', 'text' => mai_stable_prompt($db, $channel === 'comment' ? 'comment' : 'message'), 'cache_control' => ['type' => 'ephemeral']],
-            ['type' => 'text', 'text' => mai_live_prompt($db) . "\n\nএখন যেখানে উত্তর দিচ্ছেন: " . ($channel === 'comment' ? 'পাবলিক কমেন্ট' : 'মেসেঞ্জার ইনবক্স')],
-        ],
+        'system'        => mai_system_blocks($db, $channel, mai_query_text($messages)),
         'messages'      => $messages,
         'output_config' => ['effort' => 'low'],
     ];
