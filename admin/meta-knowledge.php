@@ -171,6 +171,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         } else {
             $db->prepare("INSERT INTO meta_kb (kind, status, question, answer, source, created_by, approved_by, approved_at) VALUES ('qa', 'active', :q, :a, 'admin', :b, :b2, :at)")
                ->execute(['q' => $q, 'a' => $a, 'b' => $me, 'b2' => $me, 'at' => $now]);
+            $id = (int) $db->lastInsertId();
+        }
+        // 🔴 কোথায় ব্যবহার হবে — আলাদা UPDATE, ঘরটা না থাকলে (মাইগ্রেশনের আগে) চুপচাপ বাদ
+        if ($id && mkb_has_channel($db)) {
+            $db->prepare("UPDATE meta_kb SET channel = :ch WHERE id = :id AND kind = 'qa'")
+               ->execute(['ch' => mkb_channel_clean($_POST['channel'] ?? 'both'), 'id' => $id]);
         }
         set_flash('success', '✅ প্রশ্নোত্তর জ্ঞানভান্ডারে রাখা হলো।');
         redirect(mk_back('kb', ['kind' => 'qa']));
@@ -218,7 +224,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
             $db->prepare("UPDATE meta_kb SET status = 'active', question = :q, answer = :a, approved_by = :b, approved_at = :at, updated_at = :at2
                           WHERE id = :id AND status = 'proposed'")
                ->execute(['q' => mb_substr($q, 0, 2000), 'a' => mb_substr($a, 0, 4000), 'b' => $me, 'at' => $now, 'at2' => $now, 'id' => $id]);
-            set_flash('success', '✅ শেখা হলো — এখন থেকে মিলে যাওয়া প্রশ্নে এই উত্তর প্রস্তাব হিসেবে আসবে।');
+            $chMsg = '';
+            if (mkb_has_channel($db)) {
+                $src = (string) $db->query('SELECT source FROM meta_kb WHERE id = ' . (int) $id)->fetchColumn();
+                $ch = mkb_channel_clean($_POST['channel'] ?? '', mkb_channel_default($src));
+                $db->prepare("UPDATE meta_kb SET channel = :ch WHERE id = :id AND kind = 'qa'")->execute(['ch' => $ch, 'id' => $id]);
+                $chMsg = ' (' . mkb_channels()[$ch][0] . ')';
+            }
+            set_flash('success', '✅ শেখা হলো' . $chMsg . ' — এখন থেকে মিলে যাওয়া প্রশ্নে এই উত্তর প্রস্তাব হিসেবে আসবে।');
         } else {
             $db->prepare("UPDATE meta_kb SET status = 'rejected', updated_at = :at WHERE id = :id AND status = 'proposed'")->execute(['at' => $now, 'id' => $id]);
             set_flash('success', 'প্রস্তাবটা বাদ দেওয়া হলো — আর আসবে না।');
@@ -397,6 +410,13 @@ require __DIR__ . '/includes/layout-top.php';
 .mk-chip{display:inline-block;padding:.15rem .55rem;border-radius:999px;font-size:.78rem;font-weight:600;background:#EEF2FF;color:#3730A3;margin:0 .25rem .25rem 0;overflow-wrap:anywhere}
 .mk-pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.9rem;line-height:1.7;color:#1F2937}
 .mk-row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+.mk-chs{display:flex;flex-wrap:wrap;gap:.4rem}
+.mk-ch{display:inline-flex !important;margin:0 !important;cursor:pointer}
+.mk-ch input{position:absolute;opacity:0;width:1px;height:1px}
+.mk-ch span{display:inline-flex;align-items:center;min-height:40px;padding:.4rem .8rem;border-radius:.75rem;border:2px solid #E5E7EB;background:#fff;color:#4B5563;font-size:.85rem;font-weight:700}
+.mk-ch input:checked + span{background:var(--chb);color:var(--chc);border-color:var(--chc)}
+.mk-ch input:focus-visible + span{outline:2px solid rgb(var(--c-primary));outline-offset:2px}
+.mk-src{display:inline-block;padding:.2rem .65rem;border-radius:999px;font-size:.8rem;font-weight:700}
 .mk-btn{display:inline-flex;align-items:center;gap:.3rem;padding:.5rem .9rem;border-radius:.75rem;font-size:.85rem;font-weight:700}
 .mk-var{font-family:monospace;background:#F3F4F6;padding:.05rem .35rem;border-radius:.35rem}
 </style>
@@ -600,6 +620,10 @@ require __DIR__ . '/includes/layout-top.php';
         <label>উত্তর</label>
         <textarea name="answer" rows="4" required maxlength="4000"><?= e((string) $fq['answer']) ?></textarea>
         <p class="mk-hint">উত্তরে <span class="mk-var">{name}</span> · <span class="mk-var">{courses}</span> · <span class="mk-var">{site}</span> · <span class="mk-var">{whatsapp}</span> বসানো যায়।</p>
+        <?php if (mkb_has_channel($db)): ?>
+        <label>কোথায় ব্যবহার হবে</label>
+        <?= mkb_channel_radios((string) ($fq['channel'] ?? 'both')) ?>
+        <?php endif; ?>
         <div class="mk-row mt-3">
             <button type="submit" class="mk-btn bg-indigo-600 text-white">💾 সংরক্ষণ করুন</button>
             <?php if (!empty($fq['id'])): ?><a href="<?= e(mk_back('kb', ['kind' => 'qa'])) ?>" class="mk-btn bg-gray-100 text-gray-700">বাতিল</a><?php endif; ?>
@@ -641,6 +665,7 @@ require __DIR__ . '/includes/layout-top.php';
     <?php foreach ($kbRows as $r): ?>
         <div class="mk-card" id="kb-<?= (int) $r['id'] ?>">
             <?php if ($kind === 'qa'): ?>
+                <?php if (mkb_has_channel($db)): ?><div class="mb-1"><?= mkb_channel_chip($r['channel'] ?? 'both') ?></div><?php endif; ?>
                 <p class="font-bold text-gray-800" style="overflow-wrap:anywhere">❓ <?= e((string) $r['question']) ?></p>
                 <div class="mk-pre mt-1"><?= e(meta_snippet((string) $r['answer'], 400)) ?></div>
             <?php else: ?>
@@ -955,12 +980,21 @@ require __DIR__ . '/includes/layout-top.php';
             <form method="post" action="<?= e(mk_back('learn', ['action' => 'approve'])) ?>" class="mk-f">
                 <?= csrf_field() ?>
                 <input type="hidden" name="id" value="<?= (int) $p['id'] ?>">
-                <p class="text-xs text-gray-500"><?= $p['source'] === 'comment' ? '🗨️ কমেন্টের উত্তর থেকে' : '💬 মেসেজের উত্তর থেকে' ?><?= $p['created_by'] ? ' · উত্তর দিয়েছিলেন ' . e($p['created_by']) : '' ?> · <?= e(date('d M Y', strtotime((string) $p['created_at']))) ?></p>
-                <label>প্রশ্ন (অভিভাবক যা লিখেছিলেন)</label>
+                <div class="mk-row">
+                    <?php if ($p['source'] === 'comment'): ?><span class="mk-src" style="background:#FCE7F3;color:#9D174D">💭 কমেন্ট থেকে</span>
+                    <?php else: ?><span class="mk-src" style="background:#E0F2FE;color:#075985">💬 ইনবক্স থেকে</span><?php endif; ?>
+                    <span class="text-xs text-gray-500"><?= $p['created_by'] ? 'উত্তর দিয়েছিলেন ' . e($p['created_by']) . ' · ' : '' ?><?= e(date('d M Y', strtotime((string) $p['created_at']))) ?></span>
+                </div>
+                <label>প্রশ্ন (<?= $p['source'] === 'comment' ? 'অভিভাবক কমেন্টে যা লিখেছিলেন' : 'অভিভাবক ইনবক্সে যা লিখেছিলেন' ?>)</label>
                 <textarea name="question" rows="2"><?= e((string) $p['question']) ?></textarea>
                 <label>উত্তর</label>
                 <textarea name="answer" rows="4"><?= e((string) $p['answer']) ?></textarea>
                 <p class="mk-hint">নাম, ফোন নম্বর বা একজনের নিজস্ব কথা থাকলে শেখানোর আগে মুছে দিন — এটা সবার জন্য ব্যবহার হবে।</p>
+                <?php if (mkb_has_channel($db)): ?>
+                <label>শেখার পর কোথায় ব্যবহার হবে</label>
+                <?= mkb_channel_radios(mkb_channel_default((string) $p['source'])) ?>
+                <p class="mk-hint">যেমন "ইনবক্স চেক করবেন" শুধু কমেন্টের জন্য; দাম/লিংকওয়ালা লম্বা উত্তর সাধারণত শুধু ইনবক্সের জন্য।</p>
+                <?php endif; ?>
                 <button type="submit" class="mk-btn bg-green-600 text-white mt-3">✅ শিখে নিন</button>
             </form>
             <form method="post" action="<?= e(mk_back('learn', ['action' => 'reject'])) ?>" class="mt-2"><?= csrf_field() ?><input type="hidden" name="id" value="<?= (int) $p['id'] ?>"><button type="submit" class="mk-btn bg-gray-100 text-gray-700">✕ বাদ দিন</button></form>

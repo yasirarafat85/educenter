@@ -1326,6 +1326,8 @@ PHP-র **নিজের** ভেতরের দুটো বাগ, CVSS **9.
 - ওয়্যারিং: permissions ম্যাপ, nav (`book-open`), ড্যাশবোর্ড `$taskDefs` (শেখার প্রস্তাব, `db_has_table` গার্ড), schema-check note, page-help, guide, `dd_scan()`-এ `meta_kb` (লেখায় নম্বর থাকলে delete)।
 - যাচাই: scratchpad `meta/kbtest.php` (৪৮) + `meta/kbui.js` (৫৭) + `meta/premig.js` (১০)।
 
+- **🎯 প্রশ্নোত্তরের চ্যানেল (`meta_kb.channel`, ২০২৬-১১-১৮, `migrate-meta-kb-channel.sql`)**: `message`/`comment`/`both` (ডিফল্ট both)। প্রস্তাবে উৎস থেকে আগে-বাছা (`mkb_channel_default()`), অনুমোদন ও qa-save আলাদা UPDATE-এ বসায় (`mkb_has_channel()` গার্ড)। ব্যবহারের সব কোয়েরিতে `mkb_channel_where($db, $channel)` — `mkb_suggest()` ও `mai_kb_plan($db, $channel)`/`mai_stable_prompt($db, $channel)` (mai_call চ্যানেল পাঠায়; প্রম্পট-ক্যাশ চ্যানেল-প্রতি দুটো)। 🔴 ডকুমেন্টে কখনো ছাঁকনি নয়। 🔴 **প্রশ্নোত্তর পড়ার নতুন কোনো কোয়েরি লিখলে `mkb_channel_where()` দিন**, নাহলে "শুধু কমেন্ট" উত্তর ইনবক্সে ঢুকবে। মিটার (`mai_kb_plan($db)` চ্যানেল ছাড়া) সব গোনে।
+
 ### 🤖 AI উত্তর — ধাপ ৩ (`includes/meta-ai.php`, ২০২৬-১১-১৭)
 - **টেবিল** (`migrate-meta-ai.sql`): `meta_ai_log` (প্রতিটা ডাক — channel/target/ref/kind draft|auto|manual|test/model/টোকেন/`cost_usd`/outcome ok|human|refusal|error) · `meta_ai_drafts` (status new|used|dismissed|old, needs_human, note)। গার্ড `mai_ready()` — না থাকলে সব চুপচাপ বাদ (**ফলব্যাক সরাবেন না**)।
 - **সেটিংস** (key-value): `meta_ai_key` · `meta_ai_model` (হোয়াইটলিস্ট `mai_models()`, ডিফল্ট `claude-opus-5-5`) · `meta_ai_mode_message`/`meta_ai_mode_comment` (off|draft|auto, অজানা = off) · `meta_ai_cap_usd` (ডিফল্ট 5) · `meta_ai_persona`। 🔴 বদলানো **শুধু `admin_is_super()`** (হ্যান্ডলারে গার্ড `ai-save`), চাবি পর্দায় শুধু শেষ ৪ অক্ষর, এররে `***`।

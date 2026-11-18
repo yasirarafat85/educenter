@@ -1113,6 +1113,7 @@ CREATE TABLE IF NOT EXISTS meta_kb (
     title        VARCHAR(190) NULL,
     question     TEXT         NULL,
     answer       MEDIUMTEXT   NULL,
+    channel      VARCHAR(8)   NOT NULL DEFAULT 'both',
     source       VARCHAR(12)  NOT NULL DEFAULT 'admin',
     source_ref   VARCHAR(190) NULL,
     created_by   VARCHAR(100) NULL,

@@ -171,6 +171,66 @@ function mkb_ready(?PDO $db = null): bool
     return $ok;
 }
 
+/* ───────── প্রশ্নোত্তর কোথায় ব্যবহার হবে (meta_kb.channel, ২০২৬-১১-১৮) ─────────
+ * 'message' = শুধু ইনবক্স · 'comment' = শুধু কমেন্ট · 'both' = দুই জায়গায়।
+ * 🔴 ঘরটা না থাকলে (migrate-meta-kb-channel.sql চলেনি) সবকিছু আগের মতো দুই জায়গায় চলে।
+ * 🔴 ডকুমেন্ট সবসময় দুই জায়গায় — এই ছাঁকনি শুধু প্রশ্নোত্তরে। */
+function mkb_channels(): array
+{
+    return [
+        'message' => ['💬 শুধু ইনবক্স', '#E0F2FE', '#075985'],
+        'comment' => ['💭 শুধু কমেন্ট', '#FCE7F3', '#9D174D'],
+        'both'    => ['🔁 দুই জায়গায়', '#ECFDF5', '#065F46'],
+    ];
+}
+
+/** ঘরটা আছে কিনা (static ক্যাশ) */
+function mkb_has_channel(?PDO $db = null): bool
+{
+    static $ok = null;
+    if ($ok === null) { $ok = db_has_column($db ?: get_db(), 'meta_kb', 'channel'); }
+    return $ok;
+}
+
+/** POST/অজানা মান → বৈধ মান (বিশুদ্ধ) */
+function mkb_channel_clean($v, string $fallback = 'both'): string
+{
+    $v = is_string($v) ? $v : '';
+    return isset(mkb_channels()[$v]) ? $v : $fallback;
+}
+
+/** প্রস্তাবের উৎস থেকে ডিফল্ট বাছাই (বিশুদ্ধ) — কমেন্ট থেকে এলে শুধু কমেন্ট, মেসেজ থেকে এলে শুধু ইনবক্স */
+function mkb_channel_default(string $source): string
+{
+    return $source === 'comment' ? 'comment' : ($source === 'message' ? 'message' : 'both');
+}
+
+/** কোয়েরির শর্ত: ঐ চ্যানেলে প্রযোজ্য প্রশ্নোত্তর। $channel কোডে লেখা ধ্রুবক, তবু হোয়াইটলিস্ট। */
+function mkb_channel_where(?PDO $db, ?string $channel): string
+{
+    if ($channel === null || !in_array($channel, ['message', 'comment'], true) || !mkb_has_channel($db)) { return ''; }
+    return " AND channel IN ('both', '" . $channel . "')";
+}
+
+/** ছোট রঙিন চিপ */
+function mkb_channel_chip(?string $ch): string
+{
+    $m = mkb_channels()[mkb_channel_clean($ch)];
+    return '<span class="mk-chip" style="background:' . $m[1] . ';color:' . $m[2] . '">' . e($m[0]) . '</span>';
+}
+
+/** তিনটা বিকল্পের রেডিও (ফর্মের ভেতরে) */
+function mkb_channel_radios(string $current, string $name = 'channel'): string
+{
+    $current = mkb_channel_clean($current);
+    $h = '<div class="mk-chs" role="radiogroup" aria-label="কোথায় ব্যবহার হবে">';
+    foreach (mkb_channels() as $k => $m) {
+        $h .= '<label class="mk-ch"><input type="radio" name="' . e($name) . '" value="' . $k . '"' . ($k === $current ? ' checked' : '') . '>'
+            . '<span style="--chb:' . $m[1] . ';--chc:' . $m[2] . '">' . e($m[0]) . '</span></label>';
+    }
+    return $h . '</div>';
+}
+
 /** অটো-উত্তর চালু? 🔴 ডিফল্টে বন্ধ — শুধু '1' হলেই চালু */
 function mkb_auto_on(): bool
 {
@@ -244,7 +304,7 @@ function mkb_suggest(PDO $db, string $text, string $channel, ?string $name = nul
     if ($q) {
         $scored = [];
         try {
-            $rows = $db->query("SELECT id, question, answer FROM meta_kb WHERE kind = 'qa' AND status = 'active' ORDER BY id DESC LIMIT 2000")->fetchAll();
+            $rows = $db->query("SELECT id, question, answer FROM meta_kb WHERE kind = 'qa' AND status = 'active'" . mkb_channel_where($db, $channel) . " ORDER BY id DESC LIMIT 2000")->fetchAll();
         } catch (Throwable $e) { $rows = []; }
         foreach ($rows as $r) {
             $s = mkb_score($q, mkb_tokens((string) $r['question']));

@@ -305,7 +305,7 @@ function mai_cap_reached(PDO $db): bool
  * 🔴 কিছু বাদ পড়লে সেটা 'docs'/'qa_dropped'-এ ধরা থাকে — জ্ঞানভান্ডার পাতা এটাই দেখায় (নীরবে হারানো নয়)।
  * ফেরত: ['docs' => [[id,title,chars,state full|cut|dropped,text]], 'qa' => [লাইন], 'qa_total', 'qa_dropped', 'used', 'limit']
  */
-function mai_kb_plan(PDO $db): array
+function mai_kb_plan(PDO $db, ?string $channel = null): array
 {
     $plan = ['docs' => [], 'qa' => [], 'qa_total' => 0, 'qa_dropped' => 0, 'used' => 0, 'limit' => MAI_CONTEXT_CHARS];
     $budget = MAI_CONTEXT_CHARS;
@@ -323,7 +323,7 @@ function mai_kb_plan(PDO $db): array
             $budget -= mb_strlen($text);
             $plan['docs'][] = ['id' => (int) $r['id'], 'title' => $title, 'chars' => $len, 'state' => $state, 'text' => $text];
         }
-        foreach ($db->query("SELECT question, answer FROM meta_kb WHERE kind = 'qa' AND status = 'active' ORDER BY id DESC LIMIT 1000")->fetchAll() as $r) {
+        foreach ($db->query("SELECT question, answer FROM meta_kb WHERE kind = 'qa' AND status = 'active'" . mkb_channel_where($db, $channel) . " ORDER BY id DESC LIMIT 1000")->fetchAll() as $r) {
             $plan['qa_total']++;
             $line = 'প্রশ্ন: ' . trim((string) $r['question']) . "\nউত্তর: " . trim((string) $r['answer']);
             if (mb_strlen($line) > $budget) { $plan['qa_dropped']++; continue; }
@@ -441,7 +441,7 @@ function mai_site_info_text(PDO $db): string
 }
 
 /** স্থির অংশ — নিয়ম + অ্যাডমিনের নির্দেশনা + সাইটের তথ্য + জ্ঞানভান্ডার (ক্যাশ হয়, তাই বারবারের খরচ খুব কম) */
-function mai_stable_prompt(PDO $db): string
+function mai_stable_prompt(PDO $db, ?string $channel = null): string
 {
     $cfg = mai_cfg();
     $parts = [mai_fixed_rules(), "প্রতিষ্ঠানের নির্দেশনা:\n" . $cfg['persona']];
@@ -449,7 +449,7 @@ function mai_stable_prompt(PDO $db): string
         $site = mai_site_info_text($db);
         if ($site !== '') { $parts[] = "ওয়েবসাইটের তথ্য (সাইট থেকে নেওয়া — জ্ঞানভান্ডারের সাথে না মিললে জ্ঞানভান্ডারের ডকুমেন্টকে ঠিক ধরুন):\n\n" . $site; }
     }
-    $plan = mai_kb_plan($db);
+    $plan = mai_kb_plan($db, $channel); // 🔴 শুধু এই চ্যানেলের প্রশ্নোত্তর (ইনবক্স/কমেন্টে দুটো আলাদা ক্যাশ)
     $docs = [];
     foreach ($plan['docs'] as $d) {
         if ($d['state'] !== 'dropped') { $docs[] = '### ' . $d['title'] . "\n" . $d['text']; }
@@ -579,7 +579,7 @@ function mai_call(PDO $db, array $messages, string $channel): array
         'model'         => $cfg['model'],
         'max_tokens'    => MAI_MAX_TOKENS,
         'system'        => [
-            ['type' => 'text', 'text' => mai_stable_prompt($db), 'cache_control' => ['type' => 'ephemeral']],
+            ['type' => 'text', 'text' => mai_stable_prompt($db, $channel === 'comment' ? 'comment' : 'message'), 'cache_control' => ['type' => 'ephemeral']],
             ['type' => 'text', 'text' => mai_live_prompt($db) . "\n\nএখন যেখানে উত্তর দিচ্ছেন: " . ($channel === 'comment' ? 'পাবলিক কমেন্ট' : 'মেসেঞ্জার ইনবক্স')],
         ],
         'messages'      => $messages,
