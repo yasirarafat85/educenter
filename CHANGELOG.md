@@ -4,6 +4,15 @@
 
 ---
 
+## ২০২৬-১১-১৮ — User token বসালে পেইজের token নিজে থেকেই বের করে নেয়
+
+- লাইভে ইউজার বারবার Explorer-এর User token বসাচ্ছিলেন (me/accounts থেকে ঠিক লাইন খুঁজে কপি করা কঠিন)। এখন "সংযোগ পরীক্ষা"-য় token-এর id ≠ Page ID হলে ঐ token দিয়েই `GET /{page_id}?fields=access_token` চাওয়া হয়; পাওয়া token-এর `/me` = Page ID মিললে সেটাই `meta_page_token`-এ সেভ।
+- মেয়াদ যাচাই: App Secret থাকলে `GET /app` থেকে app id → `debug_token` (app token `id|secret`) → `expires_at` ০ হলে ✅ "স্থায়ী (Never)", সময় থাকলে ⚠️ "অমুক সময়ে শেষ হবে — Extend Access Token করে ৬০ দিনের token বসান"।
+- `meta_graph()` এখন `$params['access_token']` দিলে সেটাই ব্যবহার করে (ডিফল্ট আগের মতো পেইজ token); এররে পেইজ token · ব্যবহৃত token · App Secret · input_token সব `***`।
+- যাচাই নকল Graph দিয়ে: User token → স্থায়ী/অস্থায়ী দুই অবস্থা (৮, গোপন কিছু পাতায় ফাঁস নয়, দ্বিতীয় পরীক্ষায় ✅) + সংযোগ ১৫ + metatest ৪৯ + নাম ১৬। মাইগ্রেশন লাগে না।
+
+---
+
 ## ২০২৬-১১-১৮ — "সংযোগ পরীক্ষা" User token চিনে ফেলে
 
 - লাইভে: বসানো token ছিল Explorer-এর নিজের **User token** (id 122145275679037303 = অ্যাডমিনের অ্যাপ-স্কোপড আইডি), আর আমাদের বার্তা ভুল পরামর্শ দিত — "Page ID ঘরে ঐ নম্বর লিখুন"। মেসেজ পাঠানোয় এরর আসত "(#100) Page ID in request does not match page ID in access token"।

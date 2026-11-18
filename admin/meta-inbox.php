@@ -123,6 +123,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         }
         $tokPage = (string) ($me['data']['id'] ?? '');
         $tokType = strtolower((string) ($me['data']['metadata']['type'] ?? ''));
+        // User token বা অন্য কিছু বসানো থাকলে — ঐ token দিয়েই আমাদের পেইজের token চেয়ে নেওয়া (হাতে খোঁজার দরকার নেই)
+        if ($tokPage !== $c['page_id']) {
+            $pt = meta_graph('GET', $c['page_id'], ['fields' => 'access_token']);
+            $newTok = $pt['ok'] ? trim((string) ($pt['data']['access_token'] ?? '')) : '';
+            if ($newTok !== '') {
+                $chk = meta_graph('GET', 'me', ['fields' => 'id', 'access_token' => $newTok]);
+                if ($chk['ok'] && (string) ($chk['data']['id'] ?? '') === $c['page_id']) {
+                    // মেয়াদ দেখা — App Secret থাকলে app token দিয়ে debug_token
+                    $exp = null;
+                    if ($c['app_secret'] !== '') {
+                        $app = meta_graph('GET', 'app', ['fields' => 'id', 'access_token' => $newTok]);
+                        $appId = $app['ok'] ? (string) ($app['data']['id'] ?? '') : '';
+                        if ($appId !== '') {
+                            $dbg = meta_graph('GET', 'debug_token', ['input_token' => $newTok, 'access_token' => $appId . '|' . $c['app_secret']]);
+                            if ($dbg['ok'] && isset($dbg['data']['data']['expires_at'])) { $exp = (int) $dbg['data']['data']['expires_at']; }
+                        }
+                    }
+                    update_setting('meta_page_token', $newTok);
+                    if ($exp === 0) {
+                        set_flash('success', '✅ বসানো token-টা ছিল আপনার নিজের (User) token — তা থেকে পেইজের স্থায়ী token (মেয়াদ: Never) নিজে থেকেই বের করে বসানো হলো। আবার "সংযোগ পরীক্ষা" চাপুন।');
+                    } elseif ($exp !== null) {
+                        set_flash('error', '⚠️ পেইজের token বের করে বসানো হলো, কিন্তু এটা ' . date('d M, h:i A', $exp) . '-এ মেয়াদ শেষ হবে। Access Token Debugger-এ User token-এর জন্য "Extend Access Token" চেপে নতুন (৬০ দিনের) token এখানে বসান, তারপর আবার "সংযোগ পরীক্ষা" চাপুন — তখন স্থায়ী token বসবে।');
+                    } else {
+                        set_flash('success', '✅ বসানো token থেকে পেইজের token বের করে বসানো হলো। Access Token Debugger-এ দেখে নিন Expires = Never কিনা, তারপর আবার "সংযোগ পরীক্ষা" চাপুন।');
+                    }
+                    redirect(mi_back('setup'));
+                }
+            }
+        }
         if ($tokType === 'user') {
             // সবচেয়ে সাধারণ ভুল: Explorer-এর নিজের (User) token বসানো — Page ID বদলানো কখনো সমাধান নয়
             set_flash('error', '❌ এটা আপনার নিজের অ্যাকাউন্টের (User) token, পেইজের নয়' . (!empty($me['data']['name']) ? ' (' . (string) $me['data']['name'] . ')' : '') . '। Graph API Explorer-এ me/accounts?fields=id,name,access_token চালিয়ে "' . $c['page_id'] . '"-এর পাশের access_token কপি করে বসান। Page ID ঘর বদলাবেন না।');

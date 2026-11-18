@@ -130,7 +130,9 @@ function meta_graph(string $method, string $path, array $params = [], ?array $bo
     if (!function_exists('curl_init')) {
         return ['ok' => false, 'status' => 0, 'data' => null, 'error' => 'সার্ভারে curl নেই'];
     }
-    $params['access_token'] = $c['page_token'];
+    // কলার চাইলে অন্য token দিতে পারে (যেমন User token থেকে পেইজের token বের করা, বা app token)
+    $tok = (string) ($params['access_token'] ?? $c['page_token']);
+    $params['access_token'] = $tok;
     $url = meta_graph_base() . '/' . $c['version'] . '/' . ltrim($path, '/') . '?' . http_build_query($params);
 
     $ch = curl_init($url);
@@ -158,7 +160,7 @@ function meta_graph(string $method, string $path, array $params = [], ?array $bo
         return ['ok' => true, 'status' => $status, 'data' => $data, 'error' => ''];
     }
     $msg = is_array($data) && isset($data['error']['message']) ? (string) $data['error']['message'] : ('HTTP ' . $status);
-    $msg = str_replace($c['page_token'], '***', $msg);
+    foreach (array_filter([$c['page_token'], $tok, $c['app_secret'], (string) ($params['input_token'] ?? '')]) as $secret) { $msg = str_replace($secret, '***', $msg); }
     return ['ok' => false, 'status' => $status, 'data' => $data, 'error' => meta_snippet($msg, 300)];
 }
 
