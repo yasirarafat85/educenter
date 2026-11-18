@@ -274,6 +274,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         $cap = (float) str_replace(',', '.', (string) ($_POST['ai_cap'] ?? MAI_DEFAULT_CAP));
         update_setting('meta_ai_cap_usd', (string) round(max(0, min(1000, $cap)), 2));
         update_setting('meta_ai_site_info', !empty($_POST['site_info']) ? '1' : '0');
+        $rs = (string) ($_POST['ready_style'] ?? '');
+        if (isset(mai_ready_styles()[$rs])) { update_setting('meta_ai_ready_style', $rs); }
         $persona = trim(str_replace("\r\n", "\n", (string) ($_POST['ai_persona'] ?? '')));
         update_setting('meta_ai_persona', mb_substr($persona, 0, 3000));
         set_flash('success', '🤖 AI-র সেটিংস সংরক্ষণ হয়েছে।' . (mai_has_key() ? '' : ' চাবি না বসালে AI কাজ করবে না।'));
@@ -685,7 +687,7 @@ require __DIR__ . '/includes/layout-top.php';
                 <p class="font-bold text-gray-800" style="overflow-wrap:anywhere">📄 <?= e((string) $r['title']) ?></p>
                 <p class="text-xs text-gray-500"><?= number_format(mb_strlen((string) $r['answer'])) ?> অক্ষর</p>
                 <?php foreach (mai_ready_blocks((string) $r['answer']) as $rb): $rbn = mb_strlen($rb); ?>
-                    <p class="text-xs mt-1" style="color:<?= $rbn > MAI_READY_MAX ? '#B91C1C' : '#047857' ?>">📋 প্রস্তুত বার্তা আছে (<?= number_format($rbn) ?> অক্ষর)<?= $rbn > MAI_READY_MAX ? ' — ⚠️ বেশি লম্বা, মেসেঞ্জারে শেষটা কেটে যাবে; ' . number_format(MAI_READY_MAX) . ' অক্ষরের মধ্যে আনুন' : ' — কেউ এই কোর্স সম্পর্কে জানতে চাইলে AI এটাই হুবহু পাঠাবে' ?></p>
+                    <p class="text-xs mt-1" style="color:<?= $rbn > MAI_READY_MAX ? '#B91C1C' : '#047857' ?>">📋 প্রস্তুত বার্তা আছে (<?= number_format($rbn) ?> অক্ষর)<?= $rbn > MAI_READY_MAX ? ' — ⚠️ বেশি লম্বা, মেসেঞ্জারে শেষটা কেটে যাবে; ' . number_format(MAI_READY_MAX) . ' অক্ষরের মধ্যে আনুন' : (['ask' => ' — অভিভাবক "বিস্তারিত" চাইলে AI এটাই হুবহু পাঠাবে', 'none' => ' — এখন শুধু তথ্যের উৎস (🤖 AI ট্যাবে "লম্বা বার্তা নয়" বাছা আছে)'][mai_ready_style()] ?? ' — কেউ এই কোর্স সম্পর্কে জানতে চাইলে AI এটাই হুবহু পাঠাবে') ?></p>
                 <?php endforeach; ?>
                 <?php mk_preview((string) $r['answer'], 'mt-1 text-gray-600', 220, 5); ?>
             <?php endif; ?>
@@ -819,6 +821,9 @@ require __DIR__ . '/includes/layout-top.php';
                 <span>🌐 ওয়েবসাইটের পাবলিক তথ্য থেকেও উত্তর দেবে (কোর্সের বিবরণ, ওয়ার্কশিট, প্রোডাক্ট, FAQ, চালু নোটিশ, যোগাযোগ)</span>
             </label>
             <p class="mk-hint">সাইটে যা বদলাবেন, AI নিজে থেকেই সেটা জানবে। শুধু পাবলিক সাইটে যা দেখা যায় তাই যায় — কোনো অভিভাবকের নাম, ফোন বা অর্ডার কখনো নয়।</p>
+            <label>📋 কেউ শুধু কোর্সের নাম লিখলে (মেসেজে)</label>
+            <select name="ready_style"><?php foreach (mai_ready_styles() as $k => $lb): ?><option value="<?= $k ?>" <?= mai_ready_style() === $k ? 'selected' : '' ?>><?= e($lb) ?></option><?php endforeach; ?></select>
+            <p class="mk-hint">📋 সাথে সাথে = কোর্সের নাম লিখলেই সাজানো লম্বা বার্তাটা হুবহু যায়। 👶 (ক) = আগে ২-৩ লাইনের পরিচয় দিয়ে বাচ্চার বয়স জিজ্ঞেস করে; অভিভাবক "বিস্তারিত" লিখলে তবেই লম্বা বার্তা। ✂️ (খ) = লম্বা বার্তা কখনো নয়, শুধু ৩-৫ বাক্যে মূল কথা। "প্রস্তুত বার্তা" = ডকুমেন্টে চিহ্ন দিয়ে সাজানো লম্বা লেখা। দাম/তারিখ/লিংক সব ধরনে ডকুমেন্ট থেকেই আসে, বানানো হয় না। কমেন্টে কখনো লম্বা বার্তা যায় না।</p>
             <label>AI-কে নির্দেশনা (কীভাবে কথা বলবে)</label>
             <textarea name="ai_persona" rows="4" placeholder="<?= e(mai_default_persona()) ?>"><?= e((string) get_setting('meta_ai_persona')) ?></textarea>
             <p class="mk-hint">খালি রাখলে ধূসর লেখাটাই ব্যবহার হবে। দাম/তারিখ এখানে লিখবেন না — ওগুলো সবসময় সাইট থেকে টাটকা নেওয়া হয়। "না জানলে চুপ থাকা", "দাম বানিয়ে না বলা" নিয়মগুলো আগে থেকেই বসানো, বদলানো যায় না।</p>
