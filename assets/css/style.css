@@ -1272,15 +1272,32 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
 
 /* ── 📚 কোর্স পাতার সারাংশ + সূচি (courses.php, ২০২৬-১১-১৯) ─────────────────── */
 .cix { background:#fff; border:1px solid rgb(var(--c-border)); border-radius:20px; padding:14px; margin:0 0 28px; box-shadow:0 6px 18px rgba(0,0,0,.05); }
-.cix-head { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px; }
-.cix-total { font-size:16px; color:#1f2937; margin-right:4px; }
-.cix-pill { display:inline-flex; align-items:center; font-size:13px; font-weight:700; padding:5px 12px; border-radius:9999px; text-decoration:none; }
+.cix-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+.cix-stat { border-radius:14px; padding:10px 6px; text-align:center; line-height:1.35; min-width:0; }
+.cix-stat b { display:block; font-size:26px; font-weight:900; font-variant-numeric:tabular-nums; }
+.cix-stat span { display:block; font-size:13px; font-weight:700; overflow-wrap:anywhere; }
+.cix-st-all { background:#e0f2fe; color:#0369a1; }
+.cix-st-open { background:#dcfce7; color:#15803d; }
+.cix-st-soon { background:#ede9fe; color:#6d28d9; }
+.cix-btns { display:grid; grid-template-columns:1fr; gap:10px; }
+@media (min-width:768px) { .cix-btns { grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); } }
+.cix-btn { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:8px; min-height:56px; padding:12px 16px; border-radius:16px; font-size:18px; font-weight:800; text-decoration:none; color:#fff; box-shadow:0 8px 18px rgba(0,0,0,.12); transition:transform .15s, box-shadow .15s; line-height:1.4; }
+.cix-btn:hover { transform:translateY(-2px); box-shadow:0 12px 24px rgba(0,0,0,.16); }
+.cix-btn-open { background:linear-gradient(135deg,#16a34a,#0d9488); }
+.cix-btn-soon { background:linear-gradient(135deg,#8b5cf6,#6d28d9); }
+.cix-btn-login { background:linear-gradient(135deg,#f59e0b,#ea580c); }
+.cix-n { font-style:normal; font-size:13px; font-weight:800; background:rgba(255,255,255,.25); padding:2px 10px; border-radius:9999px; }
+.cix-names { margin-top:12px; }
+.cix-names > summary { cursor:pointer; list-style:none; display:flex; align-items:center; justify-content:center; gap:6px; font-size:15px; font-weight:700; color:#374151; padding:8px; border-radius:12px; background:#f3f4f6; }
+.cix-names > summary::-webkit-details-marker { display:none; }
+.cix-names[open] > summary svg { transform:rotate(180deg); }
+.cix-glabel { display:inline-flex; font-size:13px; font-weight:700; padding:5px 12px; border-radius:9999px; margin-bottom:8px; }
 .cix-pill-open { background:#dcfce7; color:#15803d; }
 .cix-pill-soon { background:#ede9fe; color:#6d28d9; }
 .cix-group { margin-top: 10px; }
-.cix-group > .cix-pill { margin-bottom: 8px; }
 .cix-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .cix-chip { display: inline-flex; align-items: center; min-height: 36px; padding: 6px 12px; border-radius: 9999px; font-size: 14px; font-weight: 700; text-decoration: none; max-width: 100%; overflow-wrap: anywhere; line-height: 1.4; }
 .cix-chip:hover { filter: brightness(.96); }
+@media (hover: none) { .cix-btn:hover { transform:none; box-shadow:0 8px 18px rgba(0,0,0,.12); } }
 .cix-anchor { scroll-margin-top:90px; }
 .cix-anchor > .pricing-card { height:100%; }

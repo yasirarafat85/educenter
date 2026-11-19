@@ -28,30 +28,50 @@ require __DIR__ . '/includes/site-header.php';
         <p class="text-center text-gray-500">এখনো কোনো কোর্স যোগ করা হয়নি।</p>
     <?php else: ?>
 
-        <?php // 📚 সারাংশ + সূচি (২০২৬-১১-১৯): কত কোর্স, কোনগুলো খোলা, কোনগুলোয় আগ্রহ জানানো যায় —
-              // এক নজরে। নামে চাপলে নিচের কার্ডে নামে (#course-<id>)। স্টাইল .cix-* (style.css)। ?>
-        <?php // 📚 সারাংশ + সূচি (২০২৬-১১-১৯): কত কোর্স, কোনগুলো খোলা, কোনগুলোয় আগ্রহ জানানো যায়।
-              // 🔴 ব্যাচের নাম দেখানো হয় না, আর এক কোর্সের একাধিক ব্যাচ একটাই চিপ (cix_unique())।
-              // খোলা ব্যাচ আছে এমন কোর্স "আগ্রহ জানান"-এ আবার আসে না। স্টাইল .cix-* (style.css)। ?>
+        <?php // 📚 সারাংশ + বড় রঙিন বোতাম (২০২৬-১১-১৯, ইউজারের চাওয়া — হোমপেজ হিরোর বোতামের ধাঁচে, প্রতিটা আলাদা রঙ)।
+              // উপরে সংখ্যার তিন টাইল, নিচে বোতাম (সংখ্যাসহ), আর কোর্সের নাম ভাঁজ-করা <details>-এ (লম্বা তালিকা লুকানো)।
+              // 🔴 ব্যাচের নাম দেখানো হয় না, এক কোর্সের একাধিক ব্যাচ একটাই নাম (cix_unique())।
+              // খোলা ব্যাচ আছে এমন কোর্স "আগ্রহ জানান"-এ আবার আসে না। স্টাইল .cix-* (style.css, সাধারণ CSS)। ?>
         <?php
         $cixOpen = cix_unique($openCourses);
         $cixSoon = array_diff_key(cix_unique($closedCourses), $cixOpen);
+        $cixLogged = !empty($_SESSION['user_id']);
         ?>
         <nav class="cix" aria-label="সব কোর্সের তালিকা">
-            <div class="cix-head">
-                <span class="cix-total">📚 মোট <b><?= count($cixOpen) + count($cixSoon) ?>টি কোর্স</b></span>
+            <div class="cix-stats">
+                <div class="cix-stat cix-st-all"><b><?= count($cixOpen) + count($cixSoon) ?></b><span>মোট কোর্স</span></div>
+                <div class="cix-stat cix-st-open"><b><?= count($cixOpen) ?></b><span>ভর্তি চলছে</span></div>
+                <div class="cix-stat cix-st-soon"><b><?= count($cixSoon) ?></b><span>আসছে শীঘ্রই</span></div>
             </div>
-            <?php foreach ([[$cixOpen, '✅ ভর্তি চলছে', 'cix-pill-open', 'cix-open'], [$cixSoon, '🔜 আসছে — আগ্রহ জানান', 'cix-pill-soon', 'cix-closed']] as [$cixList, $cixLabel, $cixCls, $cixSec]): ?>
-                <?php if (!$cixList) continue; ?>
-                <div class="cix-group">
-                    <a href="#<?= $cixSec ?>" class="cix-pill <?= $cixCls ?>"><?= $cixLabel ?> (<?= count($cixList) ?>)</a>
-                    <div class="cix-chips">
-                        <?php foreach ($cixList as $cixC): ?>
-                            <a href="#course-<?= (int) $cixC['id'] ?>" class="cix-chip <?= $cixCls ?>"><?= course_is_new($cixC) ? '🆕 ' : '' ?><?= e($cixC['title']) ?></a>
-                        <?php endforeach; ?>
+            <div class="cix-btns">
+                <?php if ($cixOpen): ?>
+                <a href="#cix-open" class="cix-btn cix-btn-open">
+                    <i data-lucide="book-open" class="w-5 h-5"></i><span>ভর্তি চলছে</span><em class="cix-n"><?= count($cixOpen) ?>টি কোর্স</em>
+                </a>
+                <?php endif; ?>
+                <?php if ($cixSoon): ?>
+                <a href="#cix-closed" class="cix-btn cix-btn-soon">
+                    <i data-lucide="bell" class="w-5 h-5"></i><span>আগ্রহ জানান</span><em class="cix-n"><?= count($cixSoon) ?>টি কোর্স</em>
+                </a>
+                <?php endif; ?>
+                <a href="<?= $cixLogged ? 'account' : 'account-login' ?>" class="cix-btn cix-btn-login">
+                    <i data-lucide="<?= $cixLogged ? 'layout-dashboard' : 'log-in' ?>" class="w-5 h-5"></i><span><?= $cixLogged ? 'আপনার ড্যাশবোর্ড' : 'অভিভাবক লগইন' ?></span>
+                </a>
+            </div>
+            <details class="cix-names">
+                <summary>📋 সব কোর্সের নাম দেখুন <i data-lucide="chevron-down" class="w-4 h-4"></i></summary>
+                <?php foreach ([[$cixOpen, '✅ ভর্তি চলছে', 'cix-pill-open'], [$cixSoon, '🔜 আসছে — আগ্রহ জানান', 'cix-pill-soon']] as [$cixList, $cixLabel, $cixCls]): ?>
+                    <?php if (!$cixList) continue; ?>
+                    <div class="cix-group">
+                        <div class="cix-glabel <?= $cixCls ?>"><?= $cixLabel ?> (<?= count($cixList) ?>)</div>
+                        <div class="cix-chips">
+                            <?php foreach ($cixList as $cixC): ?>
+                                <a href="#course-<?= (int) $cixC['id'] ?>" class="cix-chip <?= $cixCls ?>"><?= course_is_new($cixC) ? '🆕 ' : '' ?><?= e($cixC['title']) ?></a>
+                            <?php endforeach; ?>
+                        </div>
                     </div>
-                </div>
-            <?php endforeach; ?>
+                <?php endforeach; ?>
+            </details>
         </nav>
 
         <?php if ($openCourses): ?>
