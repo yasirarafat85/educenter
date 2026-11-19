@@ -1301,3 +1301,18 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
 @media (hover: none) { .cix-btn:hover { transform:none; box-shadow:0 8px 18px rgba(0,0,0,.12); } }
 .cix-anchor { scroll-margin-top:90px; }
 .cix-anchor > .pricing-card { height:100%; }
+
+/* 🧭 হোমপেজ হিরোর চার বোতাম (২০২৬-১১-২০) — কোর্স পাতার .cix-btn-এর চিকন রূপ। "সব কোর্স" সাদা (হিরোর
+   সবুজ ব্যাকগ্রাউন্ডে আলাদা দেখায়, লেখা থিম-রঙে), বাকি তিনটা নিজের রঙে। */
+.hb-grid { display:grid; grid-template-columns:1fr; gap:10px; max-width:420px; margin:0 auto; }
+@media (min-width:768px) { .hb-grid { max-width:860px; grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (min-width:1024px) { .hb-grid { max-width:1080px; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); grid-template-columns:none; } }
+.hb-btn { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:6px; min-height:48px; padding:9px 14px; border-radius:14px; font-size:16px; font-weight:800; line-height:1.4; text-decoration:none; color:#fff; box-shadow:0 6px 14px rgba(0,0,0,.14); transition:transform .15s, box-shadow .15s; min-width:0; }
+.hb-btn:hover { transform:translateY(-2px); box-shadow:0 10px 20px rgba(0,0,0,.18); }
+.hb-all { background:#fff; color:rgb(var(--c-deep)); }
+.hb-open { background:linear-gradient(135deg,#16a34a,#0d9488); border:1px solid rgba(255,255,255,.35); }
+.hb-soon { background:linear-gradient(135deg,#8b5cf6,#6d28d9); }
+.hb-login { background:linear-gradient(135deg,#f59e0b,#ea580c); }
+.hb-n { font-style:normal; font-size:12px; font-weight:800; background:rgba(255,255,255,.25); padding:1px 9px; border-radius:9999px; }
+.hb-all .hb-n { background:rgb(var(--c-tint)); color:rgb(var(--c-deep)); }
+@media (hover: none) { .hb-btn:hover { transform:none; box-shadow:0 6px 14px rgba(0,0,0,.14); } }

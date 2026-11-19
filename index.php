@@ -34,6 +34,11 @@ foreach ($allBatches as $cbRow) {
     }
 }
 usort($deadlineCourses, fn($a, $b) => $a['_deadline_ts'] <=> $b['_deadline_ts']);
+// 🧭 হিরোর বোতামের সংখ্যা — কোর্স পাতার সারাংশের হুবহু নিয়ম (cix_unique(): এক কোর্সের একাধিক ব্যাচ একবার;
+//    খোলা ব্যাচ আছে এমন কোর্স "আগ্রহ জানান"-এ নয়)। ব্যাচের নাম কোথাও দেখানো হয় না।
+$heroOpen = cix_unique(array_values(array_filter($allBatches, fn($c) => course_reg_open($c))));
+$heroSoon = array_diff_key(cix_unique(array_values(array_filter($allBatches, fn($c) => !course_reg_open($c)))), $heroOpen);
+$heroAll  = count($heroOpen) + count($heroSoon);
 $deadlineCourses = array_slice($deadlineCourses, 0, 3);   // পট্টিতে সর্বোচ্চ ৩টা, নাহলে হিরোকেই ঢেকে দিত
 
 // হোমপেজের ৩টা কার্ড — 🔴 ঘড়ি-চলা ব্যাচ সবার আগে (সময় যত কাছে তত আগে), তারপর আগের
@@ -76,14 +81,17 @@ require __DIR__ . '/includes/site-header.php';
             </span>
             <h1 class="text-4xl sm:text-6xl font-black mb-6 hero-text leading-tight">শিক্ষার নতুন দিগন্ত</h1>
             <p class="text-lg sm:text-2xl mb-10 max-w-3xl mx-auto font-light leading-relaxed opacity-95">আমাদের সাথে যুক্ত হয়ে পেয়ে যান উন্নতমানের শিক্ষা এবং দক্ষতা উন্নয়নের সুযোগ</p>
-            <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                <a href="courses" class="inline-flex items-center justify-center gap-2 bg-white text-indigo-700 px-8 sm:px-10 py-4 sm:py-5 rounded-2xl text-lg sm:text-xl font-bold shadow-lg hover:shadow-2xl transition-all transform hover:-translate-y-1 w-full sm:w-auto">
-                    <i data-lucide="rocket" class="w-5 h-5"></i> কোর্স দেখুন
-                </a>
-                <?php $loggedIn = !empty($_SESSION['user_id']); ?>
-                <a href="<?= $loggedIn ? 'account' : 'account-login' ?>" class="inline-flex items-center justify-center gap-2 btn-outline-white px-8 sm:px-10 py-4 sm:py-5 rounded-2xl text-lg sm:text-xl font-bold w-full sm:w-auto">
-                    <i data-lucide="<?= $loggedIn ? 'layout-dashboard' : 'log-in' ?>" class="w-5 h-5"></i> <?= $loggedIn ? 'আপনার ড্যাশবোর্ড' : 'অভিভাবক লগইন' ?>
-                </a>
+            <?php // 🧭 হিরোর চারটা বোতাম (২০২৬-১১-২০) — কোর্স পাতার .cix বোতামের ধাঁচে, একটু চিকন; স্টাইল .hb-* (style.css)। ?>
+            <?php $loggedIn = !empty($_SESSION['user_id']); ?>
+            <div class="hb-grid">
+                <a href="courses" class="hb-btn hb-all"><i data-lucide="layout-grid" class="w-5 h-5"></i><span>সব কোর্স</span><?php if ($heroAll): ?><em class="hb-n"><?= (int) $heroAll ?>টি</em><?php endif; ?></a>
+                <?php if ($heroOpen): ?>
+                <a href="courses#cix-open" class="hb-btn hb-open"><i data-lucide="book-open" class="w-5 h-5"></i><span>ভর্তি চলছে</span><em class="hb-n"><?= count($heroOpen) ?>টি কোর্স</em></a>
+                <?php endif; ?>
+                <?php if ($heroSoon): ?>
+                <a href="courses#cix-closed" class="hb-btn hb-soon"><i data-lucide="bell" class="w-5 h-5"></i><span>আগ্রহ জানান</span><em class="hb-n"><?= count($heroSoon) ?>টি কোর্স</em></a>
+                <?php endif; ?>
+                <a href="<?= $loggedIn ? 'account' : 'account-login' ?>" class="hb-btn hb-login"><i data-lucide="<?= $loggedIn ? 'layout-dashboard' : 'log-in' ?>" class="w-5 h-5"></i><span><?= $loggedIn ? 'আপনার ড্যাশবোর্ড' : 'অভিভাবক লগইন' ?></span></a>
             </div>
         </div>
     </section>
