@@ -64,12 +64,21 @@ require __DIR__ . '/includes/site-header.php';
         <div class="space-y-6">
             <p class="text-gray-700 text-base sm:text-lg leading-relaxed break-words" style="overflow-wrap:anywhere;"><?= nl2br(e($item['description'] ?? '')) ?></p>
 
+            <?php // 🔜 বন্ধ কোর্সে আগের ব্যাচের ফি/মেয়াদ দেখানো হয় না (course_hide_terms()) ?>
+            <?php $hideTerms = course_hide_terms($item, $type); ?>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <?php if ($hideTerms): ?>
+                <div class="flex items-center gap-3 bg-gradient-to-r from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200" style="grid-column:1/-1;">
+                    <span class="icon-circle bg-blue-200 text-blue-700 w-10 h-10 flex-shrink-0"><i data-lucide="calendar" class="w-5 h-5"></i></span>
+                    <span class="text-blue-800 font-bold text-base sm:text-lg"><?= e(course_closed_terms_note()) ?></span>
+                </div>
+                <?php else: ?>
                 <div class="flex items-center gap-3 bg-gradient-to-r from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
                     <span class="icon-circle bg-blue-200 text-blue-700 w-10 h-10 flex-shrink-0"><i data-lucide="wallet" class="w-5 h-5"></i></span>
                     <span class="text-blue-800 font-bold text-lg flex items-baseline flex-wrap gap-2">মূল্য: <?= e($item['price'] ?? '') ?><?= render_discount_html($item['old_price'] ?? '', $item['price'] ?? '') ?></span>
                 </div>
-                <?php if (!empty($item['duration'])): ?>
+                <?php endif; ?>
+                <?php if (!empty($item['duration']) && !$hideTerms): ?>
                 <div class="flex items-center gap-3 bg-gradient-to-r from-green-50 to-green-100 p-4 rounded-xl border border-green-200">
                     <span class="icon-circle bg-green-200 text-green-700 w-10 h-10 flex-shrink-0"><i data-lucide="clock" class="w-5 h-5"></i></span>
                     <span class="text-green-800 font-bold text-lg">মেয়াদ: <?= e($item['duration']) ?></span>

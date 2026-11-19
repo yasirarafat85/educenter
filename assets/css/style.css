@@ -1269,3 +1269,23 @@ a.pg-link:hover { background: rgb(var(--c-tint)); transform: translateY(-1px); }
     .home-rail:has(> :only-child) > * { flex-basis: 100%; }
     .home-rail-hint { display: block; text-align: center; font-size: .85rem; color: #6b7280; margin-top: .25rem; }
 }
+
+/* ── 📚 কোর্স পাতার সারাংশ + সূচি (courses.php, ২০২৬-১১-১৯) ─────────────────── */
+.cix { background:#fff; border:1px solid rgb(var(--c-border)); border-radius:20px; padding:14px; margin:0 0 28px; box-shadow:0 6px 18px rgba(0,0,0,.05); }
+.cix-head { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px; }
+.cix-total { font-size:16px; color:#1f2937; margin-right:4px; }
+.cix-pill { display:inline-flex; align-items:center; font-size:13px; font-weight:700; padding:5px 12px; border-radius:9999px; text-decoration:none; }
+.cix-pill-open { background:#dcfce7; color:#15803d; }
+.cix-pill-soon { background:#ede9fe; color:#6d28d9; }
+.cix-list { list-style:none; margin:0; padding:0; display:grid; grid-template-columns:1fr; gap:6px; }
+@media (min-width:768px) { .cix-list { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+@media (min-width:1100px) { .cix-list { grid-template-columns:repeat(3, minmax(0,1fr)); } }
+.cix-item { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:44px; padding:8px 12px; border-radius:12px; background:rgb(var(--c-tint)); color:#1f2937; text-decoration:none; }
+.cix-item:hover { background:rgb(var(--c-border)); }
+.cix-name { min-width:0; overflow-wrap:anywhere; font-weight:700; font-size:14px; line-height:1.45; }
+.cix-name small { font-weight:500; color:#6b7280; font-size:12px; }
+.cix-st { flex-shrink:0; font-size:12px; font-weight:700; padding:3px 9px; border-radius:9999px; white-space:nowrap; }
+.cix-st-open { background:#dcfce7; color:#15803d; }
+.cix-st-soon { background:#ede9fe; color:#6d28d9; }
+.cix-anchor { scroll-margin-top:90px; }
+.cix-anchor > .pricing-card { height:100%; }

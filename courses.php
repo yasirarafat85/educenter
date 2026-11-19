@@ -12,8 +12,9 @@ $courses = get_db()->query(
 // খোলা (চলমান) ও বন্ধ ("আসছে শীঘ্রই") আলাদা করা — বন্ধগুলো আলাদা সেকশনে দেখানো হয়
 // 🔴 course_reg_open() — হাতের সুইচ **ও** ভর্তির শেষ সময় (registration_deadline) দুটোই দেখে,
 // তাই কাউন্টডাউন শেষ হওয়া ব্যাচ নিজে থেকেই "আসছে শীঘ্রই" সেকশনে নেমে যায়
-$openCourses   = array_filter($courses, fn($c) => course_reg_open($c));
-$closedCourses = array_filter($courses, fn($c) => !course_reg_open($c));
+// 🆕 চলমান কোর্সে নতুন ব্যাচ আগে (২০২৬-১১-১৯, ইউজারের চাওয়া) — course_sort_newest()
+$openCourses   = course_sort_newest(array_values(array_filter($courses, fn($c) => course_reg_open($c))));
+$closedCourses = array_values(array_filter($courses, fn($c) => !course_reg_open($c)));
 
 $pageJsonLd = jsonld_breadcrumb([['name' => 'কোর্স', 'url' => 'courses']]);
 
@@ -27,14 +28,38 @@ require __DIR__ . '/includes/site-header.php';
         <p class="text-center text-gray-500">এখনো কোনো কোর্স যোগ করা হয়নি।</p>
     <?php else: ?>
 
+        <?php // 📚 সারাংশ + সূচি (২০২৬-১১-১৯): কত কোর্স, কোনগুলো খোলা, কোনগুলোয় আগ্রহ জানানো যায় —
+              // এক নজরে। নামে চাপলে নিচের কার্ডে নামে (#course-<id>)। স্টাইল .cix-* (style.css)। ?>
+        <nav class="cix" aria-label="সব কোর্সের তালিকা">
+            <div class="cix-head">
+                <span class="cix-total">📚 মোট <b><?= count($courses) ?>টি কোর্স</b></span>
+                <?php if ($openCourses): ?><a href="#cix-open" class="cix-pill cix-pill-open">✅ <?= count($openCourses) ?>টিতে ভর্তি চলছে</a><?php endif; ?>
+                <?php if ($closedCourses): ?><a href="#cix-closed" class="cix-pill cix-pill-soon">🔜 <?= count($closedCourses) ?>টি আসছে — আগ্রহ জানানো যাবে</a><?php endif; ?>
+            </div>
+            <ul class="cix-list">
+                <?php foreach ([[$openCourses, true], [$closedCourses, false]] as [$cixRows, $cixOpen]): ?>
+                    <?php foreach ($cixRows as $cixC): ?>
+                    <li><a href="#course-<?= (int) $cixC['id'] ?>" class="cix-item">
+                        <span class="cix-name"><?= e($cixC['title']) ?><?php if (trim((string) ($cixC['batch_name'] ?? '')) !== ''): ?> <small><?= e($cixC['batch_name']) ?></small><?php endif; ?></span>
+                        <?php if ($cixOpen): ?>
+                            <span class="cix-st cix-st-open"><?= course_is_new($cixC) ? '🆕 ' : '' ?>ভর্তি চলছে</span>
+                        <?php else: ?>
+                            <span class="cix-st cix-st-soon">আগ্রহ জানান</span>
+                        <?php endif; ?>
+                    </a></li>
+                    <?php endforeach; ?>
+                <?php endforeach; ?>
+            </ul>
+        </nav>
+
         <?php if ($openCourses): ?>
-        <div class="flex flex-wrap items-center gap-2.5 mb-6 sm:mb-8">
+        <div id="cix-open" class="cix-anchor flex flex-wrap items-center gap-2.5 mb-6 sm:mb-8">
             <span class="cro-dot" style="width:12px;height:12px;border-radius:50%;background:#16a34a;display:inline-block;"></span>
             <h2 class="text-2xl sm:text-3xl font-black text-green-700 leading-tight">চলমান কোর্স</h2>
             <span style="background:#dcfce7;color:#15803d;font-weight:700;padding:5px 14px;border-radius:9999px;font-size:14px;">এখন <?= count($openCourses) ?> টিতে ভর্তি খোলা</span>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-            <?= implode('', array_map(fn($c) => render_item_card($c, 'course'), $openCourses)) ?>
+            <?= implode('', array_map(fn($c) => '<div id="course-' . (int) $c['id'] . '" class="cix-anchor">' . render_item_card($c, 'course') . '</div>', $openCourses)) ?>
         </div>
         <?php endif; ?>
 
@@ -51,16 +76,16 @@ require __DIR__ . '/includes/site-header.php';
         <?php endif; ?>
 
         <?php if ($closedCourses): ?>
-        <div class="mt-14 sm:mt-16 bg-violet-50 border border-violet-100 rounded-3xl p-4 sm:p-8">
+        <div id="cix-closed" class="cix-anchor mt-14 sm:mt-16 bg-violet-50 border border-violet-100 rounded-3xl p-4 sm:p-8">
             <div class="rounded-2xl p-5 sm:p-6 mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center gap-3 text-center sm:text-left shadow-lg" style="background:linear-gradient(135deg,#6366f1 0%,#7c3aed 100%);">
                 <span class="text-4xl sm:text-5xl">🔜</span>
                 <div>
                     <h2 class="text-2xl sm:text-3xl font-black text-white leading-tight">আসছে শীঘ্রই</h2>
-                    <p class="text-violet-100 text-sm sm:text-base mt-1">রেজিস্ট্রেশন এখন বন্ধ — <strong>"জানিয়ে রাখুন"</strong> চাপুন, নতুন ব্যাচ খুললেই আপনাকে যোগাযোগ করব</p>
+                    <p class="text-violet-100 text-sm sm:text-base mt-1">রেজিস্ট্রেশন এখন বন্ধ — <strong>"জানিয়ে রাখুন"</strong> চাপুন, নতুন ব্যাচ খুললেই আপনাকে যোগাযোগ করব। কী কী শেখানো হয় নিচে দেখুন; ফি ও সময় নতুন ব্যাচে জানানো হবে।</p>
                 </div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-                <?= implode('', array_map(fn($c) => render_item_card($c, 'course'), $closedCourses)) ?>
+                <?= implode('', array_map(fn($c) => '<div id="course-' . (int) $c['id'] . '" class="cix-anchor">' . render_item_card($c, 'course') . '</div>', $closedCourses)) ?>
             </div>
         </div>
         <?php endif; ?>

@@ -57,7 +57,7 @@ if (!$selectedCourse):
             <div class="absolute top-3 left-3 <?= $isOpen ? 'bg-green-600/90' : 'bg-gray-800/80' ?> text-white px-3 py-1 rounded-full font-semibold text-xs"><?= $isOpen ? '▶ এখন খোলা' : '🔜 আসছে শীঘ্রই' ?></div>
             <div class="p-4 sm:p-5">
                 <h3 class="font-bold text-gray-900 text-base sm:text-lg mb-1"><?= e($c['title']) ?></h3>
-                <p class="text-indigo-600 font-bold mb-3 text-sm sm:text-base"><?= e($c['price']) ?></p>
+                <p class="text-indigo-600 font-bold mb-3 text-sm sm:text-base"><?= course_hide_terms($c) ? '🗓️ ' . e(course_closed_terms_note()) : e($c['price']) ?></p>
                 <span class="block text-center py-2.5 rounded-xl font-semibold text-sm btn-primary text-white"><?= $isOpen ? 'আগ্রহ জানান →' : 'জানিয়ে রাখুন →' ?></span>
             </div>
         </a>

@@ -1065,6 +1065,47 @@ function course_reg_open(array $item): bool
     return !empty($item['registration_open']) && !course_deadline_passed($item);
 }
 
+// ── 🆕 সদ্য খোলা ব্যাচ (২০২৬-১১-১৯, ইউজারের চাওয়া) ─────────────────────────────
+// কোর্স পাতার "চলমান কোর্স"-এ নতুন ব্যাচ আগে আসে, আর শেষ COURSE_NEW_DAYS দিনে যোগ হওয়া
+// খোলা ব্যাচের কার্ডে "🆕 নতুন" ব্যাজ বসে। 🔴 ভিত্তি `course_batches.created_at` (ব্যাচটা
+// সাইটে কবে যোগ হয়েছে) — পুরনো ব্যাচ আবার খুললে "নতুন" হয় না (ইচ্ছাকৃত)।
+const COURSE_NEW_DAYS = 14;
+
+function course_batch_ts(array $item): int
+{
+    $t = strtotime((string) ($item['created_at'] ?? ''));
+    return $t ? (int) $t : 0;
+}
+
+function course_is_new(array $item): bool
+{
+    $t = course_batch_ts($item);
+    return $t > 0 && course_reg_open($item) && $t >= time() - COURSE_NEW_DAYS * 86400;
+}
+
+/** চলমান কোর্সের ক্রম: নতুন ব্যাচ আগে (created_at, তারপর id — দুটোই বড় আগে) */
+function course_sort_newest(array $rows): array
+{
+    usort($rows, function ($a, $b) {
+        return [course_batch_ts($b), (int) $b['id']] <=> [course_batch_ts($a), (int) $a['id']];
+    });
+    return $rows;
+}
+
+// ── 🔜 বন্ধ কোর্সে ফি ও সময় না দেখানো (২০২৬-১১-১৯, ইউজারের চাওয়া) ──────────────
+// রেজিস্ট্রেশন বন্ধ ব্যাচে আগের ব্যাচের ফি/ছাড়/মেয়াদ/সময়সূচি নতুন ব্যাচে মিলবে না, তাই
+// পাবলিক সাইটে (কার্ড · বিস্তারিত পাতা · JSON-LD) আর AI-র প্রসঙ্গে ওগুলো লুকানো হয়।
+// 🔴 ডেটা মোছা হয় না — আবার চালু করলে সব নিজে থেকেই ফেরে। গেট একটাই: course_reg_open()।
+function course_hide_terms(array $item, string $type = 'course'): bool
+{
+    return $type === 'course' && !course_reg_open($item);
+}
+
+function course_closed_terms_note(): string
+{
+    return 'ফি ও ক্লাসের সময় নতুন ব্যাচ খোলার সময় জানানো হবে';
+}
+
 // ── 🔑 বিশেষ (গোপন) রেজিস্ট্রেশন লিংক (২০২৬-০৯-৩০, ইউজারের চাওয়া) ────────────────
 //
 // সাইটে ভর্তি বন্ধ, অথচ দু-একজনের রেজিস্ট্রেশন বাকি (যেমন গ্রুপে আছেন কিন্তু ফর্ম পূরণ করেননি)।
@@ -1218,7 +1259,7 @@ function render_item_card(array $item, string $type): string
         return '<span class="inline-flex items-center gap-1.5 text-sm font-black px-3 py-1 rounded-full" style="background:' . $tint . ';color:' . $deep . ';border:1px solid ' . $border . ';"><i data-lucide="clock" class="w-4 h-4"></i>' . e($text) . '</span>';
     };
     if ($type === 'course') {
-        if (!empty($item['duration']))   $meta .= $durationChip($item['duration']);
+        if (!empty($item['duration']) && !course_hide_terms($item)) $meta .= $durationChip($item['duration']);
         if (!empty($item['instructor'])) $meta .= $metaChip('user', $item['instructor']);
     } elseif ($type === 'worksheet') {
         if (!empty($item['pages'])) $meta .= $metaChip('file-text', $item['pages']);
@@ -1250,8 +1291,15 @@ function render_item_card(array $item, string $type): string
     // চলমান কোর্সে সবুজ "ভর্তি চলছে" ব্যাজ — এখন কোর্সের নামের পাশে (ছবিতে না, ইউজারের চাওয়া)
     $openBadge = ($type === 'course' && course_reg_open($item))
         ? '<span class="inline-flex items-center gap-1 text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full whitespace-nowrap"><span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block;"></span> ভর্তি চলছে</span>' : '';
+    // 🆕 সদ্য যোগ হওয়া খোলা ব্যাচ (course_is_new())
+    if ($type === 'course' && course_is_new($item)) {
+        $openBadge .= '<span class="inline-flex items-center text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap" style="background:#fef3c7;color:#b45309;">🆕 নতুন</span>';
+    }
     // মূল ফি + (থাকলে) দ্বিতীয় ফি — গোছানো ফি বক্স
-    $feeBox = render_fee_box($item['price'] ?? '', $item['secondary_fee_label'] ?? '', $item['secondary_fee'] ?? '', $solid, $item['old_price'] ?? '');
+    // 🔜 বন্ধ কোর্সে আগের ব্যাচের ফি নয়, একটা ছোট নোট (course_hide_terms())
+    $feeBox = course_hide_terms($item, $type)
+        ? '<p class="text-center text-sm font-semibold text-gray-600 rounded-xl px-3 py-2.5 mb-3" style="background:' . $tint . ';border:1px dashed ' . $border . ';">🗓️ ' . e(course_closed_terms_note()) . '</p>'
+        : render_fee_box($item['price'] ?? '', $item['secondary_fee_label'] ?? '', $item['secondary_fee'] ?? '', $solid, $item['old_price'] ?? '');
 
     $ctaBtn = $registrationClosed
         ? '<a href="course-interest?course_id=' . $id . '" class="pricing-cta block w-full text-center py-3 px-4 rounded-xl font-bold text-white shadow-lg" style="background:' . $grad . '">জানিয়ে রাখুন</a>'
@@ -2894,13 +2942,15 @@ function jsonld_item(array $item, string $type, string $url): string
             'provider'    => ['@type' => 'EducationalOrganization', 'name' => $org],
         ];
         // 🔴 গুগল Course-এ `hasCourseInstance` চায় (নাহলে ওয়ার্নিং); আমাদের ক্লাস অনলাইন/ব্যাচভিত্তিক
+        $hideTerms = isset($item['registration_open']) && course_hide_terms($item);
         $data['hasCourseInstance'] = jsonld_clean([
             '@type'              => 'CourseInstance',
             'courseMode'         => 'online',
-            'courseWorkload'     => trim((string) ($item['duration'] ?? '')),
+            'courseWorkload'     => $hideTerms ? '' : trim((string) ($item['duration'] ?? '')),
             'name'               => trim((string) ($item['batch_name'] ?? '')),
         ]);
-        if ($price > 0) {
+        // 🔜 বন্ধ ব্যাচে আগের দাম গুগলকেও বলা হয় না (নতুন ব্যাচে বদলাতে পারে)
+        if ($price > 0 && !$hideTerms) {
             $data['offers'] = [
                 '@type'         => 'Offer',
                 'price'         => (string) $price,
