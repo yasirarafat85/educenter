@@ -30,33 +30,35 @@ require __DIR__ . '/includes/site-header.php';
 
         <?php // 📚 সারাংশ + সূচি (২০২৬-১১-১৯): কত কোর্স, কোনগুলো খোলা, কোনগুলোয় আগ্রহ জানানো যায় —
               // এক নজরে। নামে চাপলে নিচের কার্ডে নামে (#course-<id>)। স্টাইল .cix-* (style.css)। ?>
+        <?php // 📚 সারাংশ + সূচি (২০২৬-১১-১৯): কত কোর্স, কোনগুলো খোলা, কোনগুলোয় আগ্রহ জানানো যায়।
+              // 🔴 ব্যাচের নাম দেখানো হয় না, আর এক কোর্সের একাধিক ব্যাচ একটাই চিপ (cix_unique())।
+              // খোলা ব্যাচ আছে এমন কোর্স "আগ্রহ জানান"-এ আবার আসে না। স্টাইল .cix-* (style.css)। ?>
+        <?php
+        $cixOpen = cix_unique($openCourses);
+        $cixSoon = array_diff_key(cix_unique($closedCourses), $cixOpen);
+        ?>
         <nav class="cix" aria-label="সব কোর্সের তালিকা">
             <div class="cix-head">
-                <span class="cix-total">📚 মোট <b><?= count($courses) ?>টি কোর্স</b></span>
-                <?php if ($openCourses): ?><a href="#cix-open" class="cix-pill cix-pill-open">✅ <?= count($openCourses) ?>টিতে ভর্তি চলছে</a><?php endif; ?>
-                <?php if ($closedCourses): ?><a href="#cix-closed" class="cix-pill cix-pill-soon">🔜 <?= count($closedCourses) ?>টি আসছে — আগ্রহ জানানো যাবে</a><?php endif; ?>
+                <span class="cix-total">📚 মোট <b><?= count($cixOpen) + count($cixSoon) ?>টি কোর্স</b></span>
             </div>
-            <ul class="cix-list">
-                <?php foreach ([[$openCourses, true], [$closedCourses, false]] as [$cixRows, $cixOpen]): ?>
-                    <?php foreach ($cixRows as $cixC): ?>
-                    <li><a href="#course-<?= (int) $cixC['id'] ?>" class="cix-item">
-                        <span class="cix-name"><?= e($cixC['title']) ?><?php if (trim((string) ($cixC['batch_name'] ?? '')) !== ''): ?> <small><?= e($cixC['batch_name']) ?></small><?php endif; ?></span>
-                        <?php if ($cixOpen): ?>
-                            <span class="cix-st cix-st-open"><?= course_is_new($cixC) ? '🆕 ' : '' ?>ভর্তি চলছে</span>
-                        <?php else: ?>
-                            <span class="cix-st cix-st-soon">আগ্রহ জানান</span>
-                        <?php endif; ?>
-                    </a></li>
-                    <?php endforeach; ?>
-                <?php endforeach; ?>
-            </ul>
+            <?php foreach ([[$cixOpen, '✅ ভর্তি চলছে', 'cix-pill-open', 'cix-open'], [$cixSoon, '🔜 আসছে — আগ্রহ জানান', 'cix-pill-soon', 'cix-closed']] as [$cixList, $cixLabel, $cixCls, $cixSec]): ?>
+                <?php if (!$cixList) continue; ?>
+                <div class="cix-group">
+                    <a href="#<?= $cixSec ?>" class="cix-pill <?= $cixCls ?>"><?= $cixLabel ?> (<?= count($cixList) ?>)</a>
+                    <div class="cix-chips">
+                        <?php foreach ($cixList as $cixC): ?>
+                            <a href="#course-<?= (int) $cixC['id'] ?>" class="cix-chip <?= $cixCls ?>"><?= course_is_new($cixC) ? '🆕 ' : '' ?><?= e($cixC['title']) ?></a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
         </nav>
 
         <?php if ($openCourses): ?>
         <div id="cix-open" class="cix-anchor flex flex-wrap items-center gap-2.5 mb-6 sm:mb-8">
             <span class="cro-dot" style="width:12px;height:12px;border-radius:50%;background:#16a34a;display:inline-block;"></span>
             <h2 class="text-2xl sm:text-3xl font-black text-green-700 leading-tight">চলমান কোর্স</h2>
-            <span style="background:#dcfce7;color:#15803d;font-weight:700;padding:5px 14px;border-radius:9999px;font-size:14px;">এখন <?= count($openCourses) ?> টিতে ভর্তি খোলা</span>
+            <span style="background:#dcfce7;color:#15803d;font-weight:700;padding:5px 14px;border-radius:9999px;font-size:14px;">এখন <?= count(cix_unique($openCourses)) ?> টিতে ভর্তি খোলা</span>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             <?= implode('', array_map(fn($c) => '<div id="course-' . (int) $c['id'] . '" class="cix-anchor">' . render_item_card($c, 'course') . '</div>', $openCourses)) ?>

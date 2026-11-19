@@ -39,17 +39,15 @@ $deadlineCourses = array_slice($deadlineCourses, 0, 3);   // পট্টিত�
 // হোমপেজের ৩টা কার্ড — 🔴 ঘড়ি-চলা ব্যাচ সবার আগে (সময় যত কাছে তত আগে), তারপর আগের
 // নিয়মেই খোলা ভর্তি আগে, তারপর অ্যাডমিনের নিজের ক্রম।
 $featuredCourses = $allBatches;
-usort($featuredCourses, function ($a, $b) {
-    $ad = course_reg_open($a) ? course_deadline_ts($a['registration_deadline'] ?? '') : null;
-    $bd = course_reg_open($b) ? course_deadline_ts($b['registration_deadline'] ?? '') : null;
-    if ($ad !== null && $bd !== null) { return $ad <=> $bd; }
-    if ($ad !== null) { return -1; }
-    if ($bd !== null) { return 1; }
-    $c = (int) !empty($b['registration_open']) <=> (int) !empty($a['registration_open']);
-    if ($c !== 0) { return $c; }
-    $c = (int) $a['sort_order'] <=> (int) $b['sort_order'];
-    return $c !== 0 ? $c : ((int) $a['id'] <=> (int) $b['id']);
-});
+// 🔴 ২০২৬-১১-১৯: কোর্স পাতার একই নিয়ম — ঘড়ি-চলা ব্যাচ আগে (সময় যত কাছে তত আগে), তারপর বাকি
+// খোলা ব্যাচ নতুন আগে (course_sort_newest()), তারপর বন্ধ। আগে কাঁচা registration_open আর
+// কোর্স-ভিত্তিক sort_order দেখত, তাই ডেডলাইন পেরোনো ব্যাচও উপরে থাকত আর ক্রম এলোমেলো লাগত।
+$fcOpen  = course_sort_newest(array_values(array_filter($featuredCourses, fn($c) => course_reg_open($c))));
+$fcShut  = course_sort_newest(array_values(array_filter($featuredCourses, fn($c) => !course_reg_open($c))));
+$fcClock = array_values(array_filter($fcOpen, fn($c) => course_deadline_ts($c['registration_deadline'] ?? '') !== null));
+usort($fcClock, fn($a, $b) => course_deadline_ts($a['registration_deadline'] ?? '') <=> course_deadline_ts($b['registration_deadline'] ?? ''));
+$fcRest  = array_values(array_filter($fcOpen, fn($c) => course_deadline_ts($c['registration_deadline'] ?? '') === null));
+$featuredCourses = array_merge($fcClock, $fcRest, $fcShut);
 $featuredCourses = array_slice($featuredCourses, 0, 3);
 // 🔴 ওয়ার্কশিট ও প্রোডাক্টও হোমপেজে (২০২৬-০৯-২৭, ইউজার: "প্রোডাক্ট পেইজে মেনু থেকে খুঁজতে
 //    হয়, যেটা অনেকেই করবে না")। নিচের স্টিকি বারে ঠিক ৫টা স্লট বলে ওখানে জায়গা নেই
@@ -102,9 +100,7 @@ require __DIR__ . '/includes/site-header.php';
             <a href="course-register?course_id=<?= (int) $dc['id'] ?>" class="cd-row">
                 <span class="cd-row-main">
                     <span class="cd-row-title"><?= e($dc['title']) ?></span>
-                    <?php if (!empty($dc['batch_name'])): ?>
-                        <span class="cd-row-batch"><?= e($dc['batch_name']) ?></span>
-                    <?php endif; ?>
+                    <?php // 🔴 ব্যাচের নাম পাবলিক সাইটে দেখানো হয় না (২০২৬-১১-১৯) ?>
                 </span>
                 <?= render_countdown_html($dc, 'course') ?>
                 <span class="cd-row-go">ভর্তি হন →</span>
