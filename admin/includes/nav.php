@@ -155,14 +155,12 @@ function admin_nav_groups(): array
     $courier = [];
     if (admin_can('courier')) {
         $courier[] = ['key' => 'courier',              'href' => 'courier.php',              'file' => 'courier.php',              'icon' => 'truck',          'label' => 'কুরিয়ার'];
-        $courier[] = ['key' => 'courier-tracking',     'href' => 'courier-tracking.php',     'file' => 'courier-tracking.php',     'icon' => 'calendar-check', 'label' => 'কুরিয়ার ট্র্যাকিং'];
         $courier[] = ['key' => 'courier-shipment-logs','href' => 'courier-shipment-logs.php','file' => 'courier-shipment-logs.php','icon' => 'history',        'label' => 'কুরিয়ার শিপমেন্ট লগ'];
     }
 
     // 🔎 মাঝেমধ্যে — দরকার পড়ে, কিন্তু রোজ নয়
     $sometimes = [];
     if (admin_can('orders')) {
-        $sometimes[] = ['key' => 'course-data', 'href' => 'course-data.php', 'file' => 'course-data.php', 'icon' => 'table', 'label' => 'ডেটা টেবিল'];
     }
     // 👥 গ্রুপ মিলিয়ে দেখা — parcel বা orders, যেকোনো একটা থাকলেই (permissions.php-এর ম্যাপের সাথে মিল)
     if (admin_can('parcel') || admin_can('orders')) {
@@ -247,9 +245,9 @@ function admin_nav_groups(): array
         ['key' => 'guide', 'href' => 'guide.php', 'file' => 'guide.php', 'icon' => 'help-circle',      'label' => 'গাইড / সাহায্য'],
     ]];
     $groups[] = ['hub' => 'orders',   'icon' => 'clipboard-list', 'section' => '📋 অর্ডার',
-        'items' => $pick(['registrations', 'month-work', 'tasks', 'course-interests', 'course-data'])];
+        'items' => $pick(['registrations', 'month-work', 'tasks', 'course-interests'])];
     $groups[] = ['hub' => 'parcel',   'icon' => 'package-check',  'section' => '📦 পার্সেল ও কুরিয়ার',
-        'items' => $pick(['course-parcel', 'parcel-labels', 'courier', 'courier-tracking', 'courier-shipment-logs', 'group-match'])];
+        'items' => $pick(['course-parcel', 'parcel-labels', 'courier', 'courier-shipment-logs', 'group-match'])];
     $groups[] = ['hub' => 'money',    'icon' => 'pie-chart',      'section' => '💰 টাকা',
         'items' => $pick(['payment-inbox', 'income-fix', 'income', 'expenses', 'finance'])];
     $groups[] = ['hub' => 'parents',  'icon' => 'users',          'section' => '👪 অভিভাবক',
@@ -298,6 +296,9 @@ function admin_nav_alias(string $file): string
         'courier-note-assign.php' => 'course-parcel',
         'send-to-courier.php'     => 'courier',
         'account-preview.php'     => 'users',
+        // 🔁 ধাপ ২ (২০২৬-১১-২১): জোড়া লাগানো পাতা — ফাইল শুধু রিডাইরেক্ট করে
+        'course-data.php'         => 'registrations',
+        'courier-tracking.php'    => 'course-parcel',
     ];
     return $map[$file] ?? '';
 }

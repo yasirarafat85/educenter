@@ -85,7 +85,7 @@ function admin_page_sections(): array
         'course-tracking.php'       => ['parcel'],
         'courier-prepare.php'       => ['parcel'],
         'courier.php'               => ['courier'],
-        'courier-tracking.php'      => ['courier'],
+        'courier-tracking.php'      => ['courier', 'parcel'], // এখন শুধু course-parcel-এ রিডাইরেক্ট
         'courier-shipment-logs.php' => ['courier'],
         'bulk-courier-action.php'   => ['courier'],
         'send-to-courier.php'       => ['courier'],

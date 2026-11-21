@@ -957,7 +957,12 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
     $regZone = (string) ($r['delivery_zone'] ?? '');
     $needsRemoval = !$active && ($fbOn || $msgOn);
     $sentCount = 0;
-    for ($i = 1; $i <= $months; $i++) { if (($byRegPeriod[$rid][cp_month_label($i)]['send_status'] ?? '') === 'sent') { $sentCount++; } }
+    $rowAmt = 0.0;   // 💵 এই শিক্ষার্থীর সব মাসের কালেকশন (আগের "কুরিয়ার ট্র্যাকিং"-এর "মোট" কলাম)
+    for ($i = 1; $i <= $months; $i++) {
+        $cb = $byRegPeriod[$rid][cp_month_label($i)] ?? null;
+        if (($cb['send_status'] ?? '') === 'sent') { $sentCount++; }
+        if ($cb && ($cb['send_status'] ?? '') !== 'declined') { $rowAmt += (float) ($cb['amount_to_collect'] ?? 0); }
+    }
     ?>
     <tr class="cp-row border-b last:border-0 hover:bg-gray-50 <?= $active ? '' : 'opacity-70' ?>"
         data-s="<?= e(cp_haystack($r)) ?>" data-d="<?= e(cp_haystack_digits($r)) ?>">
@@ -998,9 +1003,13 @@ $render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId
         <?php for ($i = 1; $i <= $months; $i++): [$ch, $cls] = cp_cell($byRegPeriod[$rid][cp_month_label($i)] ?? null); ?>
             <td class="py-2.5 px-1.5 text-center <?= $i === $selMonth ? 'bg-indigo-50' : '' ?>">
                 <span class="inline-flex w-6 h-6 items-center justify-center rounded-full text-[11px] font-bold <?= $cls ?>" title="মাস <?= $i ?>"><?= $ch ?></span>
+                <?php $cpCb = $byRegPeriod[$rid][cp_month_label($i)] ?? null;
+                      if ($cpCb && ($cpCb['send_status'] ?? '') !== 'declined' && (float) ($cpCb['amount_to_collect'] ?? 0) > 0): ?>
+                    <div class="text-[10px] text-gray-500 font-semibold whitespace-nowrap leading-tight mt-0.5">৳<?= e(number_format((float) $cpCb['amount_to_collect'])) ?></div>
+                <?php endif; ?>
             </td>
         <?php endfor; ?>
-        <?php if ($months): ?><td class="py-2.5 px-2 text-center text-xs font-semibold text-gray-500 whitespace-nowrap"><?= $sentCount ?>/<?= $months ?></td><?php endif; ?>
+        <?php if ($months): ?><td class="py-2.5 px-2 text-center text-xs font-semibold text-gray-500 whitespace-nowrap"><?= $sentCount ?>/<?= $months ?><?php if ($rowAmt > 0): ?><div class="text-[11px] font-bold text-gray-800">৳<?= e(number_format($rowAmt)) ?></div><?php endif; ?></td><?php endif; ?>
     </tr>
     <?php
 };
@@ -1055,6 +1064,24 @@ function cpPermZone(sel) {
         <?php if (!$activeRegs && $inactiveRegs): ?><tr><td colspan="<?= 7 + $months ?>" class="py-6 px-4 text-center text-gray-400">সব শিক্ষার্থী নিষ্ক্রিয় — নিচে থেকে সক্রিয় করুন।</td></tr><?php endif; ?>
         <?php foreach ($activeRegs as $r) { $render_row($r); } ?>
         </tbody>
+        <?php // 💵 মাসের মোট কালেকশন — আগের "কুরিয়ার ট্র্যাকিং" পাতার নিচের সারি (২০২৬-১১-২১, ধাপ ২)।
+              // 🔴 সব confirmed শিক্ষার্থী (নিষ্ক্রিয়সহ) ধরে, "না এই মাসে" বাদ — ঐ পাতার হুবহু নিয়ম।
+        if ($months):
+            $cpMonthAmt = array_fill(1, $months, 0.0); $cpGrand = 0.0;
+            foreach ($regs as $cpR) { for ($i = 1; $i <= $months; $i++) {
+                $cpCb = $byRegPeriod[(int) $cpR['id']][cp_month_label($i)] ?? null;
+                if ($cpCb && ($cpCb['send_status'] ?? '') !== 'declined') { $cpMonthAmt[$i] += (float) ($cpCb['amount_to_collect'] ?? 0); }
+            } }
+            $cpGrand = array_sum($cpMonthAmt);
+            if ($cpGrand > 0): ?>
+        <tfoot><tr class="border-t bg-gray-50 font-bold text-gray-800">
+            <td colspan="6" class="py-3 px-3 text-sm">মাসের মোট কালেকশন</td>
+            <?php for ($i = 1; $i <= $months; $i++): ?>
+                <td data-label="মাস <?= $i ?>" class="py-3 px-1.5 text-center text-[11px] whitespace-nowrap <?= $i === $selMonth ? 'bg-indigo-50' : '' ?>"><?= $cpMonthAmt[$i] > 0 ? '৳' . e(number_format($cpMonthAmt[$i])) : '—' ?></td>
+            <?php endfor; ?>
+            <td data-label="সব মাস মিলিয়ে" class="py-3 px-2 text-center text-xs whitespace-nowrap">৳<?= e(number_format($cpGrand)) ?></td>
+        </tr></tfoot>
+        <?php endif; endif; ?>
     </table>
 </div>
 <?php if ($months): ?>

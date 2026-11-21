@@ -941,6 +941,12 @@ $dateTo = trim($_GET['date_to'] ?? '');
 //    ফিল্টারটা চুপচাপ বাদ যায়, তালিকা আগের মতোই চলে)
 $hasDueCol = db_has_column($db, 'registrations', 'due_amount');
 $filterDue = $hasDueCol && ($_GET['due'] ?? '') === '1';
+// 🔁 ডুপ্লিকেট রেজিস্ট্রেশন (২০২৬-১১-২১, আগের "ডেটা টেবিল" পাতা থেকে এখানে আনা) — একই
+//    কোর্স + ব্যাচ + শিশুর নাম + মায়ের মোবাইল। চালু থাকলে লেআউট সবসময় কোর্সের।
+$filterDupes = ($_GET['dupes'] ?? '') === '1';
+if ($filterDupes) { $filterType = 'course'; }
+$GLOBALS['reg_dup_role'] = [];
+$dupGroupCount = 0;
 $page = max(1, (int) ($_GET['page'] ?? 1));
 $perPage = 25;
 
@@ -985,6 +991,34 @@ if ($action === 'list') {
     }
     if ($filterDue) {
         $where[] = REG_DUE_WHERE;   // প্লেসহোল্ডার লাগে না — পুরো শর্তটা কোডে লেখা
+    }
+    // 🔁 ডুপ্লিকেট শনাক্তকরণ — 🔴 কোর্স+ব্যাচ ফিল্টারে স্কোপ করা **কিন্তু সার্চ/স্ট্যাটাস বাদে**
+    //    পুরো দল ধরে (নাহলে আংশিক দলে "কোনটা রাখা হবে" ভুল হতো)। নিয়ম `reg_dup_key()` /
+    //    `reg_complete_score()` — ডেটা টেবিল পাতার হুবহু (keeper = সবচেয়ে বেশি ঘর-ভরা,
+    //    সমান হলে পুরনোটি)। শুধু কোর্স লেআউটে হিসাব হয় (খরচ বাঁচাতে)।
+    if ($filterType === 'course') {
+        $dWhere = ["type = 'course'"]; $dParams = [];
+        if ($filterItem !== '')  { $dWhere[] = 'item_title = :item'; $dParams['item'] = $filterItem; }
+        if ($filterBatch !== '') { $dWhere[] = 'batch = :batch';     $dParams['batch'] = $filterBatch; }
+        try {
+            $dScan = $db->prepare('SELECT * FROM registrations WHERE ' . implode(' AND ', $dWhere));
+            $dScan->execute($dParams);
+            $dGroups = [];
+            foreach ($dScan->fetchAll() as $dr) { $dGroups[reg_dup_key($dr)][] = $dr; }
+            foreach ($dGroups as $dMembers) {
+                if (count($dMembers) < 2) { continue; }
+                $dupGroupCount++;
+                usort($dMembers, function ($a, $b) {
+                    $sa = reg_complete_score($a); $sb = reg_complete_score($b);
+                    return $sa !== $sb ? $sb - $sa : (int) $a['id'] - (int) $b['id'];
+                });
+                foreach ($dMembers as $di => $dm) { $GLOBALS['reg_dup_role'][(int) $dm['id']] = $di === 0 ? 'keep' : 'extra'; }
+            }
+        } catch (Throwable $e) { /* স্ক্যান ব্যর্থ হলে ডুপ্লিকেট ভিউ খালি — তালিকা আগের মতোই */ }
+        if ($filterDupes) {
+            $dIds = array_map('intval', array_keys($GLOBALS['reg_dup_role']));
+            $where[] = $dIds ? 'id IN (' . implode(',', $dIds) . ')' : '1 = 0';   // id কোডে int-কাস্ট করা
+        }
     }
     if ($dateFrom !== '') {
         $where[] = 'DATE(created_at) >= :date_from';
@@ -1086,9 +1120,11 @@ if ($action === 'list') {
     //    ওটাই দরকার। অন্য সময় আগের মতোই নতুন অর্ডার আগে (`idx_reg_status_created`
     //    তখন কাজে লাগে; বাকির শর্ত বসলে ঐ ইনডেক্স এমনিতেই ব্যবহার হয় না, তাই
     //    এই ক্রম বদলানোয় বাড়তি খরচ নেই)।
-    $orderBy = $filterDue
-        ? ' ORDER BY COALESCE(due_amount, 0) DESC, created_at DESC'
-        : ' ORDER BY created_at DESC';
+    $orderBy = $filterDupes
+        ? ' ORDER BY item_title, batch, customer_name, phone, created_at, id'   // দলের সদস্যরা পাশাপাশি
+        : ($filterDue
+            ? ' ORDER BY COALESCE(due_amount, 0) DESC, created_at DESC'
+            : ' ORDER BY created_at DESC');
     $sql = 'SELECT * FROM registrations' . $whereSql . $orderBy . ' LIMIT ' . $perPage . ' OFFSET ' . $offset;
     $stmt = $db->prepare($sql);
     $stmt->execute($params);
@@ -1147,6 +1183,7 @@ $activeFilters = array_filter([
     'item' => $filterItem,
     'batch' => $filterBatch,
     'due' => $filterDue ? '1' : '',
+    'dupes' => $filterDupes ? '1' : '',
     'date_from' => $dateFrom,
     'date_to' => $dateTo,
 ], fn($v) => $v !== '' && $v !== null);
@@ -1267,6 +1304,22 @@ function reg_person_line(string $label, string $value, string $href = '', bool $
 }
 
 // ── 📦 আইটেম-সেল (আইটেমের নাম + নিচে ছোট করে ব্যাচ/পরিমাণ) — আলাদা "ব্যাচ"/"পরিমাণ" কলাম আর লাগে না
+// 🔁 ডুপ্লিকেট-চাবি ও "কতটা ভরা" — আগে admin/course-data.php-এ (cd_dup_key/cd_complete_score) ছিল
+function reg_dup_key(array $r): string
+{
+    return ($r['item_id'] ?? '') . '|' . ($r['batch'] ?? '') . '|' . ($r['customer_name'] ?? '') . '|' . ($r['phone'] ?? '');
+}
+
+function reg_complete_score(array $r): int
+{
+    $n = 0;
+    foreach (['customer_name', 'phone', 'facebook_id', 'father_mobile', 'receiver_name',
+        'receiver_phone', 'date_of_birth', 'address', 'email', 'notes', 'admin_note'] as $c) {
+        if (trim((string) ($r[$c] ?? '')) !== '') { $n++; }
+    }
+    return $n;
+}
+
 function reg_item_cell(array $row): void
 {
     global $typeLabels;                       // reg_url()-এর `global $activeFilters`-এর মতোই
@@ -1294,6 +1347,12 @@ function reg_item_cell(array $row): void
     $grpN = $grp !== '' ? (int) ($GLOBALS['reg_order_group_counts'][$grp] ?? 0) : 0;
     if ($grpN > 1): ?>
         <div class="mt-0.5"><span class="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded-full" title="একই অর্ডারে <?= $grpN ?> টি আইটেম">🛒 একই অর্ডার (<?= $grpN ?>)</span></div>
+    <?php endif;
+    $dupR = $GLOBALS['reg_dup_role'][(int) ($row['id'] ?? 0)] ?? '';
+    if ($dupR === 'keep'): ?>
+        <div class="mt-0.5"><span class="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full" title="একই কোর্স+ব্যাচ+নাম+মোবাইলে একাধিক রেজিস্ট্রেশন — এটায় সবচেয়ে বেশি তথ্য ভরা">🔁 ✅ রাখা হবে</span></div>
+    <?php elseif ($dupR === 'extra'): ?>
+        <div class="mt-0.5"><span class="inline-flex items-center gap-1 text-[10px] font-semibold text-red-700 bg-red-100 px-1.5 py-0.5 rounded-full" title="ডুপ্লিকেট — দরকার না হলে মুছে ফেলতে পারেন">🔁 🗑️ অতিরিক্ত</span></div>
     <?php endif;
 }
 
@@ -1832,15 +1891,16 @@ require __DIR__ . '/includes/layout-top.php';
     </div>
 
     <div class="reg-pills flex flex-wrap gap-2 mb-4">
-        <a href="<?= e(reg_url(['type' => null, 'item' => null, 'batch' => null])) ?>" class="px-4 py-2 rounded-xl text-sm font-semibold <?= $filterType === '' ? 'bg-teal-600 text-white' : 'bg-white text-gray-600' ?>">সব টাইপ</a>
+        <a href="<?= e(reg_url(['type' => null, 'item' => null, 'batch' => null, 'dupes' => null])) ?>" class="px-4 py-2 rounded-xl text-sm font-semibold <?= $filterType === '' ? 'bg-teal-600 text-white' : 'bg-white text-gray-600' ?>">সব টাইপ</a>
         <?php foreach ($typeLabels as $key => $label): ?>
-            <a href="<?= e(reg_url(['type' => $key, 'item' => null, 'batch' => null])) ?>" class="px-4 py-2 rounded-xl text-sm font-semibold <?= $filterType === $key ? 'bg-teal-600 text-white' : 'bg-white text-gray-600' ?>"><?= e($label) ?></a>
+            <a href="<?= e(reg_url(['type' => $key, 'item' => null, 'batch' => null, 'dupes' => null])) ?>" class="px-4 py-2 rounded-xl text-sm font-semibold <?= $filterType === $key ? 'bg-teal-600 text-white' : 'bg-white text-gray-600' ?>"><?= e($label) ?></a>
         <?php endforeach; ?>
     </div>
 
     <form method="get" action="registrations.php" id="regFilterForm" class="mb-3 bg-white rounded-2xl shadow p-4">
         <?php if ($filterStatus): ?><input type="hidden" name="status" value="<?= e($filterStatus) ?>"><?php endif; ?>
         <?php if ($filterType): ?><input type="hidden" name="type" value="<?= e($filterType) ?>"><?php endif; ?>
+        <?php if ($filterDupes): ?><input type="hidden" name="dupes" value="1"><?php endif; ?>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
             <div class="lg:col-span-2">
                 <label class="block text-xs font-semibold text-gray-500 mb-1">খোঁজা — সব তথ্য দিয়ে</label>
@@ -1960,6 +2020,23 @@ require __DIR__ . '/includes/layout-top.php';
             <div class="text-xl font-bold text-green-700">৳<?= number_format((float) ($listSummary['income_total'] ?? 0), 0) ?></div>
         </div>
     </div>
+
+    <?php // 🔁 ডুপ্লিকেট — শুধু কোর্স লেআউটে (আগের "ডেটা টেবিল" পাতার সুবিধা, ২০২৬-১১-২১) ?>
+    <?php if ($filterType === 'course' && ($dupGroupCount > 0 || $filterDupes)): ?>
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+            <a href="<?= e(reg_url(['dupes' => $filterDupes ? null : '1', 'page' => null])) ?>"
+               class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold <?= $filterDupes ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-800' ?>">
+                🔁 <?= $filterDupes ? 'ডুপ্লিকেট দেখানো হচ্ছে — সবাইকে দেখুন' : 'ডুপ্লিকেট দেখুন (' . (int) $dupGroupCount . ' দল)' ?>
+            </a>
+        </div>
+        <?php if ($filterDupes): ?>
+            <div class="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
+                একই কোর্স + ব্যাচ + শিশুর নাম + মায়ের মোবাইলে একাধিক রেজিস্ট্রেশন। প্রতিটি দলে সবচেয়ে বেশি তথ্য-ভরা সারিটি
+                <span class="font-semibold text-green-700">✅ রাখা হবে</span>, বাকিগুলো <span class="font-semibold text-red-700">🗑️ অতিরিক্ত</span> —
+                দরকার না হলে সারির "বিস্তারিত" থেকে মুছে ফেলুন (মোছা জিনিস আর্কাইভে থাকে)। নিজে থেকে কিছু মোছা হয় না।
+            </div>
+        <?php endif; ?>
+    <?php endif; ?>
 
     <p class="text-sm text-gray-500 mb-4">
         <?php if ($filterDue): ?><span class="font-semibold text-red-600">💰 শুধু যাঁদের বাকি আছে —</span> <?php endif; ?>
