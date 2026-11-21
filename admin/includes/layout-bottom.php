@@ -80,7 +80,8 @@
             });
             nav.querySelectorAll('.nav-hubwrap').forEach(function (w) {
                 var hub = w.querySelector('.nav-hub');
-                var hubMatch = !!hub && !!q && hub.textContent.toLowerCase().indexOf(q) !== -1;
+                var hubLink = hub && hub.querySelector('.nav-link');   // শুধু মেনুর নাম (তীরের সংখ্যা/লেখা নয়)
+                var hubMatch = !!hubLink && !!q && hubLink.textContent.toLowerCase().indexOf(q) !== -1;
                 if (hubMatch) {
                     w.querySelectorAll('.nav-row').forEach(function (r) { r.style.display = ''; });
                     anyVisible = true;
@@ -668,6 +669,21 @@
     center();
     // আইকন/ফন্ট বসার পর ট্যাবের মাপ বদলায় — তখন আরেকবার
     window.addEventListener('load', center);
+})();
+</script>
+<script>
+// ▸ সাইডবারের মেনু-তীর: শুধু ঐ মেনুর পাতাগুলো খোলা/বন্ধ করে (পাতা বদলায় না)।
+(function () {
+    document.querySelectorAll('[data-hub-toggle]').forEach(function (b) {
+        b.addEventListener('click', function (e) {
+            e.preventDefault();
+            var w = b.closest('.nav-hubwrap');
+            if (!w) { return; }
+            var on = !w.classList.contains('open');
+            w.classList.toggle('open', on);
+            b.setAttribute('aria-expanded', on ? 'true' : 'false');
+        });
+    });
 })();
 </script>
 </body>

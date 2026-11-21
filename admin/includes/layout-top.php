@@ -119,12 +119,21 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     #admin-nav.nav-arrange #nav-arrange-btn { background: rgb(var(--c-primary) / .14); color: rgb(var(--c-primary)); }
     .nav-section { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: rgb(var(--c-text-muted)); padding: 16px 16px 4px; opacity: .75; }
     /* ── 🗂️ ১০ মেনু + পাতার উপরের ট্যাব (২০২৬-১১-২১) — সাধারণ CSS, Tailwind রিবিল্ড লাগে না।
-         ভেতরের পাতা (.nav-sub) শুধু "সাজান"/সার্চ চলাকালে দেখা যায়; পাতার নিজের ট্যাবের
+         ভেতরের পাতা (.nav-sub) ▸ তীরে, "সাজান"/সার্চ চলাকালে, আর চলতি মেনুতে দেখা যায়; পাতার নিজের ট্যাবের
          (সেটিংস/মাস/মেসেজ) থেকে আলাদা চেনাতে মেনুর ট্যাব সরু, উপরে, নিচে দাগসহ। */
-    .nav-hub-n { flex: 0 0 auto; font-size: 11px; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: 999px; background: rgb(var(--c-primary) / .1); color: rgb(var(--c-primary)); }
-    .nav-link.active .nav-hub-n { background: rgb(255 255 255 / .25); color: #fff; }
+    /* ▸ তীর চাপলে মেনুর পাতাগুলো নিচে খোলে; যে মেনুতে আছেন সেটা সার্ভার থেকেই `.open` (২০২৬-১১-২১)।
+       মেনুর সারি তখন হালকা রঙ (`.hub-on`), আর চলতি পাতাটাই পূর্ণ রঙে (`.active`) — দুটো গাঢ় সারি নয়। */
+    .nav-hub > .nav-link { padding-right: 6px; }
+    .nav-link.hub-on { background: rgb(var(--c-primary) / .1); color: rgb(var(--c-primary)); font-weight: 700; }
+    .nav-link.hub-on svg { color: rgb(var(--c-primary)); }
+    .nav-hub-tg { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; padding: 6px 8px; border-radius: 9px; color: rgb(var(--c-text-muted)); }
+    .nav-hub-tg:hover { background: rgb(var(--c-primary) / .1); color: rgb(var(--c-primary)); }
+    .nav-hub-n { font-size: 11px; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: 999px; background: rgb(var(--c-primary) / .1); color: rgb(var(--c-primary)); }
+    .nav-hub-chev { display: inline-block; font-size: 12px; line-height: 1; transition: transform .2s; }
+    .nav-hubwrap.open .nav-hub-chev, #admin-nav.nav-arrange .nav-hub-chev, #admin-nav.nav-searching .nav-hub-chev { transform: rotate(90deg); }
+    @media (pointer: coarse) { .nav-hub-tg { min-height: 40px; min-width: 52px; justify-content: center; } }
     .nav-sub { display: none; margin: 2px 0 6px 14px; padding-left: 8px; border-left: 2px solid rgb(var(--c-border)); }
-    #admin-nav.nav-arrange .nav-sub, #admin-nav.nav-searching .nav-sub { display: block; }
+    .nav-hubwrap.open > .nav-sub, #admin-nav.nav-arrange .nav-sub, #admin-nav.nav-searching .nav-sub { display: block; }
     .nav-sub .nav-link { padding: 7px 10px; font-size: 13px; }
     .hub-tabs { position: relative; margin: -4px -4px 18px; border-bottom: 1px solid rgb(var(--c-border)); overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
     .hub-tabs::-webkit-scrollbar { display: none; }
@@ -636,14 +645,16 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
             if ($navPinned): ?><p class="nav-section">📂 মেনু</p><?php endif; ?>
             <?php foreach ($navGroups as $navGi => $navGroup):
                 $navHubOn = $navHere && $navHere[0] === $navGi; ?>
-                <div class="nav-hubwrap">
+                <div class="nav-hubwrap<?= $navHubOn ? ' open' : '' ?>">
                 <?php if (count($navGroup['items']) === 1): ?>
                     <?php $navRow($navGroup['items'][0]); ?>
                 <?php else: ?>
                     <div class="nav-row nav-hub">
-                        <a href="<?= e($navGroup['items'][0]['href']) ?>" class="nav-link <?= $navHubOn ? 'active' : '' ?>"><i data-lucide="<?= e($navGroup['icon'] ?? 'folder') ?>" class="w-4 h-4"></i> <span class="flex-1 min-w-0 truncate"><?= e(trim(preg_replace('/^\S+\s/u', '', $navGroup['section']))) ?></span><span class="nav-hub-n"><?= count($navGroup['items']) ?></span></a>
+                        <a href="<?= e($navGroup['items'][0]['href']) ?>" class="nav-link <?= $navHubOn ? 'hub-on' : '' ?>"><i data-lucide="<?= e($navGroup['icon'] ?? 'folder') ?>" class="w-4 h-4"></i> <span class="flex-1 min-w-0 truncate"><?= e(trim(preg_replace('/^\S+\s/u', '', $navGroup['section']))) ?></span></a>
+                        <?php // ▸ তীর = শুধু এই মেনুর পাতাগুলো সাইডবারে খোলা/বন্ধ (পাতা বদলায় না); নামে চাপলে আগের মতোই প্রথম পাতা ?>
+                        <button type="button" class="nav-hub-tg" data-hub-toggle aria-expanded="<?= $navHubOn ? 'true' : 'false' ?>" aria-controls="navsub-<?= (int) $navGi ?>" title="এই মেনুর পাতাগুলো দেখুন / লুকান"><span class="nav-hub-n"><?= count($navGroup['items']) ?></span><span class="nav-hub-chev" aria-hidden="true">▸</span><span class="sr-only"> — পাতাগুলো দেখুন</span></button>
                     </div>
-                    <div class="nav-sub">
+                    <div class="nav-sub" id="navsub-<?= (int) $navGi ?>">
                         <?php foreach ($navGroup['items'] as $navItem) {
                             $navPi = array_search($navItem['key'], array_column($navPinned, 'key'), true);
                             if ($navPi === false) { $navRow($navItem); }
