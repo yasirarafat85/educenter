@@ -118,6 +118,24 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
     .nav-pin.on > button { color: rgb(var(--c-primary)); }
     #admin-nav.nav-arrange #nav-arrange-btn { background: rgb(var(--c-primary) / .14); color: rgb(var(--c-primary)); }
     .nav-section { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: rgb(var(--c-text-muted)); padding: 16px 16px 4px; opacity: .75; }
+    /* ── 🗂️ ১০ মেনু + পাতার উপরের ট্যাব (২০২৬-১১-২১) — সাধারণ CSS, Tailwind রিবিল্ড লাগে না।
+         ভেতরের পাতা (.nav-sub) শুধু "সাজান"/সার্চ চলাকালে দেখা যায়; পাতার নিজের ট্যাবের
+         (সেটিংস/মাস/মেসেজ) থেকে আলাদা চেনাতে মেনুর ট্যাব সরু, উপরে, নিচে দাগসহ। */
+    .nav-hub-n { flex: 0 0 auto; font-size: 11px; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: 999px; background: rgb(var(--c-primary) / .1); color: rgb(var(--c-primary)); }
+    .nav-link.active .nav-hub-n { background: rgb(255 255 255 / .25); color: #fff; }
+    .nav-sub { display: none; margin: 2px 0 6px 14px; padding-left: 8px; border-left: 2px solid rgb(var(--c-border)); }
+    #admin-nav.nav-arrange .nav-sub, #admin-nav.nav-searching .nav-sub { display: block; }
+    .nav-sub .nav-link { padding: 7px 10px; font-size: 13px; }
+    .hub-tabs { position: relative; margin: -4px -4px 18px; border-bottom: 1px solid rgb(var(--c-border)); overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .hub-tabs::-webkit-scrollbar { display: none; }
+    .hub-tabs-in { display: flex; gap: 4px; padding: 0 4px; width: max-content; min-width: 100%; }
+    .hub-tab { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 9px 12px 10px; font-size: 13.5px; font-weight: 600; color: rgb(var(--c-text-muted)); border-bottom: 3px solid transparent; margin-bottom: -1px; border-radius: 8px 8px 0 0; }
+    .hub-tab > i, .hub-tab > svg { display: inline-block; width: 16px; height: 16px; flex: 0 0 16px; }
+    .hub-tab:hover { color: rgb(var(--c-text)); background: rgb(var(--c-primary) / .06); }
+    .hub-tab.on { color: rgb(var(--c-primary)); border-bottom-color: rgb(var(--c-primary)); background: rgb(var(--c-primary) / .07); }
+    @media (pointer: coarse) { .hub-tab { min-height: 44px; } }
+    /* ৭৬৮–১০২৩px-এ সাইডবার স্থায়ী থাকে, হেডারে জায়গা কম — নামটা (সাইডবারের নিচে আছেই) লুকাই, নাহলে পাতা ১৭px উপচে পড়ত */
+    @media screen and (max-width: 1023px) { .adm-hname { display: none !important; } }
 
     /* ── কার্ড গভীরতা — থিমড হালকা বর্ডার + নরম গভীর শ্যাডো (সাদা কার্ড tinted ব্যাকগ্রাউন্ডে ফুটে ওঠে) ── */
     main .bg-white.rounded-2xl, main .bg-white.rounded-xl, main .bg-white.rounded-3xl { border: 1px solid rgb(var(--c-border)); }
@@ -574,6 +592,7 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                 $navGroups = admin_nav_groups();
                 $navPins   = nav_pins_get();
                 [$navPinned, $navRest] = admin_nav_split($navGroups, $navPins);
+                $navHere   = admin_nav_locate($navGroups, $currentFile, (string) $currentEntity);
                 $navQs     = (string) ($_SERVER['QUERY_STRING'] ?? '');
                 $navReturn = nav_safe_return($currentFile . ($navQs !== '' ? '?' . $navQs : ''));
                 $navPinTotal = count($navPinned);
@@ -610,9 +629,29 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                 </form>
             <?php endif; ?>
 
-            <?php foreach ($navRest as $navGroup): ?>
-                <?php if ($navGroup['section'] !== ''): ?><p class="nav-section"><?= e($navGroup['section']) ?></p><?php endif; ?>
-                <?php foreach ($navGroup['items'] as $navItem) { $navRow($navItem); } ?>
+            <?php // 🗂️ ১০টা মেনু — প্রতিটার একটাই লিংক (প্রথম অনুমোদিত পাতায়); ঐ মেনুর বাকি পাতা
+                  // পাতার উপরে ট্যাব হয়ে আসে (admin_hub_tabs_html)। ভেতরের পাতাগুলো `.nav-sub`-এ
+                  // লুকানো থাকে — শুধু "সাজান" (পিন করতে) বা সার্চ চলাকালে দেখা যায়।
+                  // 🔴 পিন করা পাতা মেনু থেকে সরানো হয় না (মেনুর লিংক প্রথম পাতায় যায়, সরালে বদলে যেত)।
+            if ($navPinned): ?><p class="nav-section">📂 মেনু</p><?php endif; ?>
+            <?php foreach ($navGroups as $navGi => $navGroup):
+                $navHubOn = $navHere && $navHere[0] === $navGi; ?>
+                <div class="nav-hubwrap">
+                <?php if (count($navGroup['items']) === 1): ?>
+                    <?php $navRow($navGroup['items'][0]); ?>
+                <?php else: ?>
+                    <div class="nav-row nav-hub">
+                        <a href="<?= e($navGroup['items'][0]['href']) ?>" class="nav-link <?= $navHubOn ? 'active' : '' ?>"><i data-lucide="<?= e($navGroup['icon'] ?? 'folder') ?>" class="w-4 h-4"></i> <span class="flex-1 min-w-0 truncate"><?= e(trim(preg_replace('/^\S+\s/u', '', $navGroup['section']))) ?></span><span class="nav-hub-n"><?= count($navGroup['items']) ?></span></a>
+                    </div>
+                    <div class="nav-sub">
+                        <?php foreach ($navGroup['items'] as $navItem) {
+                            $navPi = array_search($navItem['key'], array_column($navPinned, 'key'), true);
+                            if ($navPi === false) { $navRow($navItem); }
+                            else { ?><div class="nav-row"><a href="<?= e($navItem['href']) ?>" class="nav-link <?= nav_active($navItem['file'], $currentFile, $navItem['entity'] ?? '', $currentEntity) ?>"><i data-lucide="<?= e($navItem['icon']) ?>" class="w-4 h-4"></i> <?= e($navItem['label']) ?></a><?= nav_pin_form('unpin', $navItem['key'], '★', 'প্রিয় থেকে সরান', $navReturn, false, true) ?></div><?php }
+                        } ?>
+                    </div>
+                <?php endif; ?>
+                </div>
             <?php endforeach; ?>
         </nav>
         <?php
@@ -706,10 +745,11 @@ function nav_active(string $file, string $currentFile, string $entity = '', stri
                     <button type="button" class="theme-dot" data-theme-id="teal"     style="background:#2DD4BF" title="Teal (dark)" aria-label="রঙ: Teal (dark)"></button>
                     <button type="button" class="theme-dot" data-theme-id="carbon"   style="background:#F59E0B" title="Carbon (dark)" aria-label="রঙ: Carbon (dark)"></button>
                 </div>
-                <span class="text-sm text-gray-600 hidden sm:inline"><?= e(current_admin_name()) ?></span>
+                <span class="adm-hname text-sm text-gray-600 hidden sm:inline"><?= e(current_admin_name()) ?></span>
             </div>
         </header>
         <main class="p-4 md:p-6 flex-1">
+        <?= admin_hub_tabs_html($navGroups, $navHere) ?>
         <?php $flash = get_flash(); if ($flash): ?>
             <div id="toast-wrap">
                 <div class="toast <?= $flash['type'] === 'error' ? 'err' : 'ok' ?>" data-toast>

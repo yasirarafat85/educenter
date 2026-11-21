@@ -217,21 +217,51 @@ function admin_nav_groups(): array
         $settings[] = ['key' => 'archive', 'href' => 'archive.php', 'file' => 'archive.php', 'icon' => 'archive', 'label' => 'আর্কাইভ (রিস্টোর)'];
     }
 
-    $groups[] = ['section' => '', 'items' => [
+    /* ────────────────────────────────────────────────────────────────────
+     * 🗂️ ১০টা মেনু (হাব) — প্রতিটার পাতাগুলো পাতার উপরে ট্যাব হয়ে আসে (২০২৬-১১-২১)
+     *
+     * 🔴 নিছক **দেখানোর** ব্যবস্থা: কোনো পাতার ফাইল, URL, হ্যান্ডলার বা অনুমতি
+     *    বদলায়নি; প্রতিটা আইটেমের `key` ও `admin_can()` গার্ড হুবহু আগের মতো (পিনও
+     *    `key` ধরে মেলে)। সাইডবারে প্রতি মেনুর একটাই লিংক (প্রথম অনুমোদিত পাতায়),
+     *    আর পাতার উপরে `admin_hub_tabs_html()` ঐ মেনুর বাকি পাতার ট্যাব বসায়।
+     * 🔴 প্রতিটা গ্রুপে `hub` (স্থায়ী চাবি) · `icon` · `section` (মেনুর নাম) — `section`
+     *    নামটা রাখা হয়েছে কারণ menu.php/activity-log.php/nav-pins.php ওটাই পড়ে।
+     * 🔴 নতুন পাতা কোন মেনুতে যাবে সেটা নিচের তালিকায় ঠিক করুন — ক্রম = ট্যাবের ক্রম,
+     *    আর প্রথম অনুমোদিত পাতাই মেনুর লিংক।
+     * ──────────────────────────────────────────────────────────────────── */
+    $byKey = [];
+    foreach (array_merge($daily, $money, $courier, $sometimes, $logs, $settings) as $it) { $byKey[$it['key']] = $it; }
+    $pick = function (array $keys) use (&$byKey): array {
+        $out = [];
+        foreach ($keys as $k) { if (isset($byKey[$k])) { $out[] = $byKey[$k]; } }
+        return $out;
+    };
+    // কুরিয়ার নোট-টাইপ আসলে একটা সেটিং — কনটেন্ট থেকে সেটিংসে
+    $noteTypes = array_values(array_filter($content, fn($it) => $it['key'] === 'manage:courier_note_types'));
+    $content   = array_values(array_filter($content, fn($it) => $it['key'] !== 'manage:courier_note_types'));
+    foreach ($noteTypes as $it) { $byKey[$it['key']] = $it; }
+
+    $groups[] = ['hub' => 'home', 'icon' => 'layout-dashboard', 'section' => '🏠 ড্যাশবোর্ড', 'items' => [
         ['key' => 'index', 'href' => 'index.php', 'file' => 'index.php', 'icon' => 'layout-dashboard', 'label' => 'ড্যাশবোর্ড'],
         ['key' => 'menu',  'href' => 'menu.php',  'file' => 'menu.php',  'icon' => 'layout-grid',      'label' => 'সব মেনু'],
         ['key' => 'guide', 'href' => 'guide.php', 'file' => 'guide.php', 'icon' => 'help-circle',      'label' => 'গাইড / সাহায্য'],
     ]];
-    // 🔴 ক্রম = ইউজারের কাজের ক্রম (রোজকার আগে, মাঝেমধ্যেরটা পরে)। খালি গ্রুপ
-    //    নিচের `array_filter()`-এ এমনিতেই বাদ যায়, তাই অনুমতিহীন মডারেটর
-    //    খালি শিরোনাম দেখেন না।
-    $groups[] = ['section' => '📅 রোজকার কাজ',  'items' => $daily];
-    $groups[] = ['section' => '💰 টাকা মেলানো', 'items' => $money];
-    $groups[] = ['section' => '🚚 কুরিয়ার',     'items' => $courier];
-    $groups[] = ['section' => '🗂️ কনটেন্ট',     'items' => $content];
-    $groups[] = ['section' => '🔎 মাঝেমধ্যে',   'items' => $sometimes];
-    $groups[] = ['section' => '🕘 লগ',          'items' => $logs];
-    $groups[] = ['section' => '⚙️ সেটিংস',      'items' => $settings];
+    $groups[] = ['hub' => 'orders',   'icon' => 'clipboard-list', 'section' => '📋 অর্ডার',
+        'items' => $pick(['registrations', 'month-work', 'tasks', 'course-interests', 'course-data'])];
+    $groups[] = ['hub' => 'parcel',   'icon' => 'package-check',  'section' => '📦 পার্সেল ও কুরিয়ার',
+        'items' => $pick(['course-parcel', 'parcel-labels', 'courier', 'courier-tracking', 'courier-shipment-logs', 'group-match'])];
+    $groups[] = ['hub' => 'money',    'icon' => 'pie-chart',      'section' => '💰 টাকা',
+        'items' => $pick(['payment-inbox', 'income-fix', 'income', 'expenses', 'finance'])];
+    $groups[] = ['hub' => 'parents',  'icon' => 'users',          'section' => '👪 অভিভাবক',
+        'items' => $pick(['users', 'user-requests', 'contact-messages', 'reports', 'legacy-students'])];
+    $groups[] = ['hub' => 'facebook', 'icon' => 'message-circle', 'section' => '💬 ফেসবুক',
+        'items' => $pick(['meta-inbox', 'meta-knowledge'])];
+    $groups[] = ['hub' => 'content',  'icon' => 'file-text',      'section' => '🗂️ কনটেন্ট', 'items' => $content];
+    $groups[] = ['hub' => 'logs',     'icon' => 'history',        'section' => '🕘 লগ', 'items' => $logs];
+    $groups[] = ['hub' => 'settings', 'icon' => 'settings',       'section' => '⚙️ সেটিংস',
+        'items' => $pick(['settings', 'payment-methods', 'sms-patterns', 'manage:courier_note_types', 'team', 'backup', 'archive', 'data-requests', 'system-check'])];
+    $groups[] = ['hub' => 'account',  'icon' => 'fingerprint',    'section' => '🔐 আমার অ্যাকাউন্ট',
+        'items' => $pick(['change-password', 'security'])];
 
     return array_values(array_filter($groups, fn($g) => !empty($g['items'])));
 }
@@ -253,6 +283,55 @@ function admin_nav_split(array $groups, array $pins): array
         if ($items) { $rest[] = ['section' => $g['section'], 'items' => $items]; }
     }
     return [$pinned, $rest];
+}
+
+// ── এই পাতাটা কোন মেনুর কোন ট্যাব: [গ্রুপের ইনডেক্স, আইটেমের key] অথবা null।
+// সাইডবারে নেই এমন কয়েকটা পাতা (ব্যাচ/মিডিয়া/নোট/একক পাঠানো) তাদের মূল পাতার ট্যাব ধরে।
+function admin_nav_alias(string $file): string
+{
+    if ($file === 'course-media.php') {
+        $t = (string) ($_GET['type'] ?? '');
+        return $t === 'worksheet' ? 'manage:worksheets' : ($t === 'product' ? 'manage:products' : 'manage:courses');
+    }
+    $map = [
+        'course-batches.php'      => 'manage:courses',
+        'courier-note-assign.php' => 'course-parcel',
+        'send-to-courier.php'     => 'courier',
+        'account-preview.php'     => 'users',
+    ];
+    return $map[$file] ?? '';
+}
+
+function admin_nav_locate(array $groups, string $file, string $entity = ''): ?array
+{
+    $alias = admin_nav_alias($file);
+    foreach ($groups as $gi => $g) {
+        foreach ($g['items'] as $it) {
+            if ($alias !== '') {
+                if ($it['key'] === $alias) { return [$gi, $it['key']]; }
+                continue;
+            }
+            if ($it['file'] !== $file) { continue; }
+            if (isset($it['entity']) && $it['entity'] !== $entity) { continue; }
+            return [$gi, $it['key']];
+        }
+    }
+    return null;
+}
+
+// পাতার উপরের ট্যাবের সারি — এই মেনুতে অন্তত দুটো (অনুমোদিত) পাতা থাকলেই
+function admin_hub_tabs_html(array $groups, ?array $here): string
+{
+    if (!$here) { return ''; }
+    $g = $groups[$here[0]] ?? null;
+    if (!$g || count($g['items']) < 2) { return ''; }
+    $h = '<nav class="hub-tabs no-print" aria-label="' . e(trim(preg_replace('/^\S+\s/u', '', $g['section']))) . ' — পাতা"><div class="hub-tabs-in">';
+    foreach ($g['items'] as $it) {
+        $on = $it['key'] === $here[1];
+        $h .= '<a href="' . e($it['href']) . '" class="hub-tab' . ($on ? ' on' : '') . '"' . ($on ? ' aria-current="page"' : '') . '>'
+            . '<i data-lucide="' . e($it['icon']) . '" class="w-4 h-4"></i><span>' . e($it['label']) . '</span></a>';
+    }
+    return $h . '</div></nav>';
 }
 
 // অ্যাডমিন প্যানেলের ভেতরের রিলেটিভ URL ছাড়া কোথাও রিডাইরেক্ট করা যাবে না

@@ -68,20 +68,31 @@
 
         function filter() {
             var q = input.value.trim().toLowerCase();
-            // ⚠️ প্রতিটা লিংক এখন একটা .nav-row-এর ভেতরে (তারা/তীর বোতামসহ) — তাই পুরো সারিটাই
-            // লুকাতে হয়, শুধু <a> নয় (নাহলে খালি সারির ফাঁকা জায়গা থেকে যেত)
-            var rows = nav.querySelectorAll('.nav-row');
             var anyVisible = false;
-            rows.forEach(function (r) {
+            // 🗂️ ২০২৬-১১-২১ থেকে সাইডবারে ১০টা মেনু; ভেতরের পাতা `.nav-sub`-এ লুকানো থাকে —
+            // সার্চ চলাকালে `.nav-searching` বসে সেগুলো দেখা যায়, আর মেনুর নাম মিললে তার সব পাতাই।
+            nav.classList.toggle('nav-searching', !!q);
+            nav.querySelectorAll('.nav-row').forEach(function (r) {
+                if (r.classList.contains('nav-hub')) { return; }
                 var match = !q || r.textContent.toLowerCase().indexOf(q) !== -1;
                 r.style.display = match ? '' : 'none';
-                if (match && q) anyVisible = true;
+                if (match && q) { anyVisible = true; }
             });
-            // যে সেকশন-হেডারের নিচে দৃশ্যমান লিংক নেই সেটাও লুকানো (সার্চ চলাকালীন)
+            nav.querySelectorAll('.nav-hubwrap').forEach(function (w) {
+                var hub = w.querySelector('.nav-hub');
+                var hubMatch = !!hub && !!q && hub.textContent.toLowerCase().indexOf(q) !== -1;
+                if (hubMatch) {
+                    w.querySelectorAll('.nav-row').forEach(function (r) { r.style.display = ''; });
+                    anyVisible = true;
+                }
+                var vis = !q || hubMatch || !!Array.prototype.some.call(w.querySelectorAll('.nav-sub .nav-row, :scope > .nav-row:not(.nav-hub)'), function (r) { return r.style.display !== 'none'; });
+                w.style.display = vis ? '' : 'none';
+            });
+            // যে সেকশন-হেডারের নিচে দৃশ্যমান কিছু নেই সেটাও লুকানো (সার্চ চলাকালীন)
             nav.querySelectorAll('.nav-section').forEach(function (h) {
                 var vis = false, el = h.nextElementSibling;
                 while (el && !el.classList.contains('nav-section')) {
-                    if (el.classList.contains('nav-row') && el.style.display !== 'none') { vis = true; break; }
+                    if ((el.classList.contains('nav-row') || el.classList.contains('nav-hubwrap')) && el.style.display !== 'none') { vis = true; break; }
                     el = el.nextElementSibling;
                 }
                 h.style.display = (!q || vis) ? '' : 'none';
@@ -645,6 +656,19 @@
 
         if (window.lucide && lucide.createIcons) { lucide.createIcons(); }
     })();
+</script>
+<script>
+// 🗂️ পাতার উপরের মেনু-ট্যাব: ফোনে সারি পাশে সরানো যায় — চলতি ট্যাবটা মাঝখানে এনে রাখি
+// (পাতা উল্লম্বভাবে নড়ে না; scrollIntoView ইচ্ছাকৃতভাবে নয়)
+(function () {
+    var on = document.querySelector('.hub-tabs .hub-tab.on');
+    if (!on) { return; }
+    var w = on.closest('.hub-tabs');
+    function center() { if (w && w.scrollWidth > w.clientWidth) { w.scrollLeft = Math.max(0, on.offsetLeft - (w.clientWidth - on.offsetWidth) / 2); } }
+    center();
+    // আইকন/ফন্ট বসার পর ট্যাবের মাপ বদলায় — তখন আরেকবার
+    window.addEventListener('load', center);
+})();
 </script>
 </body>
 </html>
