@@ -828,6 +828,9 @@ function cp_cell(?array $b): array
 .cp-fold-hint{margin-left:auto;white-space:nowrap}
 #cpRoster[open] .cp-fold-show{display:none}
 #cpRoster:not([open]) .cp-fold-hide{display:none}
+/* 🔴 মোবাইলে layout-top-এর `main .overflow-x-auto { overflow-x: visible }` (টেবিল-কার্ডের নিয়ম) মাসের
+   ট্যাব-সারির স্ক্রলও বন্ধ করে দিত — শেষের মাসগুলো পর্দার বাইরে চলে যেত, পাতা উপচে পড়ত (২০২৬-১১-২১) */
+main .cp-tabbar{overflow-x:auto !important;-webkit-overflow-scrolling:touch}
 .cp-tab{flex-shrink:0;padding:.5rem .9rem;border-radius:.6rem .6rem 0 0;font-weight:600;font-size:.875rem;border-bottom:3px solid transparent;white-space:nowrap}
 .cp-tab.on{background:#fff;border-color:rgb(var(--c-primary));color:rgb(var(--c-primary));box-shadow:0 -1px 3px rgba(0,0,0,.05)}
 .cp-tab.off{background:#f3f4f6;color:#6b7280}
@@ -932,192 +935,6 @@ function cp_cell(?array $b): array
     </div>
 <?php endif; ?>
 
-<?php // ══════════ Section 1 — শিক্ষার্থী × মাস ম্যাট্রিক্স ══════════
-      // 🔴 পুরো সেকশনটা `<details id="cpRoster" open>`-এ — ফোনে নিচের স্ক্রিপ্ট এটা বন্ধ করে
-      //    দেয় (ডেস্কটপে খোলাই থাকে)। গ্রুপ/সক্রিয়/এলাকার ফর্মগুলো আলাদা ছোট ফর্ম, আর
-      //    `roundForm` এই অংশের বাইরে — তাই ভাঁজ করায় কোনো সেভ ক্ষতিগ্রস্ত হয় না। ?>
-<details id="cpRoster" open>
-<summary class="cp-hd"><span class="bar"></span><span class="text-sm font-bold text-gray-700">অবস্থা</span><span class="text-xs text-gray-400">গ্রুপে যোগ · সক্রিয়/নিষ্ক্রিয় · কোন মাসে কী</span><span class="cp-fold-hint text-xs text-indigo-600 font-semibold"><span class="cp-fold-show">▼ দেখুন</span><span class="cp-fold-hide">▲ লুকান</span></span></summary>
-
-<?php
-$grp_toggle = function (array $r, string $field, bool $on, int $itemId, int $selMonth) {
-    $lbl = $field === 'messenger' ? 'Messenger' : 'FB';
-    ?>
-    <form method="post" action="course-parcel.php" class="inline" onsubmit="return <?= $on ? "confirmSubmit(this, '$lbl গ্রুপ থেকে টিক তুলে ফেলবেন? (এই শিক্ষার্থী গ্রুপে নেই বলে চিহ্নিত হবে)', 'টিক তুলবেন?')" : 'true' ?>;"><?= csrf_field() ?>
-        <input type="hidden" name="action" value="group"><input type="hidden" name="field" value="<?= $field ?>"><input type="hidden" name="item_id" value="<?= $itemId ?>"><input type="hidden" name="id" value="<?= (int) $r['id'] ?>"><input type="hidden" name="month" value="<?= $selMonth ?>"><input type="hidden" name="value" value="<?= $on ? 0 : 1 ?>">
-        <button type="submit" title="<?= $lbl ?> গ্রুপে যোগ হয়েছে?" class="cp-toggle <?= $on ? 'bg-green-500' : 'border-2 border-gray-300 hover:border-green-400' ?>"><?php if ($on): ?><i data-lucide="check" class="w-4 h-4 text-white"></i><?php endif; ?></button>
-    </form>
-    <?php
-};
-
-$render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId, $grp_toggle, $zoneLabels) {
-    $rid = (int) $r['id'];
-    $active = (int) ($r['courier_active'] ?? 1);
-    $fbOn = !empty($r['fb_group_added']); $msgOn = !empty($r['messenger_group_added']);
-    $regZone = (string) ($r['delivery_zone'] ?? '');
-    $needsRemoval = !$active && ($fbOn || $msgOn);
-    $sentCount = 0;
-    $rowAmt = 0.0;   // 💵 এই শিক্ষার্থীর সব মাসের কালেকশন (আগের "কুরিয়ার ট্র্যাকিং"-এর "মোট" কলাম)
-    for ($i = 1; $i <= $months; $i++) {
-        $cb = $byRegPeriod[$rid][cp_month_label($i)] ?? null;
-        if (($cb['send_status'] ?? '') === 'sent') { $sentCount++; }
-        if ($cb && ($cb['send_status'] ?? '') !== 'declined') { $rowAmt += (float) ($cb['amount_to_collect'] ?? 0); }
-    }
-    ?>
-    <tr class="cp-row border-b last:border-0 hover:bg-gray-50 <?= $active ? '' : 'opacity-70' ?>"
-        data-s="<?= e(cp_haystack($r)) ?>" data-d="<?= e(cp_haystack_digits($r)) ?>">
-        <td class="py-2.5 px-3" style="min-width:150px;vertical-align:top;">
-            <?php // 🔴 তিন লাইন একটাই মোড়কে — মোবাইল কার্ড-লেআউটে `td` flex হয়ে যায়, খোলা রাখলে
-                  //    নাম/ফেসবুক/ফোন পাশাপাশি তিন কলামে চেপে যেত (স্ক্রিনশটে ধরা) ?>
-            <div class="min-w-0">
-                <div class="font-bold text-gray-900 text-base leading-snug"><span class="text-xs text-gray-400 font-normal">শিশু:</span> <?= e($r['customer_name']) ?></div>
-                <div class="text-sm text-blue-600 leading-snug break-words"><span class="text-gray-400">ফেসবুক:</span> <?= e($r['facebook_id'] ?: '—') ?></div>
-                <div class="text-sm text-gray-500 font-mono break-all"><?= e($r['phone']) ?></div>
-                <?php if ($needsRemoval): ?><div class="text-sm text-red-600 font-semibold mt-0.5">⚠ গ্রুপ থেকে বাদ দিন</div><?php endif; ?>
-            </div>
-        </td>
-        <td class="py-2.5 px-2 text-center"><?php $grp_toggle($r, 'fb', $fbOn, $itemId, $selMonth); ?></td>
-        <td class="py-2.5 px-2 text-center"><?php $grp_toggle($r, 'messenger', $msgOn, $itemId, $selMonth); ?></td>
-        <td class="py-2.5 px-2 text-center">
-            <form method="post" action="course-parcel.php" class="inline" onsubmit="return confirmSubmit(this, <?= $active ? "'নিষ্ক্রিয় করলে এই শিক্ষার্থী আর মাসের তালিকায় আসবে না। নিশ্চিত?', 'নিষ্ক্রিয় করবেন?'" : "'আবার সক্রিয় করবেন?', 'সক্রিয় করবেন?'" ?>);"><?= csrf_field() ?>
-                <input type="hidden" name="action" value="active"><input type="hidden" name="item_id" value="<?= $itemId ?>"><input type="hidden" name="id" value="<?= $rid ?>"><input type="hidden" name="month" value="<?= $selMonth ?>"><input type="hidden" name="value" value="<?= $active ? 0 : 1 ?>">
-                <button type="submit" class="px-2.5 py-1 rounded-full text-xs font-semibold <?= $active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500' ?>"><?= $active ? 'সক্রিয়' : 'নিষ্ক্রিয়' ?></button>
-            </form>
-        </td>
-        <td class="py-2.5 px-2 text-sm text-gray-600" style="min-width:180px;max-width:300px;white-space:normal;vertical-align:top;">
-            <?php // 📍 ডেলিভারি এলাকা বাছার আগে ঠিকানাটা দেখা দরকার — তাই পাশেই (ইউজারের চাওয়া) ?>
-            <?= e(trim((string) ($r['address'] ?? '')) ?: '—') ?>
-        </td>
-        <td class="py-2.5 px-2 text-center">
-            <?php // 🔑 স্থায়ী এলাকা — একবার সেট করলেই প্রতি মাসের কালেকশনে অটো বসে ?>
-            <form method="post" action="course-parcel.php" class="inline"><?= csrf_field() ?>
-                <input type="hidden" name="action" value="zone"><input type="hidden" name="item_id" value="<?= $itemId ?>"><input type="hidden" name="id" value="<?= $rid ?>"><input type="hidden" name="month" value="<?= $selMonth ?>">
-                <select name="value" data-orig="<?= e($regZone) ?>" onchange="cpPermZone(this)" class="border rounded-lg px-2 py-1 text-xs text-gray-700" title="এই শিক্ষার্থীর স্থায়ী ডেলিভারি এলাকা — সব মাসে প্রযোজ্য">
-                    <option value="" <?= $regZone === '' ? 'selected' : '' ?>>— সেট করা নেই —</option>
-                    <?php foreach ($zoneLabels as $zk => $zl): ?>
-                        <option value="<?= $zk ?>" <?= $regZone === $zk ? 'selected' : '' ?>><?= e($zl) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </form>
-        </td>
-        <?php for ($i = 1; $i <= $months; $i++): [$ch, $cls] = cp_cell($byRegPeriod[$rid][cp_month_label($i)] ?? null); ?>
-            <td class="py-2.5 px-1.5 text-center <?= $i === $selMonth ? 'bg-indigo-50' : '' ?>">
-                <span class="inline-flex w-6 h-6 items-center justify-center rounded-full text-[11px] font-bold <?= $cls ?>" title="মাস <?= $i ?>"><?= $ch ?></span>
-                <?php $cpCb = $byRegPeriod[$rid][cp_month_label($i)] ?? null;
-                      if ($cpCb && ($cpCb['send_status'] ?? '') !== 'declined' && (float) ($cpCb['amount_to_collect'] ?? 0) > 0): ?>
-                    <div class="text-[10px] text-gray-500 font-semibold whitespace-nowrap leading-tight mt-0.5">৳<?= e(number_format((float) $cpCb['amount_to_collect'])) ?></div>
-                <?php endif; ?>
-            </td>
-        <?php endfor; ?>
-        <?php if ($months): ?><td class="py-2.5 px-2 text-center text-xs font-semibold text-gray-500 whitespace-nowrap"><?= $sentCount ?>/<?= $months ?><?php if ($rowAmt > 0): ?><div class="text-[11px] font-bold text-gray-800">৳<?= e(number_format($rowAmt)) ?></div><?php endif; ?></td><?php endif; ?>
-    </tr>
-    <?php
-};
-?>
-
-<?php if (!$months): ?>
-    <div class="p-4 mb-6 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-2xl">
-        <i data-lucide="alert-triangle" class="w-4 h-4 inline"></i> উপরে <b>"মোট কয়বার পার্সেল"</b> সংখ্যাটা দিন — তারপর মাস অনুযায়ী পার্সেল প্রস্তুত করা যাবে।
-    </div>
-<?php endif; ?>
-
-<script>
-// স্থায়ী ডেলিভারি এলাকা বদলানো — প্রথমবার সেট করায় ওয়ার্নিং নয়, পরে বদলালে নিশ্চিতকরণ
-function cpPermZone(sel) {
-    var orig = sel.getAttribute('data-orig') || '';
-    if (orig === '') { sel.form.submit(); return; }   // প্রথমবার সেট — ওয়ার্নিং লাগে না
-    var now = sel.value, txt = sel.options[sel.selectedIndex].text;
-    sel.value = orig;                                  // নিশ্চিত না করা পর্যন্ত আগেরটাই দেখাবে
-    showConfirmModal('এই শিক্ষার্থীর স্থায়ী ডেলিভারি এলাকা বদলে "' + txt + '" করবেন? পরের মাসগুলোর কালেকশনে এটাই বসবে (আগে সেভ করা মাস অপরিবর্তিত থাকবে)।',
-        function () { sel.value = now; sel.form.submit(); },
-        'এলাকা বদলাবেন?');
-}
-</script>
-
-<?php // ══════ 🔎 তালিকায় খুঁজুন — নাম / মোবাইল / ফেসবুক / ঠিকানা ══════
-      // 🔴 এই বাক্সটা থাকলে `layout-bottom.php`-এর জেনেরিক অটো-সার্চ এই পাতায় বসে না
-      //    (গার্ড-লিস্টে `#cpSearchBox` যোগ করা আছে) — নাহলে তিনটা টেবিলে তিনটা আলাদা
-      //    বাক্স বসত, আর সেটা সারির ড্রপডাউনের অপশনও "মিল" ধরত।
-      // 🔴 নিষ্ক্রিয়দের ভাঁজ-করা অংশে মিল পেলে সেটা নিজে থেকে খুলে যায় — নাহলে
-      //    "পাওয়া যায়নি" মনে হতো যদিও মানুষটা ওখানেই ছিল। ?>
-<?php if (count($regs) >= CP_SEARCH_MIN): ?>
-    <div id="cpSearchBox" class="mb-3">
-        <div class="list-search-wrap">
-            <i data-lucide="search" class="w-4 h-4"></i>
-            <input type="search" id="cpRosterSearch" class="list-search" autocomplete="off"
-                   aria-label="তালিকায় খুঁজুন" placeholder="তালিকায় খুঁজুন — নাম, মোবাইল, ফেসবুক, ঠিকানা...">
-        </div>
-        <p id="cpRosterNote" class="text-xs text-gray-500 mt-1 hidden"></p>
-    </div>
-<?php endif; ?>
-
-<div class="bg-white rounded-2xl shadow overflow-x-auto mb-3">
-    <table class="w-full text-sm">
-        <thead><tr class="text-left text-gray-500 border-b bg-gray-50">
-            <th class="py-3 px-3">শিশুর নাম</th><th class="py-3 px-2 text-center">FB</th><th class="py-3 px-2 text-center">Msngr</th><th class="py-3 px-2 text-center">সক্রিয়</th><th class="py-3 px-2">ঠিকানা</th><th class="py-3 px-2 text-center whitespace-nowrap">ডেলিভারি</th>
-            <?php for ($i = 1; $i <= $months; $i++): ?>
-                <th class="py-3 px-1.5 text-center whitespace-nowrap <?= $i === $selMonth ? 'bg-indigo-50' : '' ?>"><a href="<?= e(cp_url($itemId, $i)) ?>" class="<?= $i === $selMonth ? 'text-indigo-700 font-bold' : 'text-gray-500 hover:text-indigo-600' ?>" title="এই মাসে কাজ করুন">মাস <?= $i ?></a></th>
-            <?php endfor; ?>
-            <?php if ($months): ?><th class="py-3 px-2 text-center whitespace-nowrap">পাঠানো</th><?php endif; ?>
-        </tr></thead>
-        <tbody>
-        <?php if (!$activeRegs && $inactiveRegs): ?><tr><td colspan="<?= 7 + $months ?>" class="py-6 px-4 text-center text-gray-400">সব শিক্ষার্থী নিষ্ক্রিয় — নিচে থেকে সক্রিয় করুন।</td></tr><?php endif; ?>
-        <?php foreach ($activeRegs as $r) { $render_row($r); } ?>
-        </tbody>
-        <?php // 💵 মাসের মোট কালেকশন — আগের "কুরিয়ার ট্র্যাকিং" পাতার নিচের সারি (২০২৬-১১-২১, ধাপ ২)।
-              // 🔴 সব confirmed শিক্ষার্থী (নিষ্ক্রিয়সহ) ধরে, "না এই মাসে" বাদ — ঐ পাতার হুবহু নিয়ম।
-        if ($months):
-            $cpMonthAmt = array_fill(1, $months, 0.0); $cpGrand = 0.0;
-            foreach ($regs as $cpR) { for ($i = 1; $i <= $months; $i++) {
-                $cpCb = $byRegPeriod[(int) $cpR['id']][cp_month_label($i)] ?? null;
-                if ($cpCb && ($cpCb['send_status'] ?? '') !== 'declined') { $cpMonthAmt[$i] += (float) ($cpCb['amount_to_collect'] ?? 0); }
-            } }
-            $cpGrand = array_sum($cpMonthAmt);
-            if ($cpGrand > 0): ?>
-        <tfoot><tr class="border-t bg-gray-50 font-bold text-gray-800">
-            <td colspan="6" class="py-3 px-3 text-sm">মাসের মোট কালেকশন</td>
-            <?php for ($i = 1; $i <= $months; $i++): ?>
-                <td data-label="মাস <?= $i ?>" class="py-3 px-1.5 text-center text-[11px] whitespace-nowrap <?= $i === $selMonth ? 'bg-indigo-50' : '' ?>"><?= $cpMonthAmt[$i] > 0 ? '৳' . e(number_format($cpMonthAmt[$i])) : '—' ?></td>
-            <?php endfor; ?>
-            <td data-label="সব মাস মিলিয়ে" class="py-3 px-2 text-center text-xs whitespace-nowrap">৳<?= e(number_format($cpGrand)) ?></td>
-        </tr></tfoot>
-        <?php endif; endif; ?>
-    </table>
-</div>
-<?php if ($months): ?>
-    <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mb-6 px-1">
-        <span><span class="inline-block w-3 h-3 rounded-full bg-green-500 align-middle"></span> পাঠানো</span>
-        <span><span class="inline-block w-3 h-3 rounded-full bg-amber-400 align-middle"></span> প্রস্তুত</span>
-        <span><span class="inline-block w-3 h-3 rounded-full bg-red-500 align-middle"></span> না</span>
-        <span><span class="inline-block w-3 h-3 rounded-full bg-orange-500 align-middle"></span> ব্যর্থ</span>
-        <span><span class="inline-block w-3 h-3 rounded-full border-2 border-gray-200 align-middle"></span> বাকি</span>
-    </div>
-<?php else: ?><div class="mb-6"></div><?php endif; ?>
-
-<?php if ($inactiveRegs): ?>
-    <details id="cpInactive" class="mb-6" <?= $pendingGroupRemoval ? 'open' : '' ?>>
-        <summary class="cursor-pointer select-none text-sm font-semibold <?= $pendingGroupRemoval ? 'text-red-600' : 'text-gray-500' ?> py-2 px-1 flex items-center gap-1.5">
-            <i data-lucide="chevron-right" class="w-4 h-4"></i> নিষ্ক্রিয় শিক্ষার্থী (<?= count($inactiveRegs) ?> জন)<?= $pendingGroupRemoval ? ' — ' . count($pendingGroupRemoval) . ' জন এখনো গ্রুপে (বাদ দিন)' : ' — দেখতে/আবার সক্রিয় করতে ক্লিক করুন' ?>
-        </summary>
-        <div class="bg-white rounded-2xl shadow overflow-x-auto mt-2"><table class="w-full text-sm"><tbody>
-        <?php foreach ($inactiveRegs as $r) { $render_row($r); } ?>
-        </tbody></table></div>
-    </details>
-<?php endif; ?>
-
-</details>
-<script>
-// 📱 ফোনে "অবস্থা" তালিকাটা ভাঁজ করা থাকে — ইউজার রোজ যেটা করেন ("এই মাসের পার্সেল")
-// সেটাই যেন প্রথম পর্দাতেই থাকে। ডেস্কটপে কিছুই বদলায় না।
-// 🔴 স্ক্রিপ্ট ভেঙে গেলেও তালিকাটা **খোলাই** থাকে (HTML-এ `open`) — নিরাপদ দিক।
-(function () {
-    try {
-        var d = document.getElementById('cpRoster');
-        if (d && window.matchMedia('(max-width: 767px)').matches) { d.open = false; }
-    } catch (e) {}
-})();
-</script>
-
 <?php // ══════════ Section 2 — মাস ট্যাব + এই মাসের পার্সেল ══════════ ?>
 <?php if ($months): ?>
     <div class="cp-hd"><span class="bar"></span><span class="text-sm font-bold text-gray-700">এই মাসের পার্সেল</span><span class="text-xs text-gray-400">মাস বেছে প্রস্তুত করুন / পাঠান</span></div>
@@ -1159,7 +976,7 @@ function cpPermZone(sel) {
         </div>
     <?php endif; ?>
 
-    <div class="flex gap-1 overflow-x-auto pb-0 mb-0 border-b border-gray-200">
+    <div class="cp-tabbar flex gap-1 overflow-x-auto pb-0 mb-0 border-b border-gray-200">
         <?php // 🔴 ট্যাবেই "কত বাকি" লেখা থাকে — আগে প্রতিটা মাসে ঢুকে দেখতে হতো
               //    কোন মাসের কাজ পড়ে আছে (ইউজারের চাওয়া)। সংখ্যা `$cpMonthStat` থেকেই। ?>
         <?php for ($i = 1; $i <= $months; $i++): $ms = $cpMonthStat[$i] ?? null; ?>
@@ -1752,6 +1569,197 @@ function cpPermZone(sel) {
 })();
 </script>
 
+<?php // 🔽 ২০২৬-১১-২১ (ইউজারের চাওয়া: "আমার মাসের কাজগুলো বেশি লাগে") — "অবস্থা" অংশ এখন
+      //    "এই মাসের পার্সেল"-এর **নিচে**। শুধু জায়গা বদলেছে: ফর্ম/হ্যান্ডলার একই, আর নিচের
+      //    সার্চ-স্ক্রিপ্ট দুই অংশের পরেই চলে বলে দুটো বাক্সই আগের মতো কাজ করে। ?>
+<?php // ══════════ Section 1 — শিক্ষার্থী × মাস ম্যাট্রিক্স ══════════
+      // 🔴 পুরো সেকশনটা `<details id="cpRoster" open>`-এ — ফোনে নিচের স্ক্রিপ্ট এটা বন্ধ করে
+      //    দেয় (ডেস্কটপে খোলাই থাকে)। গ্রুপ/সক্রিয়/এলাকার ফর্মগুলো আলাদা ছোট ফর্ম, আর
+      //    `roundForm` এই অংশের বাইরে — তাই ভাঁজ করায় কোনো সেভ ক্ষতিগ্রস্ত হয় না। ?>
+<details id="cpRoster" open>
+<summary class="cp-hd"><span class="bar"></span><span class="text-sm font-bold text-gray-700">অবস্থা</span><span class="text-xs text-gray-400">গ্রুপে যোগ · সক্রিয়/নিষ্ক্রিয় · কোন মাসে কী</span><span class="cp-fold-hint text-xs text-indigo-600 font-semibold"><span class="cp-fold-show">▼ দেখুন</span><span class="cp-fold-hide">▲ লুকান</span></span></summary>
+
+<?php
+$grp_toggle = function (array $r, string $field, bool $on, int $itemId, int $selMonth) {
+    $lbl = $field === 'messenger' ? 'Messenger' : 'FB';
+    ?>
+    <form method="post" action="course-parcel.php" class="inline" onsubmit="return <?= $on ? "confirmSubmit(this, '$lbl গ্রুপ থেকে টিক তুলে ফেলবেন? (এই শিক্ষার্থী গ্রুপে নেই বলে চিহ্নিত হবে)', 'টিক তুলবেন?')" : 'true' ?>;"><?= csrf_field() ?>
+        <input type="hidden" name="action" value="group"><input type="hidden" name="field" value="<?= $field ?>"><input type="hidden" name="item_id" value="<?= $itemId ?>"><input type="hidden" name="id" value="<?= (int) $r['id'] ?>"><input type="hidden" name="month" value="<?= $selMonth ?>"><input type="hidden" name="value" value="<?= $on ? 0 : 1 ?>">
+        <button type="submit" title="<?= $lbl ?> গ্রুপে যোগ হয়েছে?" class="cp-toggle <?= $on ? 'bg-green-500' : 'border-2 border-gray-300 hover:border-green-400' ?>"><?php if ($on): ?><i data-lucide="check" class="w-4 h-4 text-white"></i><?php endif; ?></button>
+    </form>
+    <?php
+};
+
+$render_row = function (array $r) use ($byRegPeriod, $months, $selMonth, $itemId, $grp_toggle, $zoneLabels) {
+    $rid = (int) $r['id'];
+    $active = (int) ($r['courier_active'] ?? 1);
+    $fbOn = !empty($r['fb_group_added']); $msgOn = !empty($r['messenger_group_added']);
+    $regZone = (string) ($r['delivery_zone'] ?? '');
+    $needsRemoval = !$active && ($fbOn || $msgOn);
+    $sentCount = 0;
+    $rowAmt = 0.0;   // 💵 এই শিক্ষার্থীর সব মাসের কালেকশন (আগের "কুরিয়ার ট্র্যাকিং"-এর "মোট" কলাম)
+    for ($i = 1; $i <= $months; $i++) {
+        $cb = $byRegPeriod[$rid][cp_month_label($i)] ?? null;
+        if (($cb['send_status'] ?? '') === 'sent') { $sentCount++; }
+        if ($cb && ($cb['send_status'] ?? '') !== 'declined') { $rowAmt += (float) ($cb['amount_to_collect'] ?? 0); }
+    }
+    ?>
+    <tr class="cp-row border-b last:border-0 hover:bg-gray-50 <?= $active ? '' : 'opacity-70' ?>"
+        data-s="<?= e(cp_haystack($r)) ?>" data-d="<?= e(cp_haystack_digits($r)) ?>">
+        <td class="py-2.5 px-3" style="min-width:150px;vertical-align:top;">
+            <?php // 🔴 তিন লাইন একটাই মোড়কে — মোবাইল কার্ড-লেআউটে `td` flex হয়ে যায়, খোলা রাখলে
+                  //    নাম/ফেসবুক/ফোন পাশাপাশি তিন কলামে চেপে যেত (স্ক্রিনশটে ধরা) ?>
+            <div class="min-w-0">
+                <div class="font-bold text-gray-900 text-base leading-snug"><span class="text-xs text-gray-400 font-normal">শিশু:</span> <?= e($r['customer_name']) ?></div>
+                <div class="text-sm text-blue-600 leading-snug break-words"><span class="text-gray-400">ফেসবুক:</span> <?= e($r['facebook_id'] ?: '—') ?></div>
+                <div class="text-sm text-gray-500 font-mono break-all"><?= e($r['phone']) ?></div>
+                <?php if ($needsRemoval): ?><div class="text-sm text-red-600 font-semibold mt-0.5">⚠ গ্রুপ থেকে বাদ দিন</div><?php endif; ?>
+            </div>
+        </td>
+        <td class="py-2.5 px-2 text-center"><?php $grp_toggle($r, 'fb', $fbOn, $itemId, $selMonth); ?></td>
+        <td class="py-2.5 px-2 text-center"><?php $grp_toggle($r, 'messenger', $msgOn, $itemId, $selMonth); ?></td>
+        <td class="py-2.5 px-2 text-center">
+            <form method="post" action="course-parcel.php" class="inline" onsubmit="return confirmSubmit(this, <?= $active ? "'নিষ্ক্রিয় করলে এই শিক্ষার্থী আর মাসের তালিকায় আসবে না। নিশ্চিত?', 'নিষ্ক্রিয় করবেন?'" : "'আবার সক্রিয় করবেন?', 'সক্রিয় করবেন?'" ?>);"><?= csrf_field() ?>
+                <input type="hidden" name="action" value="active"><input type="hidden" name="item_id" value="<?= $itemId ?>"><input type="hidden" name="id" value="<?= $rid ?>"><input type="hidden" name="month" value="<?= $selMonth ?>"><input type="hidden" name="value" value="<?= $active ? 0 : 1 ?>">
+                <button type="submit" class="px-2.5 py-1 rounded-full text-xs font-semibold <?= $active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500' ?>"><?= $active ? 'সক্রিয়' : 'নিষ্ক্রিয়' ?></button>
+            </form>
+        </td>
+        <td class="py-2.5 px-2 text-sm text-gray-600" style="min-width:180px;max-width:300px;white-space:normal;vertical-align:top;">
+            <?php // 📍 ডেলিভারি এলাকা বাছার আগে ঠিকানাটা দেখা দরকার — তাই পাশেই (ইউজারের চাওয়া) ?>
+            <?= e(trim((string) ($r['address'] ?? '')) ?: '—') ?>
+        </td>
+        <td class="py-2.5 px-2 text-center">
+            <?php // 🔑 স্থায়ী এলাকা — একবার সেট করলেই প্রতি মাসের কালেকশনে অটো বসে ?>
+            <form method="post" action="course-parcel.php" class="inline"><?= csrf_field() ?>
+                <input type="hidden" name="action" value="zone"><input type="hidden" name="item_id" value="<?= $itemId ?>"><input type="hidden" name="id" value="<?= $rid ?>"><input type="hidden" name="month" value="<?= $selMonth ?>">
+                <select name="value" data-orig="<?= e($regZone) ?>" onchange="cpPermZone(this)" class="border rounded-lg px-2 py-1 text-xs text-gray-700" title="এই শিক্ষার্থীর স্থায়ী ডেলিভারি এলাকা — সব মাসে প্রযোজ্য">
+                    <option value="" <?= $regZone === '' ? 'selected' : '' ?>>— সেট করা নেই —</option>
+                    <?php foreach ($zoneLabels as $zk => $zl): ?>
+                        <option value="<?= $zk ?>" <?= $regZone === $zk ? 'selected' : '' ?>><?= e($zl) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </form>
+        </td>
+        <?php for ($i = 1; $i <= $months; $i++): [$ch, $cls] = cp_cell($byRegPeriod[$rid][cp_month_label($i)] ?? null); ?>
+            <td class="py-2.5 px-1.5 text-center <?= $i === $selMonth ? 'bg-indigo-50' : '' ?>">
+                <span class="inline-flex w-6 h-6 items-center justify-center rounded-full text-[11px] font-bold <?= $cls ?>" title="মাস <?= $i ?>"><?= $ch ?></span>
+                <?php $cpCb = $byRegPeriod[$rid][cp_month_label($i)] ?? null;
+                      if ($cpCb && ($cpCb['send_status'] ?? '') !== 'declined' && (float) ($cpCb['amount_to_collect'] ?? 0) > 0): ?>
+                    <div class="text-[10px] text-gray-500 font-semibold whitespace-nowrap leading-tight mt-0.5">৳<?= e(number_format((float) $cpCb['amount_to_collect'])) ?></div>
+                <?php endif; ?>
+            </td>
+        <?php endfor; ?>
+        <?php if ($months): ?><td class="py-2.5 px-2 text-center text-xs font-semibold text-gray-500 whitespace-nowrap"><?= $sentCount ?>/<?= $months ?><?php if ($rowAmt > 0): ?><div class="text-[11px] font-bold text-gray-800">৳<?= e(number_format($rowAmt)) ?></div><?php endif; ?></td><?php endif; ?>
+    </tr>
+    <?php
+};
+?>
+
+<?php if (!$months): ?>
+    <div class="p-4 mb-6 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-2xl">
+        <i data-lucide="alert-triangle" class="w-4 h-4 inline"></i> উপরে <b>"মোট কয়বার পার্সেল"</b> সংখ্যাটা দিন — তারপর মাস অনুযায়ী পার্সেল প্রস্তুত করা যাবে।
+    </div>
+<?php endif; ?>
+
+<script>
+// স্থায়ী ডেলিভারি এলাকা বদলানো — প্রথমবার সেট করায় ওয়ার্নিং নয়, পরে বদলালে নিশ্চিতকরণ
+function cpPermZone(sel) {
+    var orig = sel.getAttribute('data-orig') || '';
+    if (orig === '') { sel.form.submit(); return; }   // প্রথমবার সেট — ওয়ার্নিং লাগে না
+    var now = sel.value, txt = sel.options[sel.selectedIndex].text;
+    sel.value = orig;                                  // নিশ্চিত না করা পর্যন্ত আগেরটাই দেখাবে
+    showConfirmModal('এই শিক্ষার্থীর স্থায়ী ডেলিভারি এলাকা বদলে "' + txt + '" করবেন? পরের মাসগুলোর কালেকশনে এটাই বসবে (আগে সেভ করা মাস অপরিবর্তিত থাকবে)।',
+        function () { sel.value = now; sel.form.submit(); },
+        'এলাকা বদলাবেন?');
+}
+</script>
+
+<?php // ══════ 🔎 তালিকায় খুঁজুন — নাম / মোবাইল / ফেসবুক / ঠিকানা ══════
+      // 🔴 এই বাক্সটা থাকলে `layout-bottom.php`-এর জেনেরিক অটো-সার্চ এই পাতায় বসে না
+      //    (গার্ড-লিস্টে `#cpSearchBox` যোগ করা আছে) — নাহলে তিনটা টেবিলে তিনটা আলাদা
+      //    বাক্স বসত, আর সেটা সারির ড্রপডাউনের অপশনও "মিল" ধরত।
+      // 🔴 নিষ্ক্রিয়দের ভাঁজ-করা অংশে মিল পেলে সেটা নিজে থেকে খুলে যায় — নাহলে
+      //    "পাওয়া যায়নি" মনে হতো যদিও মানুষটা ওখানেই ছিল। ?>
+<?php if (count($regs) >= CP_SEARCH_MIN): ?>
+    <div id="cpSearchBox" class="mb-3">
+        <div class="list-search-wrap">
+            <i data-lucide="search" class="w-4 h-4"></i>
+            <input type="search" id="cpRosterSearch" class="list-search" autocomplete="off"
+                   aria-label="তালিকায় খুঁজুন" placeholder="তালিকায় খুঁজুন — নাম, মোবাইল, ফেসবুক, ঠিকানা...">
+        </div>
+        <p id="cpRosterNote" class="text-xs text-gray-500 mt-1 hidden"></p>
+    </div>
+<?php endif; ?>
+
+<div class="bg-white rounded-2xl shadow overflow-x-auto mb-3">
+    <table class="w-full text-sm">
+        <thead><tr class="text-left text-gray-500 border-b bg-gray-50">
+            <th class="py-3 px-3">শিশুর নাম</th><th class="py-3 px-2 text-center">FB</th><th class="py-3 px-2 text-center">Msngr</th><th class="py-3 px-2 text-center">সক্রিয়</th><th class="py-3 px-2">ঠিকানা</th><th class="py-3 px-2 text-center whitespace-nowrap">ডেলিভারি</th>
+            <?php for ($i = 1; $i <= $months; $i++): ?>
+                <th class="py-3 px-1.5 text-center whitespace-nowrap <?= $i === $selMonth ? 'bg-indigo-50' : '' ?>"><a href="<?= e(cp_url($itemId, $i)) ?>" class="<?= $i === $selMonth ? 'text-indigo-700 font-bold' : 'text-gray-500 hover:text-indigo-600' ?>" title="এই মাসে কাজ করুন">মাস <?= $i ?></a></th>
+            <?php endfor; ?>
+            <?php if ($months): ?><th class="py-3 px-2 text-center whitespace-nowrap">পাঠানো</th><?php endif; ?>
+        </tr></thead>
+        <tbody>
+        <?php if (!$activeRegs && $inactiveRegs): ?><tr><td colspan="<?= 7 + $months ?>" class="py-6 px-4 text-center text-gray-400">সব শিক্ষার্থী নিষ্ক্রিয় — নিচে থেকে সক্রিয় করুন।</td></tr><?php endif; ?>
+        <?php foreach ($activeRegs as $r) { $render_row($r); } ?>
+        </tbody>
+        <?php // 💵 মাসের মোট কালেকশন — আগের "কুরিয়ার ট্র্যাকিং" পাতার নিচের সারি (২০২৬-১১-২১, ধাপ ২)।
+              // 🔴 সব confirmed শিক্ষার্থী (নিষ্ক্রিয়সহ) ধরে, "না এই মাসে" বাদ — ঐ পাতার হুবহু নিয়ম।
+        if ($months):
+            $cpMonthAmt = array_fill(1, $months, 0.0); $cpGrand = 0.0;
+            foreach ($regs as $cpR) { for ($i = 1; $i <= $months; $i++) {
+                $cpCb = $byRegPeriod[(int) $cpR['id']][cp_month_label($i)] ?? null;
+                if ($cpCb && ($cpCb['send_status'] ?? '') !== 'declined') { $cpMonthAmt[$i] += (float) ($cpCb['amount_to_collect'] ?? 0); }
+            } }
+            $cpGrand = array_sum($cpMonthAmt);
+            if ($cpGrand > 0): ?>
+        <tfoot><tr class="border-t bg-gray-50 font-bold text-gray-800">
+            <td colspan="6" class="py-3 px-3 text-sm">মাসের মোট কালেকশন</td>
+            <?php for ($i = 1; $i <= $months; $i++): ?>
+                <td data-label="মাস <?= $i ?>" class="py-3 px-1.5 text-center text-[11px] whitespace-nowrap <?= $i === $selMonth ? 'bg-indigo-50' : '' ?>"><?= $cpMonthAmt[$i] > 0 ? '৳' . e(number_format($cpMonthAmt[$i])) : '—' ?></td>
+            <?php endfor; ?>
+            <td data-label="সব মাস মিলিয়ে" class="py-3 px-2 text-center text-xs whitespace-nowrap">৳<?= e(number_format($cpGrand)) ?></td>
+        </tr></tfoot>
+        <?php endif; endif; ?>
+    </table>
+</div>
+<?php if ($months): ?>
+    <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mb-6 px-1">
+        <span><span class="inline-block w-3 h-3 rounded-full bg-green-500 align-middle"></span> পাঠানো</span>
+        <span><span class="inline-block w-3 h-3 rounded-full bg-amber-400 align-middle"></span> প্রস্তুত</span>
+        <span><span class="inline-block w-3 h-3 rounded-full bg-red-500 align-middle"></span> না</span>
+        <span><span class="inline-block w-3 h-3 rounded-full bg-orange-500 align-middle"></span> ব্যর্থ</span>
+        <span><span class="inline-block w-3 h-3 rounded-full border-2 border-gray-200 align-middle"></span> বাকি</span>
+    </div>
+<?php else: ?><div class="mb-6"></div><?php endif; ?>
+
+<?php if ($inactiveRegs): ?>
+    <details id="cpInactive" class="mb-6" <?= $pendingGroupRemoval ? 'open' : '' ?>>
+        <summary class="cursor-pointer select-none text-sm font-semibold <?= $pendingGroupRemoval ? 'text-red-600' : 'text-gray-500' ?> py-2 px-1 flex items-center gap-1.5">
+            <i data-lucide="chevron-right" class="w-4 h-4"></i> নিষ্ক্রিয় শিক্ষার্থী (<?= count($inactiveRegs) ?> জন)<?= $pendingGroupRemoval ? ' — ' . count($pendingGroupRemoval) . ' জন এখনো গ্রুপে (বাদ দিন)' : ' — দেখতে/আবার সক্রিয় করতে ক্লিক করুন' ?>
+        </summary>
+        <div class="bg-white rounded-2xl shadow overflow-x-auto mt-2"><table class="w-full text-sm"><tbody>
+        <?php foreach ($inactiveRegs as $r) { $render_row($r); } ?>
+        </tbody></table></div>
+    </details>
+<?php endif; ?>
+
+</details>
+<script>
+// 📱 ফোনে "অবস্থা" তালিকাটা ভাঁজ করা থাকে — ইউজার রোজ যেটা করেন ("এই মাসের পার্সেল")
+// সেটাই যেন প্রথম পর্দাতেই থাকে। ডেস্কটপে কিছুই বদলায় না।
+// 🔴 স্ক্রিপ্ট ভেঙে গেলেও তালিকাটা **খোলাই** থাকে (HTML-এ `open`) — নিরাপদ দিক।
+(function () {
+    try {
+        var d = document.getElementById('cpRoster');
+        if (d && window.matchMedia('(max-width: 767px)').matches) { d.open = false; }
+    } catch (e) {}
+})();
+</script>
+
+<?php // নিচের ভাসমান "সেভ / কুরিয়ারে পাঠান" বার যেন "অবস্থা"-র শেষ সারি ঢেকে না দেয় ?>
+<?php if ($months): ?><div style="height:110px"></div><?php endif; ?>
 <script>
 // ══════ 🔎 কোর্স পার্সেলের নিজের সার্চ (রোস্টার + এই মাসের কার্ড) ══════
 // একটাই ম্যাচিং-ফাংশন দুই জায়গায় — তাই এক বাক্সে যাকে পাওয়া যায় অন্য বাক্সেও পাওয়া যায়।
